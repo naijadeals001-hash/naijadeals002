@@ -125,6 +125,7 @@ export interface ReviewRow {
   product_id: number
   user_id: number | null
   author_name: string
+  avatar_url: string | null
   rating: number
   title: string
   comment: string

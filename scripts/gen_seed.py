@@ -9,8 +9,25 @@ against a fresh DB (uses INSERT OR IGNORE with explicit IDs).
 import json
 
 def ph(cat, emoji, label):
+    """Legacy placeholder generator — no longer used for real image_url/gallery_json output
+    (kept only in case a call site is missed; real paths are assigned by product id below)."""
     from urllib.parse import quote
     return f"/ph.svg?cat={cat}&emoji={quote(emoji)}&label={quote(label)}"
+
+def product_image(pid_):
+    return f"/static/products/product-{pid_}.jpg"
+
+def vendor_logo(vid_):
+    return f"/static/vendors/vendor-{vid_}.jpg"
+
+# Deterministic reviewer avatar pool mapping — same author_name always maps to the same face.
+AVATAR_POOL_SIZE = 8
+def avatar_for(author_name):
+    h = 0
+    for ch in author_name:
+        h = (h * 31 + ord(ch)) & 0xFFFFFFFF
+    idx = (h % AVATAR_POOL_SIZE) + 1
+    return f"/static/avatars/avatar-{idx}.jpg"
 
 out = []
 out.append("-- NaijaDeals seed data v2 — realistic multi-seller marketplace catalog")
@@ -102,8 +119,8 @@ vendors = [
 ]
 def esc(s):
     return s.replace("'", "''")
-out.append("INSERT OR IGNORE INTO vendors (id, slug, name, description, city, state, is_verified, rating_avg, rating_count, positive_feedback_percent, response_time_hours, joined_year) VALUES")
-out.append(",\n".join(f"  ({i},'{s}','{esc(n)}','{esc(d)}','{c}','{st}',{v},{ra},{rc},{pf},{rt},{jy})" for i,s,n,d,c,st,v,ra,rc,pf,rt,jy in vendors) + ";")
+out.append("INSERT OR IGNORE INTO vendors (id, slug, name, description, logo_url, banner_url, city, state, is_verified, rating_avg, rating_count, positive_feedback_percent, response_time_hours, joined_year) VALUES")
+out.append(",\n".join(f"  ({i},'{s}','{esc(n)}','{esc(d)}','{vendor_logo(i)}','/static/banners/banner-{(i % 5) + 1}.jpg','{c}','{st}',{v},{ra},{rc},{pf},{rt},{jy})" for i,s,n,d,c,st,v,ra,rc,pf,rt,jy in vendors) + ";")
 
 # ============ PRODUCTS (canonical) + LISTINGS (per-seller offers) ============
 # product tuple: (id, slug, cat_id, brand_id, title, desc, long_desc, specs(dict), included(list), image ph args, rating_avg, rating_count, sales, flash, gallery_count)
@@ -457,8 +474,11 @@ def slugify(t):
 rows=[]
 for (pid_,cat,brand,title,desc,longd,specs,included,img,rating,rcount,sales,flash) in products:
     slug = slugify(title)
-    gallery = json.dumps([img, img, img])
-    rows.append(f"  ({pid_}, '{slug}', {cat}, {brand if brand else 'NULL'}, '{esc(title)}', '{esc(desc)}', '{esc(longd)}', '{esc(specs)}', '{esc(included)}', '{img}', '{esc(gallery)}', {rating}, {rcount}, {sales}, {flash})")
+    real_img = product_image(pid_)
+    # Only one real photo exists per product (no multi-angle shoot yet) — gallery is a single-item
+    # array rather than duplicating the same frame 3x, which would look fake in a gallery UI.
+    gallery = json.dumps([real_img])
+    rows.append(f"  ({pid_}, '{slug}', {cat}, {brand if brand else 'NULL'}, '{esc(title)}', '{esc(desc)}', '{esc(longd)}', '{esc(specs)}', '{esc(included)}', '{real_img}', '{esc(gallery)}', {rating}, {rcount}, {sales}, {flash})")
 out.append(",\n".join(rows) + ";")
 
 # ---- write listings SQL ----
@@ -496,7 +516,7 @@ review_comments_mixed = [
 import random
 random.seed(42)
 
-out.append("INSERT OR IGNORE INTO reviews (product_id, author_name, rating, title, comment, has_photo, is_verified_purchase, created_at) VALUES")
+out.append("INSERT OR IGNORE INTO reviews (product_id, author_name, avatar_url, rating, title, comment, has_photo, photo_url, is_verified_purchase, created_at) VALUES")
 review_rows = []
 for (pid_,cat,brand,title,desc,longd,specs,included,img,rating,rcount,sales,flash) in products:
     # generate 3-6 reviews per product, weighted toward the product's stated rating
@@ -513,7 +533,11 @@ for (pid_,cat,brand,title,desc,longd,specs,included,img,rating,rcount,sales,flas
             comment = random.choice(review_comments_mixed)
             rtitle = random.choice(["Decent", "It's okay", "Fair quality"])
         has_photo = 1 if random.random() < 0.25 else 0
-        review_rows.append(f"  ({pid_}, '{esc(author)}', {r}, '{esc(rtitle)}', '{esc(comment)}', {has_photo}, 1, datetime('now', '-{days_ago} days'))")
+        # A photo review must actually carry a photo — reuse the real product studio shot as the
+        # "customer photo" stand-in (no separate customer-photo shoot exists yet), never a dangling flag.
+        photo_url_sql = f"'{product_image(pid_)}'" if has_photo else 'NULL'
+        avatar_url = avatar_for(author)
+        review_rows.append(f"  ({pid_}, '{esc(author)}', '{avatar_url}', {r}, '{esc(rtitle)}', '{esc(comment)}', {has_photo}, {photo_url_sql}, 1, datetime('now', '-{days_ago} days'))")
 out.append(",\n".join(review_rows) + ";")
 
 # ============ PRODUCT Q&A ============
