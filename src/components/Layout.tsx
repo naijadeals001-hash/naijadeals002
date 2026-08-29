@@ -8,6 +8,8 @@ interface LayoutProps {
   cartCount?: number
   wishlistCount?: number
   activeNav?: string
+  /** City the visitor picked for delivery (nd_city cookie). Defaults to Lagos. */
+  selectedCity?: string
   children: any
 }
 
@@ -37,7 +39,7 @@ const CATEGORY_NAV = [
   { href: '/shop?category=automotive', label: 'Automotive' }
 ]
 
-export const Layout: FC<LayoutProps> = ({ title, description, user, cartCount = 0, wishlistCount = 0, children }) => {
+export const Layout: FC<LayoutProps> = ({ title, description, user, cartCount = 0, wishlistCount = 0, selectedCity = 'Lagos', children }) => {
   return (
     <html lang="en">
       <head>
@@ -90,7 +92,7 @@ export const Layout: FC<LayoutProps> = ({ title, description, user, cartCount = 
               <label class="hidden lg:flex flex-col justify-center leading-tight px-2 py-1 rounded-lg hover:bg-white/10 transition-colors shrink-0 cursor-pointer">
                 <span class="text-[11px] text-white/70">Deliver to</span>
                 <select id="city-selector" class="text-sm font-semibold bg-transparent outline-none cursor-pointer [&>option]:text-gray-900">
-                  {CITIES.map((city) => <option value={city} selected={city === 'Lagos'}>{city}</option>)}
+                  {CITIES.map((city) => <option value={city} selected={city === selectedCity}>{city}</option>)}
                 </select>
               </label>
               <form action="/shop" method="get" class="flex flex-1 max-w-2xl items-stretch rounded-md overflow-hidden bg-white">
@@ -183,7 +185,7 @@ export const Layout: FC<LayoutProps> = ({ title, description, user, cartCount = 
                 <span class="text-lg font-bold tracking-tight">Naija<span class="text-primary-fixed">Deals</span></span>
               </a>
               <button id="mobile-location-btn" class="flex items-center gap-0.5 text-[11px] text-white/80 ml-1 shrink-0">
-                <span class="material-symbols-outlined text-sm">location_on</span>Lagos
+                <span class="material-symbols-outlined text-sm">location_on</span>{selectedCity}
                 <span class="material-symbols-outlined text-sm">expand_more</span>
               </button>
               <div class="ml-auto flex items-center gap-3 shrink-0">
