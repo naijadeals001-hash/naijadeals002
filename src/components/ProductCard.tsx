@@ -10,7 +10,7 @@ interface ProductCardProps {
 
 export const ProductCard: FC<ProductCardProps> = ({ product, carousel = false }) => {
   const discount = discountPercent(product.price_kobo, product.compare_at_price_kobo)
-  const widthClass = carousel ? 'w-[42vw] sm:w-44 md:w-auto shrink-0' : ''
+  const widthClass = carousel ? 'w-[42vw] sm:w-44 md:w-52 lg:w-56 shrink-0 snap-start' : ''
   return (
     <a href={`/shop/${product.slug}`} class={`group flex flex-col bg-white rounded-lg border border-gray-200 overflow-hidden hover:shadow-md transition-shadow ${widthClass}`}>
       <div class="relative aspect-square bg-gray-100 overflow-hidden">
@@ -78,11 +78,22 @@ export const ProductCard: FC<ProductCardProps> = ({ product, carousel = false })
   )
 }
 
-/** Horizontal-scroll wrapper for mobile carousels — desktop shows the same items as a static grid. */
-export const ProductCarousel: FC<{ title: string; subtitle?: string; products: ProductWithListingRow[]; viewAllHref?: string; icon?: string }> = ({
-  title, subtitle, products, viewAllHref, icon
-}) => {
+/**
+ * Horizontal-scroll carousel used on both desktop and mobile. A fixed grid (e.g. grid-cols-5)
+ * would silently truncate an 8-12 item carousel to whatever fits one row — this uses a scroll
+ * track with snap points and desktop-only prev/next buttons instead, so every product passed in
+ * is actually reachable, on every viewport, exactly as Pat specified.
+ */
+export const ProductCarousel: FC<{
+  title: string
+  subtitle?: string
+  products: ProductWithListingRow[]
+  viewAllHref?: string
+  icon?: string
+  id?: string
+}> = ({ title, subtitle, products, viewAllHref, icon, id }) => {
   if (products.length === 0) return null
+  const trackId = id ? `carousel-track-${id}` : undefined
   return (
     <section class="py-6 md:py-8 border-t border-gray-100">
       <div class="max-w-[100rem] mx-auto px-4 md:px-6 lg:px-8">
@@ -94,13 +105,40 @@ export const ProductCarousel: FC<{ title: string; subtitle?: string; products: P
             </h2>
             {subtitle && <p class="text-sm text-gray-500 mt-0.5">{subtitle}</p>}
           </div>
-          {viewAllHref && (
-            <a href={viewAllHref} class="text-sm font-semibold text-primary hover:underline shrink-0 flex items-center gap-0.5">
-              See all<span class="material-symbols-outlined text-base">chevron_right</span>
-            </a>
-          )}
+          <div class="flex items-center gap-2 shrink-0">
+            {viewAllHref && (
+              <a href={viewAllHref} class="text-sm font-semibold text-primary hover:underline flex items-center gap-0.5">
+                See all<span class="material-symbols-outlined text-base">chevron_right</span>
+              </a>
+            )}
+            {trackId && (
+              <div class="hidden md:flex items-center gap-1.5 ml-2">
+                <button
+                  type="button"
+                  aria-label="Scroll left"
+                  class="carousel-nav-btn w-8 h-8 rounded-full border border-gray-300 flex items-center justify-center text-gray-600 hover:border-primary hover:text-primary transition-colors"
+                  data-target={trackId}
+                  data-dir="-1"
+                >
+                  <span class="material-symbols-outlined text-lg">chevron_left</span>
+                </button>
+                <button
+                  type="button"
+                  aria-label="Scroll right"
+                  class="carousel-nav-btn w-8 h-8 rounded-full border border-gray-300 flex items-center justify-center text-gray-600 hover:border-primary hover:text-primary transition-colors"
+                  data-target={trackId}
+                  data-dir="1"
+                >
+                  <span class="material-symbols-outlined text-lg">chevron_right</span>
+                </button>
+              </div>
+            )}
+          </div>
         </div>
-        <div class="flex md:grid md:grid-cols-5 gap-3 md:gap-4 overflow-x-auto md:overflow-visible pb-2 -mx-4 px-4 md:mx-0 md:px-0 snap-x">
+        <div
+          id={trackId}
+          class="flex gap-3 md:gap-4 overflow-x-auto pb-2 -mx-4 px-4 md:mx-0 md:px-0 snap-x scroll-smooth [&::-webkit-scrollbar]:hidden"
+        >
           {products.map((p) => <ProductCard product={p} carousel />)}
         </div>
       </div>

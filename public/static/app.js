@@ -122,6 +122,68 @@
     }
   })();
 
+  // ---------- Product carousels: desktop prev/next buttons scroll the track ----------
+  (function initCarouselNav() {
+    qsa('.carousel-nav-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        const track = document.getElementById(btn.getAttribute('data-target'));
+        if (!track) return;
+        const dir = Number(btn.getAttribute('data-dir'));
+        const card = track.querySelector(':scope > a');
+        const step = card ? card.getBoundingClientRect().width + 16 : 300;
+        track.scrollBy({ left: dir * step * 2, behavior: 'smooth' });
+      });
+    });
+  })();
+
+  // ---------- Recently Viewed: track visited PDPs in localStorage + hydrate homepage section ----------
+  (function trackRecentlyViewed() {
+    var pid = document.body.getAttribute('data-product-id');
+    if (!pid) return;
+    try {
+      var KEY = 'nd_recently_viewed';
+      var ids = JSON.parse(localStorage.getItem(KEY) || '[]').filter(function (id) { return id !== Number(pid); });
+      ids.unshift(Number(pid));
+      localStorage.setItem(KEY, JSON.stringify(ids.slice(0, 20)));
+    } catch (e) { /* localStorage unavailable — skip silently */ }
+  })();
+
+  (function hydrateRecentlyViewed() {
+    var section = document.getElementById('recently-viewed-section');
+    if (!section) return;
+    var currentPid = Number(document.body.getAttribute('data-product-id') || '0');
+    try {
+      var ids = JSON.parse(localStorage.getItem('nd_recently_viewed') || '[]').filter(function (id) { return id !== currentPid; });
+      if (ids.length === 0) { section.remove(); return; }
+      api('/api/catalog/products/by-ids?ids=' + ids.slice(0, 12).join(',')).then(function (res) {
+        if (!res.ok || !res.data || !res.data.products || res.data.products.length === 0) { section.remove(); return; }
+        var track = section.querySelector('.rv-track');
+        if (!track) { section.remove(); return; }
+        track.innerHTML = res.data.products.map(function (p) {
+          var discountBadge = (p.compare_at_price_kobo && p.compare_at_price_kobo > p.price_kobo)
+            ? '<span class="absolute top-2 left-2 bg-red-600 text-white text-xs font-bold px-1.5 py-0.5 rounded">-' + Math.round((p.compare_at_price_kobo - p.price_kobo) / p.compare_at_price_kobo * 100) + '%</span>'
+            : '';
+          var compareHtml = p.compare_at_price_kobo ? '<span class="text-xs text-gray-400 line-through">' + formatNaira(p.compare_at_price_kobo) + '</span>' : '';
+          return '<a href="/shop/' + p.slug + '" class="group flex flex-col bg-white rounded-lg border border-gray-200 overflow-hidden hover:shadow-md transition-shadow w-[42vw] sm:w-44 md:w-52 lg:w-56 shrink-0 snap-start">' +
+            '<div class="relative aspect-square bg-gray-100 overflow-hidden"><img src="' + p.image_url + '" alt="' + p.title.replace(/"/g, '&quot;') + '" loading="lazy" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300">' + discountBadge + '</div>' +
+            '<div class="p-3 flex flex-col gap-1 flex-1"><h3 class="text-sm text-gray-800 line-clamp-2 min-h-[2.5rem]">' + p.title + '</h3>' +
+            '<div class="flex items-baseline gap-2 mt-1"><span class="text-base font-bold text-gray-900">' + formatNaira(p.price_kobo) + '</span>' + compareHtml + '</div></div></a>';
+        }).join('');
+        section.classList.remove('hidden');
+      }).catch(function () { section.remove(); });
+    } catch (e) { section.remove(); }
+  })();
+
+  // ---------- City selector: persist choice to a cookie, then reload so the server can re-render "Deals Near You" ----------
+  (function initCitySelector() {
+    qsa('#city-selector').forEach(function (sel) {
+      sel.addEventListener('change', function () {
+        document.cookie = 'nd_city=' + encodeURIComponent(sel.value) + ';path=/;max-age=' + (60 * 60 * 24 * 365);
+        location.reload();
+      });
+    });
+  })();
+
   // ---------- Home page: flash deal countdown (visual only, resets each load) ----------
   (function initFlashTimer() {
     const el = document.getElementById('flash-timer-value');

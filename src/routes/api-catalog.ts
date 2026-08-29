@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import type { AppEnv, CategoryRow } from '../types'
-import { getTopLevelCategories, getListingsForProduct, getVariantsForListing } from '../lib/catalog'
+import { getTopLevelCategories, getListingsForProduct, getVariantsForListing, getProductsByIds } from '../lib/catalog'
 import { getHomepageFeed } from '../lib/homepage-feed'
 
 export const catalogApi = new Hono<AppEnv>()
@@ -18,6 +18,19 @@ catalogApi.get('/categories/top', async (c) => {
 catalogApi.get('/homepage-feed', async (c) => {
   const feed = await getHomepageFeed(c.env.DB)
   return c.json(feed)
+})
+
+/** Hydrates "Recently Viewed" from the visitor's own localStorage id list (client-side history, no server-side tracking). */
+catalogApi.get('/products/by-ids', async (c) => {
+  const idsParam = c.req.query('ids') || ''
+  const ids = idsParam
+    .split(',')
+    .map((s) => Number(s.trim()))
+    .filter((n) => Number.isInteger(n) && n > 0)
+    .slice(0, 20)
+  if (ids.length === 0) return c.json({ products: [] })
+  const products = await getProductsByIds(c.env.DB, ids)
+  return c.json({ products })
 })
 
 /** Search/listing endpoint used by /shop search results page. Joined to each product's primary listing. */

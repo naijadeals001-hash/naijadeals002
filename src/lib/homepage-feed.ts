@@ -19,20 +19,29 @@ import {
   getDiscounted,
   getNigerianBrandProducts,
   getTopBrands,
-  getPopularVendors
+  getPopularVendors,
+  getLimitedTimeDeals,
+  getPopularCategories
 } from './catalog'
 
 const TTL_SECONDS = 120 // recompute at most once every 2 minutes per section
 
+// Only sections that are the SAME for every visitor belong here (cacheable). Visitor-specific
+// sections — "Deals Near You" (depends on the city the visitor picked) and "Recently Viewed"
+// (depends on that visitor's own browsing history) — are NOT cacheable and must never be added
+// to this map. They are fetched live, per-request, via getDealsNearYouLive/getRecentlyViewedLive
+// below, called directly from the home.tsx route handler alongside (not through) this cache.
 const SECTION_LOADERS: Record<string, (db: D1Database) => Promise<any>> = {
-  flash_deals: (db) => getFlashDeals(db, 10),
-  best_sellers: (db) => getBestSellers(db, 10),
-  new_arrivals: (db) => getNewArrivals(db, 10),
-  trending: (db) => getTrending(db, 10),
+  flash_deals: (db) => getFlashDeals(db, 12),
+  best_sellers: (db) => getBestSellers(db, 12),
+  new_arrivals: (db) => getNewArrivals(db, 12),
+  trending: (db) => getTrending(db, 12),
   recommended: (db) => getRecommended(db, 12),
-  todays_deals: (db) => getDiscounted(db, 10),
-  nigerian_brands: (db) => getNigerianBrandProducts(db, 10),
+  todays_deals: (db) => getDiscounted(db, 12),
+  limited_time_deals: (db) => getLimitedTimeDeals(db, 10),
+  nigerian_brands: (db) => getNigerianBrandProducts(db, 12),
   top_brands: (db) => getTopBrands(db, 12),
+  popular_categories: (db) => getPopularCategories(db, 10),
   popular_vendors: (db) => getPopularVendors(db, 8)
 }
 
@@ -67,7 +76,7 @@ async function getSection<T>(db: D1Database, key: string): Promise<T> {
   return fresh as T
 }
 
-/** Loads ALL homepage sections in parallel (each independently cache-checked), for the homepage route. */
+/** Loads ALL cacheable homepage sections in parallel (each independently cache-checked). */
 export async function getHomepageFeed(db: D1Database) {
   const keys = Object.keys(SECTION_LOADERS)
   const values = await Promise.all(keys.map((k) => getSection(db, k)))
@@ -80,8 +89,10 @@ export async function getHomepageFeed(db: D1Database) {
     trending: any[]
     recommended: any[]
     todays_deals: any[]
+    limited_time_deals: any[]
     nigerian_brands: any[]
     top_brands: any[]
+    popular_categories: any[]
     popular_vendors: any[]
   }
 }
