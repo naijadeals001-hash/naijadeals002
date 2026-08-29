@@ -15,10 +15,12 @@ function generateOrderNumber(): string {
   return `ND-${ts}-${rand}`
 }
 
-const FLAT_DELIVERY_FEE_KOBO = 150000 // ₦1,500 flat fee for MVP; per-vendor/distance rules come later
+export const FLAT_DELIVERY_FEE_KOBO = 150000 // ₦1,500 flat fee for MVP; per-vendor/distance rules come later
 
 /**
  * Creates an order + order_items from the given cart items, at status 'pending_payment'.
+ * Each order_item snapshots the listing's vendor_id and variant at time of purchase, so seller
+ * comparison / price changes after checkout never affect an already-placed order.
  * Does NOT touch payment or stock — that happens in confirmOrderPayment() once payment
  * is verified, so an abandoned unpaid order never locks up inventory.
  */
@@ -56,25 +58,18 @@ export async function createPendingOrder(
 
   const orderId = orderInsert.meta.last_row_id as number
 
-  // Need vendor_id per product for order_items snapshot
-  const productIds = items.map((i) => i.product_id)
-  const placeholders = productIds.map(() => '?').join(',')
-  const { results: vendorRows } = await db
-    .prepare(`SELECT id, vendor_id FROM products WHERE id IN (${placeholders})`)
-    .bind(...productIds)
-    .all<{ id: number; vendor_id: number }>()
-  const vendorByProduct = new Map(vendorRows.map((r) => [r.id, r.vendor_id]))
-
   const itemInserts = items.map((item) =>
     db
       .prepare(
-        `INSERT INTO order_items (order_id, product_id, vendor_id, title_snapshot, image_snapshot, unit_price_kobo, quantity, line_total_kobo)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO order_items (order_id, listing_id, product_id, vendor_id, variant_snapshot, title_snapshot, image_snapshot, unit_price_kobo, quantity, line_total_kobo)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .bind(
         orderId,
+        item.listing_id,
         item.product_id,
-        vendorByProduct.get(item.product_id) ?? 0,
+        item.vendor_id,
+        item.variant_value ?? null,
         item.title,
         item.image_url,
         item.price_kobo,
@@ -88,7 +83,7 @@ export async function createPendingOrder(
 }
 
 /**
- * Marks an order paid, decrements stock, and puts payment into escrow_held state.
+ * Marks an order paid, decrements listing stock, and puts payment into escrow_held state.
  * Called after Paystack webhook verification OR successful wallet debit.
  * Stock decrement happens here (not at order creation) so browsing/pending carts
  * never reserve inventory — only a confirmed payment does.
@@ -104,14 +99,14 @@ export async function confirmOrderPayment(
   if (order.payment_status !== 'unpaid') return // idempotent — already processed
 
   const items = await db
-    .prepare('SELECT product_id, quantity FROM order_items WHERE order_id = ?')
+    .prepare('SELECT listing_id, quantity FROM order_items WHERE order_id = ?')
     .bind(orderId)
-    .all<{ product_id: number; quantity: number }>()
+    .all<{ listing_id: number; quantity: number }>()
 
   const stockUpdates = items.results.map((item) =>
     db
-      .prepare('UPDATE products SET stock = MAX(0, stock - ?) WHERE id = ?')
-      .bind(item.quantity, item.product_id)
+      .prepare('UPDATE product_listings SET stock = MAX(0, stock - ?) WHERE id = ?')
+      .bind(item.quantity, item.listing_id)
   )
 
   await db.batch([
