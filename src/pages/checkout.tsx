@@ -115,7 +115,7 @@ export async function checkoutPage(c: Context<AppEnv>) {
         </div>
 
         <div class="grid lg:grid-cols-3 gap-8">
-          <div class="lg:col-span-2 space-y-6">
+          <div class="lg:col-span-2 space-y-6 min-w-0">
             {/* ============ STEP 1: Delivery Address ============ */}
             <section class="checkout-step bg-white border border-gray-200 rounded-xl p-5" data-step="1">
               <h2 class="font-bold text-gray-800 mb-4 flex items-center gap-2">
@@ -229,11 +229,11 @@ export async function checkoutPage(c: Context<AppEnv>) {
                   const groupTotal = group.items.reduce((s, i) => s + i.price_kobo * i.quantity, 0)
                   return (
                     <div class="border border-gray-100 rounded-lg overflow-hidden">
-                      <div class="bg-gray-50 px-4 py-2 flex items-center justify-between">
-                        <span class="text-sm font-bold text-gray-800 flex items-center gap-1.5">
-                          <span class="material-symbols-outlined text-primary text-base">storefront</span>{group.vendorName}
+                      <div class="bg-gray-50 px-4 py-2 flex items-center justify-between gap-2">
+                        <span class="text-sm font-bold text-gray-800 flex items-center gap-1.5 min-w-0 truncate">
+                          <span class="material-symbols-outlined text-primary text-base shrink-0">storefront</span><span class="truncate">{group.vendorName}</span>
                         </span>
-                        <span class="text-xs text-gray-500">Subtotal: {formatNaira(groupTotal)}</span>
+                        <span class="text-xs text-gray-500 shrink-0 whitespace-nowrap">Subtotal: {formatNaira(groupTotal)}</span>
                       </div>
                       <div class="divide-y divide-gray-100">
                         {group.items.map((item) => (
@@ -256,8 +256,8 @@ export async function checkoutPage(c: Context<AppEnv>) {
               <div class="mt-5 border-t border-gray-100 pt-4">
                 <label class="block text-sm font-medium text-gray-700 mb-1.5">Have a coupon code?</label>
                 <div class="flex gap-2">
-                  <input id="coupon-input" placeholder="e.g. WELCOME10" class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30 uppercase" />
-                  <button type="button" id="apply-coupon-btn" class="bg-gray-800 text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-gray-900 transition">Apply</button>
+                  <input id="coupon-input" placeholder="e.g. WELCOME10" class="flex-1 min-w-0 border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30 uppercase" />
+                  <button type="button" id="apply-coupon-btn" class="shrink-0 bg-gray-800 text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-gray-900 transition">Apply</button>
                 </div>
                 <p id="coupon-feedback" class="text-xs mt-1.5"></p>
               </div>
@@ -310,7 +310,7 @@ export async function checkoutPage(c: Context<AppEnv>) {
           </div>
 
           {/* ============ Sticky Order Summary sidebar ============ */}
-          <div class="bg-white border border-gray-200 rounded-xl p-5 h-fit lg:sticky lg:top-20">
+          <div class="bg-white border border-gray-200 rounded-xl p-5 h-fit lg:sticky lg:top-20 min-w-0">
             <h2 class="font-bold text-gray-800 mb-3">Order Summary</h2>
             <div class="space-y-1.5 text-sm">
               <div class="flex justify-between text-gray-600">
