@@ -1,5 +1,6 @@
 import type { CartItemRow } from '../types'
 import { debitWallet, InsufficientFundsError } from './wallet'
+import { validateCoupon, incrementCouponUsage } from './coupons'
 
 export interface ShippingDetails {
   name: string
@@ -9,13 +10,29 @@ export interface ShippingDetails {
   state: string
 }
 
+export type DeliveryMethod = 'standard' | 'express'
+
 function generateOrderNumber(): string {
   const ts = Date.now().toString(36).toUpperCase()
   const rand = Math.floor(Math.random() * 1000).toString().padStart(3, '0')
   return `ND-${ts}-${rand}`
 }
 
-export const FLAT_DELIVERY_FEE_KOBO = 150000 // ₦1,500 flat fee for MVP; per-vendor/distance rules come later
+// Delivery is charged PER SELLER SHIPMENT (each vendor fulfils and ships their own items
+// independently, exactly like Jumia/Amazon marketplace orders) — not one flat fee regardless
+// of how many sellers are in the cart. Express roughly doubles the per-shipment fee.
+export const DELIVERY_FEE_PER_SELLER_KOBO: Record<DeliveryMethod, number> = {
+  standard: 150000, // ₦1,500 per seller shipment, 3-7 business days
+  express: 300000   // ₦3,000 per seller shipment, 1-2 business days
+}
+
+export function countDistinctVendors(items: CartItemRow[]): number {
+  return new Set(items.map((i) => i.vendor_id)).size
+}
+
+export function calculateDeliveryFeeKobo(items: CartItemRow[], method: DeliveryMethod): number {
+  return countDistinctVendors(items) * DELIVERY_FEE_PER_SELLER_KOBO[method]
+}
 
 /**
  * Creates an order + order_items from the given cart items, at status 'pending_payment'.
@@ -28,31 +45,53 @@ export async function createPendingOrder(
   db: D1Database,
   userId: number,
   items: CartItemRow[],
-  shipping: ShippingDetails
-): Promise<{ orderId: number; orderNumber: string; totalKobo: number }> {
+  shipping: ShippingDetails,
+  deliveryMethod: DeliveryMethod = 'standard',
+  couponCode: string | null = null
+): Promise<{ orderId: number; orderNumber: string; totalKobo: number; discountKobo: number; deliveryFeeKobo: number }> {
   if (items.length === 0) throw new Error('Cart is empty')
 
   const subtotal = items.reduce((sum, item) => sum + item.price_kobo * item.quantity, 0)
-  const total = subtotal + FLAT_DELIVERY_FEE_KOBO
+  const deliveryFee = calculateDeliveryFeeKobo(items, deliveryMethod)
+
+  let discountKobo = 0
+  let appliedCouponId: number | null = null
+  let appliedCouponCode: string | null = null
+  if (couponCode) {
+    const validation = await validateCoupon(db, couponCode, subtotal)
+    if (validation.valid && validation.coupon) {
+      discountKobo = validation.discountKobo ?? 0
+      appliedCouponId = validation.coupon.id
+      appliedCouponCode = validation.coupon.code
+    }
+    // If the coupon is no longer valid at the moment of order creation (e.g. someone else just
+    // used up the last redemption), we simply proceed without a discount rather than blocking checkout.
+  }
+
+  const total = Math.max(0, subtotal + deliveryFee - discountKobo)
   const orderNumber = generateOrderNumber()
 
   const orderInsert = await db
     .prepare(
       `INSERT INTO orders (order_number, user_id, status, payment_status, subtotal_kobo, delivery_fee_kobo, total_kobo,
-                            shipping_name, shipping_phone, shipping_address, shipping_city, shipping_state)
-       VALUES (?, ?, 'pending_payment', 'unpaid', ?, ?, ?, ?, ?, ?, ?, ?)`
+                            shipping_name, shipping_phone, shipping_address, shipping_city, shipping_state,
+                            delivery_method, coupon_code, discount_kobo)
+       VALUES (?, ?, 'pending_payment', 'unpaid', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .bind(
       orderNumber,
       userId,
       subtotal,
-      FLAT_DELIVERY_FEE_KOBO,
+      deliveryFee,
       total,
       shipping.name,
       shipping.phone,
       shipping.address,
       shipping.city,
-      shipping.state
+      shipping.state,
+      deliveryMethod,
+      appliedCouponCode,
+      discountKobo
     )
     .run()
 
@@ -79,7 +118,11 @@ export async function createPendingOrder(
   )
   await db.batch(itemInserts)
 
-  return { orderId, orderNumber, totalKobo: total }
+  if (appliedCouponId) {
+    await incrementCouponUsage(db, appliedCouponId)
+  }
+
+  return { orderId, orderNumber, totalKobo: total, discountKobo, deliveryFeeKobo: deliveryFee }
 }
 
 /**

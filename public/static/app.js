@@ -83,7 +83,10 @@
     });
   })();
 
-  // ---------- Product Detail Page: quantity stepper + add to cart ----------
+  // ---------- Product Detail Page: quantity stepper, variant selection, add to cart ----------
+  // BUY-BOX RULE: every add-to-cart call on this page (main buy box AND each Compare Sellers row)
+  // must send listing_id, never product_id — a product can have several sellers/listings, and the
+  // customer must get exactly the seller/price/stock they selected, never a different seller's offer.
   (function initPDP() {
     const qtyInput = document.getElementById('qty-input');
     const qtyMinus = document.getElementById('qty-minus');
@@ -100,26 +103,62 @@
       });
     }
 
+    // Track the currently-selected variant (if this listing has variants). Starts as whichever
+    // variant-option button is rendered active (server marks the first one), null if no variants.
+    let selectedVariantId = null;
+    const activeVariantBtn = qs('.variant-option.border-primary');
+    if (activeVariantBtn) selectedVariantId = Number(activeVariantBtn.getAttribute('data-variant-id'));
+
+    qsa('.variant-option').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        selectedVariantId = Number(btn.getAttribute('data-variant-id'));
+        qsa('.variant-option').forEach(function (b) {
+          b.classList.remove('border-primary', 'bg-primary-light', 'text-primary-dark', 'font-semibold');
+          b.classList.add('border-gray-300', 'text-gray-600');
+        });
+        btn.classList.remove('border-gray-300', 'text-gray-600');
+        btn.classList.add('border-primary', 'bg-primary-light', 'text-primary-dark', 'font-semibold');
+      });
+    });
+
+    async function addListingToCart(btn, listingId, quantity, variantId) {
+      const originalHTML = btn.innerHTML;
+      btn.disabled = true;
+      btn.textContent = 'Adding...';
+      const res = await api('/api/cart/items', {
+        method: 'POST',
+        body: JSON.stringify({ listing_id: listingId, quantity: quantity, variant_id: variantId || undefined })
+      });
+      btn.disabled = false;
+      if (res.ok) {
+        updateCartBadges(res.data.count);
+        btn.innerHTML = originalHTML;
+        btn.textContent = 'Added ✓';
+        setTimeout(function () { btn.innerHTML = originalHTML; }, 1500);
+      } else {
+        btn.innerHTML = originalHTML;
+        alert((res.data && res.data.error) || 'Could not add to cart. Please try again.');
+      }
+    }
+
+    // Main buy-box "Add to cart" button
     const addBtn = document.getElementById('add-to-cart-btn');
     if (addBtn) {
-      addBtn.addEventListener('click', async function () {
-        const productId = Number(addBtn.getAttribute('data-product-id'));
+      addBtn.addEventListener('click', function () {
+        const listingId = Number(addBtn.getAttribute('data-listing-id'));
         const quantity = qtyInput ? parseInt(qtyInput.value, 10) || 1 : 1;
-        const originalText = addBtn.innerHTML;
-        addBtn.disabled = true;
-        addBtn.textContent = 'Adding...';
-        const res = await api('/api/cart/items', { method: 'POST', body: JSON.stringify({ product_id: productId, quantity: quantity }) });
-        addBtn.disabled = false;
-        addBtn.innerHTML = originalText;
-        if (res.ok) {
-          updateCartBadges(res.data.count);
-          addBtn.textContent = 'Added ✓';
-          setTimeout(function () { addBtn.innerHTML = originalText; }, 1500);
-        } else {
-          alert((res.data && res.data.error) || 'Could not add to cart. Please try again.');
-        }
+        addListingToCart(addBtn, listingId, quantity, selectedVariantId);
       });
     }
+
+    // Compare Sellers table: each row has its own listing_id — adds THAT seller's offer specifically,
+    // completely independent of whichever listing is shown in the main buy box above.
+    qsa('.add-listing-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        const listingId = Number(btn.getAttribute('data-listing-id'));
+        addListingToCart(btn, listingId, 1, null);
+      });
+    });
   })();
 
   // ---------- Product carousels: desktop prev/next buttons scroll the track ----------
@@ -201,16 +240,23 @@
     setInterval(tick, 1000);
   })();
 
-  // ---------- Cart page: quantity +/-, remove ----------
+  // ---------- Cart page: quantity +/-, remove, save-for-later, move-to-cart ----------
+  // BUY-BOX RULE: every row is keyed by cart_items.id (data-cart-item-id), never by product_id —
+  // two rows can legitimately share the same product_id (same product, two different sellers), so
+  // product_id would be ambiguous as a row key here.
   (function initCartPage() {
     const list = document.getElementById('cart-items-list');
-    if (!list) return;
+    const savedList = document.getElementById('saved-items-list');
+    if (!list && !savedList) return;
 
-    function rowEl(productId) {
-      return list.querySelector('[data-cart-item][data-product-id="' + productId + '"]');
+    function cartRowEl(cartItemId) {
+      return document.querySelector('[data-cart-item][data-cart-item-id="' + cartItemId + '"]');
+    }
+    function savedRowEl(cartItemId) {
+      return document.querySelector('[data-saved-item][data-cart-item-id="' + cartItemId + '"]');
     }
 
-    async function applyCartResponse(data) {
+    function applyCartSummary(data) {
       updateCartBadges(data.count);
       const countEl = document.getElementById('cart-summary-count');
       const subtotalEl = document.getElementById('cart-summary-subtotal');
@@ -218,46 +264,85 @@
       if (subtotalEl) subtotalEl.textContent = formatNaira(data.subtotal_kobo);
     }
 
-    async function changeQuantity(productId, newQty) {
-      const res = await api('/api/cart/items/' + productId, { method: 'PUT', body: JSON.stringify({ quantity: newQty }) });
+    async function changeQuantity(cartItemId, newQty) {
+      const res = await api('/api/cart/items/' + cartItemId, { method: 'PUT', body: JSON.stringify({ quantity: newQty }) });
       if (!res.ok) { alert((res.data && res.data.error) || 'Could not update cart.'); return; }
       if (newQty <= 0) {
-        const row = rowEl(productId);
-        if (row) row.remove();
-      } else {
-        const row = rowEl(productId);
-        if (row) {
-          const valueEl = row.querySelector('.cart-qty-value');
-          if (valueEl) valueEl.textContent = String(newQty);
-          const item = res.data.items.find(function (i) { return i.product_id === productId; });
-          const lineTotalEl = row.querySelector('.line-total');
-          if (lineTotalEl && item) lineTotalEl.textContent = formatNaira(item.price_kobo * item.quantity);
-        }
+        location.reload(); // seller-group headers may need to disappear if this was the last item from that seller
+        return;
       }
-      applyCartResponse(res.data);
-      if (res.data.items.length === 0) location.reload();
+      const row = cartRowEl(cartItemId);
+      if (row) {
+        const valueEl = row.querySelector('.cart-qty-value');
+        if (valueEl) valueEl.textContent = String(newQty);
+        const item = res.data.items.find(function (i) { return i.id === cartItemId; });
+        const lineTotalEl = row.querySelector('.line-total');
+        if (lineTotalEl && item) lineTotalEl.textContent = formatNaira(item.price_kobo * item.quantity);
+      }
+      applyCartSummary(res.data);
     }
 
-    list.addEventListener('click', function (e) {
-      const minusBtn = e.target.closest('.cart-qty-minus');
-      const plusBtn = e.target.closest('.cart-qty-plus');
-      const removeBtn = e.target.closest('.cart-remove-btn');
+    async function removeItem(cartItemId) {
+      const res = await api('/api/cart/items/' + cartItemId, { method: 'DELETE' });
+      if (!res.ok) { alert((res.data && res.data.error) || 'Could not remove item.'); return; }
+      location.reload(); // simplest correct way to re-render seller grouping after a removal
+    }
 
-      if (minusBtn) {
-        const productId = Number(minusBtn.getAttribute('data-product-id'));
-        const row = rowEl(productId);
-        const current = parseInt(row.querySelector('.cart-qty-value').textContent, 10);
-        changeQuantity(productId, current - 1);
-      } else if (plusBtn) {
-        const productId = Number(plusBtn.getAttribute('data-product-id'));
-        const row = rowEl(productId);
-        const current = parseInt(row.querySelector('.cart-qty-value').textContent, 10);
-        changeQuantity(productId, current + 1);
-      } else if (removeBtn) {
-        const productId = Number(removeBtn.getAttribute('data-product-id'));
-        changeQuantity(productId, 0);
-      }
-    });
+    async function saveForLater(cartItemId) {
+      const res = await api('/api/cart/items/' + cartItemId + '/save-for-later', { method: 'POST' });
+      if (!res.ok) { alert((res.data && res.data.error) || 'Could not save item for later.'); return; }
+      location.reload();
+    }
+
+    async function moveToCart(cartItemId) {
+      const res = await api('/api/cart/items/' + cartItemId + '/move-to-cart', { method: 'POST' });
+      if (!res.ok) { alert((res.data && res.data.error) || 'Could not move item to cart.'); return; }
+      location.reload();
+    }
+
+    async function removeSaved(cartItemId) {
+      const res = await api('/api/cart/items/' + cartItemId + '/saved', { method: 'DELETE' });
+      if (!res.ok) { alert((res.data && res.data.error) || 'Could not remove item.'); return; }
+      const row = savedRowEl(cartItemId);
+      if (row) row.remove();
+    }
+
+    if (list) {
+      list.addEventListener('click', function (e) {
+        const minusBtn = e.target.closest('.cart-qty-minus');
+        const plusBtn = e.target.closest('.cart-qty-plus');
+        const removeBtn = e.target.closest('.cart-remove-btn');
+        const saveBtn = e.target.closest('.cart-save-later-btn');
+
+        if (minusBtn) {
+          const cartItemId = Number(minusBtn.getAttribute('data-cart-item-id'));
+          const row = cartRowEl(cartItemId);
+          const current = parseInt(row.querySelector('.cart-qty-value').textContent, 10);
+          changeQuantity(cartItemId, current - 1);
+        } else if (plusBtn) {
+          const cartItemId = Number(plusBtn.getAttribute('data-cart-item-id'));
+          const row = cartRowEl(cartItemId);
+          const current = parseInt(row.querySelector('.cart-qty-value').textContent, 10);
+          changeQuantity(cartItemId, current + 1);
+        } else if (removeBtn) {
+          removeItem(Number(removeBtn.getAttribute('data-cart-item-id')));
+        } else if (saveBtn) {
+          saveForLater(Number(saveBtn.getAttribute('data-cart-item-id')));
+        }
+      });
+    }
+
+    if (savedList) {
+      savedList.addEventListener('click', function (e) {
+        const moveBtn = e.target.closest('.saved-move-to-cart-btn');
+        const removeBtn = e.target.closest('.saved-remove-btn');
+        if (moveBtn) {
+          moveToCart(Number(moveBtn.getAttribute('data-cart-item-id')));
+        } else if (removeBtn) {
+          removeSaved(Number(removeBtn.getAttribute('data-cart-item-id')));
+        }
+      });
+    }
   })();
 
   // ---------- Login / Register ----------
@@ -312,60 +397,212 @@
     }
   })();
 
-  // ---------- Checkout ----------
+  // ---------- Checkout: real multi-step UI (address -> delivery -> review/coupon -> payment) ----------
   (function initCheckout() {
-    const form = document.getElementById('checkout-form');
-    if (!form) return;
+    const stepper = document.getElementById('checkout-stepper');
+    const initDataEl = document.getElementById('checkout-init-data');
+    if (!stepper || !initDataEl) return;
+
+    const initData = JSON.parse(initDataEl.textContent || '{}');
     const errorEl = document.getElementById('checkout-error');
+    let currentStep = 1;
+    let appliedCouponCode = null;
+    let deliveryMethod = 'standard';
 
-    form.addEventListener('submit', async function (e) {
-      e.preventDefault();
-      hideError(errorEl);
-      const fd = new FormData(form);
-      const btn = document.getElementById('place-order-btn');
-      const originalText = btn.textContent;
-      btn.disabled = true;
-      btn.textContent = 'Placing order...';
-
-      const res = await api('/api/orders/checkout', {
-        method: 'POST',
-        body: JSON.stringify({
-          name: fd.get('name'),
-          phone: fd.get('phone'),
-          address: fd.get('address'),
-          city: fd.get('city'),
-          state: fd.get('state'),
-          payment_method: fd.get('payment_method')
-        })
+    // ---------- Step navigation ----------
+    function goToStep(n) {
+      currentStep = n;
+      qsa('.checkout-step').forEach(function (sec) {
+        sec.classList.toggle('hidden', Number(sec.getAttribute('data-step')) !== n);
       });
+      qsa('.checkout-step-tab').forEach(function (tab) {
+        const tabStep = Number(tab.getAttribute('data-step-tab'));
+        if (tabStep === n) {
+          tab.classList.add('bg-primary', 'text-white', 'border-primary');
+          tab.classList.remove('border-gray-200', 'text-gray-500');
+        } else {
+          tab.classList.remove('bg-primary', 'text-white', 'border-primary');
+          tab.classList.add('border-gray-200', 'text-gray-500');
+        }
+      });
+      window.scrollTo({ top: stepper.getBoundingClientRect().top + window.scrollY - 90, behavior: 'smooth' });
+    }
 
-      btn.disabled = false;
-      btn.textContent = originalText;
-
-      if (!res.ok) {
-        showError(errorEl, (res.data && res.data.error) || 'Checkout failed. Please try again.');
-        return;
-      }
-
-      if (res.data.authorization_url) {
-        // Paystack flow — hand off to their checkout page.
-        location.href = res.data.authorization_url;
-        return;
-      }
-
-      if (res.data.paid) {
-        location.href = '/orders/' + res.data.orderNumber;
-        return;
-      }
-
-      if (res.data.error === 'insufficient_wallet_balance') {
-        showError(errorEl, 'Insufficient wallet balance. Please top up your wallet or choose card/bank transfer.');
-        return;
-      }
-
-      // Fallback
-      location.href = '/orders/' + res.data.orderNumber;
+    qsa('.checkout-next-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () { goToStep(Number(btn.getAttribute('data-next-step'))); });
     });
+    qsa('.checkout-back-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () { goToStep(Number(btn.getAttribute('data-back-step'))); });
+    });
+    qsa('.checkout-step-tab').forEach(function (tab) {
+      tab.addEventListener('click', function () { goToStep(Number(tab.getAttribute('data-step-tab'))); });
+    });
+
+    // ---------- New address form (address book) ----------
+    const showNewAddrBtn = document.getElementById('show-new-address-btn');
+    const newAddrForm = document.getElementById('new-address-form');
+    const cancelNewAddrBtn = document.getElementById('cancel-new-address-btn');
+    const saveNewAddrBtn = document.getElementById('save-new-address-btn');
+    const newAddrError = document.getElementById('new-address-error');
+
+    if (showNewAddrBtn && newAddrForm) {
+      showNewAddrBtn.addEventListener('click', function () { newAddrForm.classList.remove('hidden'); });
+    }
+    if (cancelNewAddrBtn && newAddrForm) {
+      cancelNewAddrBtn.addEventListener('click', function () { newAddrForm.classList.add('hidden'); });
+    }
+    if (saveNewAddrBtn) {
+      saveNewAddrBtn.addEventListener('click', async function () {
+        hideError(newAddrError);
+        const payload = {
+          label: (document.getElementById('na-label') || {}).value || '',
+          recipient_name: (document.getElementById('na-recipient') || {}).value || '',
+          phone: (document.getElementById('na-phone') || {}).value || '',
+          line1: (document.getElementById('na-line1') || {}).value || '',
+          city: (document.getElementById('na-city') || {}).value || '',
+          state: (document.getElementById('na-state') || {}).value || ''
+        };
+        if (!payload.label || !payload.recipient_name || !payload.phone || !payload.line1 || !payload.city || !payload.state) {
+          showError(newAddrError, 'Please fill in every field.');
+          return;
+        }
+        saveNewAddrBtn.disabled = true;
+        const res = await api('/api/addresses', { method: 'POST', body: JSON.stringify(payload) });
+        saveNewAddrBtn.disabled = false;
+        if (!res.ok) { showError(newAddrError, (res.data && res.data.error) || 'Could not save address.'); return; }
+        location.reload(); // simplest correct way to re-render the address list with the new entry selected
+      });
+    }
+
+    // ---------- Live summary recalculation (delivery method + coupon) via /api/cart/preview ----------
+    const summarySubtotalEl = document.getElementById('summary-subtotal');
+    const summaryDeliveryFeeEl = document.getElementById('summary-delivery-fee');
+    const summarySellerCountEl = document.getElementById('summary-seller-count');
+    const summaryDiscountRow = document.getElementById('summary-discount-row');
+    const summaryDiscountEl = document.getElementById('summary-discount');
+    const summaryTotalEl = document.getElementById('summary-total');
+    const placeOrderTotalEl = document.getElementById('place-order-total');
+    const walletRadio = document.getElementById('payment-wallet-radio');
+    const paystackRadio = document.getElementById('payment-paystack-radio');
+    const walletBalanceNote = document.getElementById('wallet-balance-note');
+    const couponFeedback = document.getElementById('coupon-feedback');
+
+    async function refreshSummary() {
+      const body = { delivery_method: deliveryMethod };
+      if (appliedCouponCode) body.coupon_code = appliedCouponCode;
+      if (initData.isBuyNow && initData.buyNow) body.buy_now = initData.buyNow;
+
+      const res = await api('/api/cart/preview', { method: 'POST', body: JSON.stringify(body) });
+      if (!res.ok) return;
+      const d = res.data;
+
+      if (summarySubtotalEl) summarySubtotalEl.textContent = formatNaira(d.subtotal_kobo);
+      if (summaryDeliveryFeeEl) summaryDeliveryFeeEl.textContent = formatNaira(d.delivery_fee_kobo);
+      if (summarySellerCountEl) summarySellerCountEl.textContent = String(d.seller_count);
+      if (summaryTotalEl) summaryTotalEl.textContent = formatNaira(d.total_kobo);
+      if (placeOrderTotalEl) placeOrderTotalEl.textContent = formatNaira(d.total_kobo);
+
+      if (d.discount_kobo > 0) {
+        if (summaryDiscountRow) summaryDiscountRow.classList.remove('hidden');
+        if (summaryDiscountEl) summaryDiscountEl.textContent = '-' + formatNaira(d.discount_kobo);
+      } else if (summaryDiscountRow) {
+        summaryDiscountRow.classList.add('hidden');
+      }
+
+      // Wallet affordability re-check now that delivery/coupon changed the total
+      const canPayWallet = initData.walletBalanceKobo >= d.total_kobo;
+      if (walletRadio) {
+        walletRadio.disabled = !canPayWallet;
+        if (!canPayWallet && walletRadio.checked && paystackRadio) paystackRadio.checked = true;
+      }
+      if (walletBalanceNote) {
+        walletBalanceNote.textContent = 'Balance: ' + formatNaira(initData.walletBalanceKobo) + (canPayWallet ? '' : ' — insufficient, top up or pay by card');
+      }
+    }
+
+    qsa('input[name="delivery_method"]').forEach(function (radio) {
+      radio.addEventListener('change', function () {
+        if (radio.checked) { deliveryMethod = radio.value; refreshSummary(); }
+      });
+    });
+
+    // ---------- Coupon apply ----------
+    const applyCouponBtn = document.getElementById('apply-coupon-btn');
+    const couponInput = document.getElementById('coupon-input');
+    if (applyCouponBtn && couponInput) {
+      applyCouponBtn.addEventListener('click', async function () {
+        const code = couponInput.value.trim();
+        if (!code) return;
+        applyCouponBtn.disabled = true;
+        const body = { delivery_method: deliveryMethod, coupon_code: code };
+        if (initData.isBuyNow && initData.buyNow) body.buy_now = initData.buyNow;
+        const res = await api('/api/cart/preview', { method: 'POST', body: JSON.stringify(body) });
+        applyCouponBtn.disabled = false;
+        if (res.ok && res.data.coupon_valid) {
+          appliedCouponCode = code;
+          if (couponFeedback) { couponFeedback.textContent = 'Coupon applied — you saved ' + formatNaira(res.data.discount_kobo) + '!'; couponFeedback.className = 'text-xs mt-1.5 text-primary font-medium'; }
+        } else {
+          appliedCouponCode = null;
+          if (couponFeedback) { couponFeedback.textContent = (res.data && res.data.coupon_error) || 'Invalid coupon code.'; couponFeedback.className = 'text-xs mt-1.5 text-red-600 font-medium'; }
+        }
+        refreshSummary();
+      });
+    }
+
+    // ---------- Place order ----------
+    const placeOrderBtn = document.getElementById('place-order-btn');
+    if (placeOrderBtn) {
+      placeOrderBtn.addEventListener('click', async function () {
+        hideError(errorEl);
+        const addressRadio = document.querySelector('input[name="address_id"]:checked');
+        if (!addressRadio) {
+          showError(errorEl, 'Please select a delivery address.');
+          goToStep(1);
+          return;
+        }
+        const paymentRadio = document.querySelector('input[name="payment_method"]:checked');
+        const originalText = placeOrderBtn.textContent;
+        placeOrderBtn.disabled = true;
+        placeOrderBtn.textContent = 'Placing order...';
+
+        const payload = {
+          address_id: Number(addressRadio.value),
+          delivery_method: deliveryMethod,
+          payment_method: paymentRadio ? paymentRadio.value : 'wallet'
+        };
+        if (appliedCouponCode) payload.coupon_code = appliedCouponCode;
+        if (initData.isBuyNow && initData.buyNow) payload.buy_now = initData.buyNow;
+
+        const res = await api('/api/orders/checkout', { method: 'POST', body: JSON.stringify(payload) });
+
+        placeOrderBtn.disabled = false;
+        placeOrderBtn.textContent = originalText;
+
+        if (!res.ok) {
+          showError(errorEl, (res.data && res.data.error) || 'Checkout failed. Please try again.');
+          return;
+        }
+
+        if (res.data.authorization_url) {
+          // Paystack flow — hand off to their hosted checkout page.
+          location.href = res.data.authorization_url;
+          return;
+        }
+
+        if (res.data.paid) {
+          location.href = '/orders/' + res.data.orderNumber;
+          return;
+        }
+
+        if (res.data.error === 'insufficient_wallet_balance') {
+          showError(errorEl, 'Insufficient wallet balance. Please top up your wallet or choose card/bank transfer.');
+          return;
+        }
+
+        // Fallback
+        location.href = '/orders/' + res.data.orderNumber;
+      });
+    }
   })();
 
   // ---------- Checkout callback (return from Paystack after order payment) ----------

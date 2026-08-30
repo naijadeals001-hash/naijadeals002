@@ -1,7 +1,9 @@
 import { Hono } from 'hono'
-import type { AppEnv } from '../types'
-import { getOrCreateCartId, getCartItems, getSavedForLaterItems, addToCart, updateCartItemQuantity, removeFromCart, setSavedForLater } from '../lib/cart'
+import type { AppEnv, CartItemRow } from '../types'
+import { getOrCreateCartId, getCartItems, getSavedForLaterItems, addToCart, updateCartItemQuantity, removeFromCart, setSavedForLater, groupByVendor, getBuyNowItem } from '../lib/cart'
 import { getOrSetGuestToken } from '../lib/guest'
+import { validateCoupon } from '../lib/coupons'
+import { calculateDeliveryFeeKobo, type DeliveryMethod } from '../lib/orders'
 
 export const cartApi = new Hono<AppEnv>()
 
@@ -14,7 +16,8 @@ async function resolveCartId(c: any): Promise<number> {
 function summarize(items: Awaited<ReturnType<typeof getCartItems>>) {
   const subtotal = items.reduce((sum, i) => sum + i.price_kobo * i.quantity, 0)
   const count = items.reduce((s, i) => s + i.quantity, 0)
-  return { subtotal_kobo: subtotal, count }
+  const sellerCount = new Set(items.map((i) => i.vendor_id)).size
+  return { subtotal_kobo: subtotal, count, seller_count: sellerCount }
 }
 
 cartApi.get('/', async (c) => {
@@ -75,4 +78,67 @@ cartApi.post('/items/:cartItemId/move-to-cart', async (c) => {
   const items = await getCartItems(c.env.DB, cartId)
   const saved = await getSavedForLaterItems(c.env.DB, cartId)
   return c.json({ items, saved, ...summarize(items) })
+})
+
+cartApi.delete('/items/:cartItemId/saved', async (c) => {
+  // Permanently remove a saved-for-later item (distinct from moving it back to the active cart).
+  const cartItemId = Number(c.req.param('cartItemId'))
+  const cartId = await resolveCartId(c)
+  await removeFromCart(c.env.DB, cartId, cartItemId)
+  const saved = await getSavedForLaterItems(c.env.DB, cartId)
+  return c.json({ saved })
+})
+
+/**
+ * Live coupon + delivery-method preview for the checkout summary panel — recalculates against the
+ * CURRENT cart (or, for the Buy Now flow, a single fresh-resolved listing), not a client-guessed
+ * number, so the total shown always matches what the order will actually charge.
+ */
+cartApi.post('/preview', async (c) => {
+  const body = await c.req
+    .json<{ coupon_code?: string; delivery_method?: DeliveryMethod; buy_now?: { listing_id: number; quantity: number; variant_id?: number | null } }>()
+    .catch(() => ({}))
+
+  let items: CartItemRow[]
+  if (body.buy_now) {
+    const item = await getBuyNowItem(c.env.DB, Number(body.buy_now.listing_id), Math.max(1, Number(body.buy_now.quantity) || 1), body.buy_now.variant_id ?? null)
+    items = item ? [item] : []
+  } else {
+    const cartId = await resolveCartId(c)
+    items = await getCartItems(c.env.DB, cartId)
+  }
+  const subtotal = items.reduce((sum, i) => sum + i.price_kobo * i.quantity, 0)
+  const deliveryMethod: DeliveryMethod = body.delivery_method === 'express' ? 'express' : 'standard'
+  const deliveryFee = calculateDeliveryFeeKobo(items, deliveryMethod)
+
+  let discountKobo = 0
+  let couponError: string | null = null
+  let couponValid = false
+  if (body.coupon_code) {
+    const validation = await validateCoupon(c.env.DB, body.coupon_code, subtotal)
+    if (validation.valid) {
+      discountKobo = validation.discountKobo ?? 0
+      couponValid = true
+    } else {
+      couponError = validation.error ?? 'Invalid coupon'
+    }
+  }
+
+  const total = Math.max(0, subtotal + deliveryFee - discountKobo)
+  const sellers = Array.from(groupByVendor(items).entries()).map(([vendorId, g]) => ({
+    vendor_id: vendorId,
+    vendor_name: g.vendorName,
+    item_count: g.items.length
+  }))
+
+  return c.json({
+    subtotal_kobo: subtotal,
+    delivery_fee_kobo: deliveryFee,
+    discount_kobo: discountKobo,
+    total_kobo: total,
+    seller_count: sellers.length,
+    sellers,
+    coupon_valid: couponValid,
+    coupon_error: couponError
+  })
 })

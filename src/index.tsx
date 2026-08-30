@@ -9,6 +9,7 @@ import { catalogApi } from './routes/api-catalog'
 import { cartApi } from './routes/api-cart'
 import { authApi } from './routes/api-auth'
 import { ordersApi } from './routes/api-orders'
+import { addressesApi } from './routes/api-addresses'
 import { walletApi } from './routes/api-wallet'
 import { webhooksApi } from './routes/api-webhooks'
 import { placeholderRoute } from './routes/placeholder'
@@ -44,6 +45,7 @@ app.route('/api/catalog', catalogApi)
 app.route('/api/cart', cartApi)
 app.route('/api/auth', authApi)
 app.route('/api/orders', ordersApi)
+app.route('/api/addresses', addressesApi)
 app.route('/api/wallet', walletApi)
 app.route('/api/webhooks', webhooksApi)
 

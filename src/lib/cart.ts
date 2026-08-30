@@ -40,13 +40,7 @@ export async function mergeGuestCartIntoUser(db: D1Database, guestToken: string,
     .all<{ listing_id: number; variant_id: number | null; quantity: number }>()
 
   for (const item of guestItems.results) {
-    await db
-      .prepare(
-        `INSERT INTO cart_items (cart_id, listing_id, variant_id, quantity) VALUES (?, ?, ?, ?)
-         ON CONFLICT(cart_id, listing_id, variant_id) DO UPDATE SET quantity = quantity + excluded.quantity`
-      )
-      .bind(userCartId, item.listing_id, item.variant_id, item.quantity)
-      .run()
+    await addToCart(db, userCartId, item.listing_id, item.quantity, item.variant_id)
   }
 
   await db.prepare('DELETE FROM carts WHERE id = ?').bind(guestCart.id).run()
@@ -58,7 +52,9 @@ export async function getCartItems(db: D1Database, cartId: number): Promise<Cart
     .prepare(
       `SELECT ci.id, ci.cart_id, ci.listing_id, ci.variant_id, ci.quantity, ci.is_saved_for_later,
               p.id as product_id, p.title, p.slug, p.image_url,
-              l.price_kobo, l.stock, l.vendor_id, v.name as vendor_name,
+              l.price_kobo, l.compare_at_price_kobo, l.stock, l.vendor_id,
+              l.delivery_days_min, l.delivery_days_max,
+              v.name as vendor_name, v.slug as vendor_slug, v.is_verified,
               pv.variant_value
        FROM cart_items ci
        JOIN product_listings l ON l.id = ci.listing_id
@@ -78,7 +74,9 @@ export async function getSavedForLaterItems(db: D1Database, cartId: number): Pro
     .prepare(
       `SELECT ci.id, ci.cart_id, ci.listing_id, ci.variant_id, ci.quantity, ci.is_saved_for_later,
               p.id as product_id, p.title, p.slug, p.image_url,
-              l.price_kobo, l.stock, l.vendor_id, v.name as vendor_name,
+              l.price_kobo, l.compare_at_price_kobo, l.stock, l.vendor_id,
+              l.delivery_days_min, l.delivery_days_max,
+              v.name as vendor_name, v.slug as vendor_slug, v.is_verified,
               pv.variant_value
        FROM cart_items ci
        JOIN product_listings l ON l.id = ci.listing_id
@@ -93,6 +91,13 @@ export async function getSavedForLaterItems(db: D1Database, cartId: number): Pro
   return results
 }
 
+/**
+ * IMPORTANT: SQLite's UNIQUE(cart_id, listing_id, variant_id) constraint does NOT treat two NULL
+ * variant_ids as equal — so `INSERT ... ON CONFLICT` silently INSERTs a duplicate row instead of
+ * upserting whenever variant_id is NULL (the common case: most listings have no color/size variants).
+ * We therefore look up the existing row manually with an explicit NULL-safe comparison, rather than
+ * relying on the DB constraint to dedupe for us.
+ */
 export async function addToCart(
   db: D1Database,
   cartId: number,
@@ -100,13 +105,24 @@ export async function addToCart(
   quantity: number,
   variantId: number | null = null
 ) {
-  await db
+  const existing = await db
     .prepare(
-      `INSERT INTO cart_items (cart_id, listing_id, variant_id, quantity) VALUES (?, ?, ?, ?)
-       ON CONFLICT(cart_id, listing_id, variant_id) DO UPDATE SET quantity = quantity + excluded.quantity`
+      `SELECT id, quantity FROM cart_items
+       WHERE cart_id = ? AND listing_id = ?
+         AND ((variant_id IS NULL AND ? IS NULL) OR variant_id = ?)
+         AND is_saved_for_later = 0`
     )
-    .bind(cartId, listingId, variantId, quantity)
-    .run()
+    .bind(cartId, listingId, variantId, variantId)
+    .first<{ id: number; quantity: number }>()
+
+  if (existing) {
+    await db.prepare('UPDATE cart_items SET quantity = ? WHERE id = ?').bind(existing.quantity + quantity, existing.id).run()
+  } else {
+    await db
+      .prepare('INSERT INTO cart_items (cart_id, listing_id, variant_id, quantity) VALUES (?, ?, ?, ?)')
+      .bind(cartId, listingId, variantId, quantity)
+      .run()
+  }
 }
 
 export async function updateCartItemQuantity(db: D1Database, cartId: number, cartItemId: number, quantity: number) {
@@ -133,6 +149,51 @@ export async function setSavedForLater(db: D1Database, cartId: number, cartItemI
 
 export async function clearCart(db: D1Database, cartId: number) {
   await db.prepare('DELETE FROM cart_items WHERE cart_id = ? AND is_saved_for_later = 0').bind(cartId).run()
+}
+
+/**
+ * Removes only the specific listing_ids that were just paid for. Used after a successful payment
+ * instead of a blanket clearCart(), so that a "Buy Now" purchase (which bypasses the persisted cart
+ * entirely) never wipes out unrelated items the customer still had sitting in their real cart.
+ */
+export async function removeCartItemsByListingIds(db: D1Database, cartId: number, listingIds: number[]) {
+  if (listingIds.length === 0) return
+  const placeholders = listingIds.map(() => '?').join(',')
+  await db
+    .prepare(`DELETE FROM cart_items WHERE cart_id = ? AND is_saved_for_later = 0 AND listing_id IN (${placeholders})`)
+    .bind(cartId, ...listingIds)
+    .run()
+}
+
+/**
+ * Resolves a single listing into the same CartItemRow shape used everywhere else, WITHOUT touching
+ * the persisted cart_items table at all. This backs the "Buy Now" flow: price, vendor, and stock are
+ * always re-read fresh from product_listings here (never trusted from the client), so a customer can
+ * never end up paying Seller B's price for something they clicked "Buy Now" on under Seller A.
+ */
+export async function getBuyNowItem(
+  db: D1Database,
+  listingId: number,
+  quantity: number,
+  variantId: number | null = null
+): Promise<CartItemRow | null> {
+  const row = await db
+    .prepare(
+      `SELECT -1 as id, -1 as cart_id, l.id as listing_id, ? as variant_id, ? as quantity, 0 as is_saved_for_later,
+              p.id as product_id, p.title, p.slug, p.image_url,
+              l.price_kobo, l.compare_at_price_kobo, l.stock, l.vendor_id,
+              l.delivery_days_min, l.delivery_days_max,
+              v.name as vendor_name, v.slug as vendor_slug, v.is_verified,
+              pv.variant_value
+       FROM product_listings l
+       JOIN products p ON p.id = l.product_id
+       JOIN vendors v ON v.id = l.vendor_id
+       LEFT JOIN product_variants pv ON pv.id = ?
+       WHERE l.id = ? AND l.is_active = 1 AND p.is_active = 1`
+    )
+    .bind(variantId, quantity, variantId, listingId)
+    .first<CartItemRow>()
+  return row ?? null
 }
 
 /** Groups cart items by vendor — used for multi-seller cart display and per-seller order splitting. */

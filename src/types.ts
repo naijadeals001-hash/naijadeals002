@@ -161,9 +161,14 @@ export interface CartItemRow {
   slug: string
   image_url: string
   price_kobo: number
+  compare_at_price_kobo: number | null
   stock: number
   vendor_id: number
   vendor_name: string
+  vendor_slug: string
+  is_verified: number
+  delivery_days_min: number
+  delivery_days_max: number
   variant_value: string | null
 }
 
@@ -184,6 +189,9 @@ export interface OrderRow {
   shipping_address: string
   shipping_city: string
   shipping_state: string
+  delivery_method: string
+  coupon_code: string | null
+  discount_kobo: number
   created_at: string
 }
 

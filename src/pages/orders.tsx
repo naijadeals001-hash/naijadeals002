@@ -81,8 +81,23 @@ export async function orderDetailPage(c: Context<AppEnv>) {
     )
   }
 
-  const { results: items } = await db.prepare('SELECT * FROM order_items WHERE order_id = ?').bind(order.id).all<OrderItemRow>()
+  const { results: items } = await db
+    .prepare(
+      `SELECT oi.*, v.name as vendor_name
+       FROM order_items oi JOIN vendors v ON v.id = oi.vendor_id
+       WHERE oi.order_id = ?`
+    )
+    .bind(order.id)
+    .all<OrderItemRow & { vendor_name: string }>()
   const status = STATUS_LABEL[order.status] || { label: order.status, color: 'text-gray-500 bg-gray-100' }
+
+  // Group items by seller so the customer can see which vendor is fulfilling which part of the order —
+  // consistent with the seller grouping shown in cart and checkout.
+  const sellerGroups = new Map<number, { vendorName: string; items: (OrderItemRow & { vendor_name: string })[] }>()
+  for (const item of items) {
+    if (!sellerGroups.has(item.vendor_id)) sellerGroups.set(item.vendor_id, { vendorName: item.vendor_name, items: [] })
+    sellerGroups.get(item.vendor_id)!.items.push(item)
+  }
 
   return c.render(
     <Layout title={order.order_number} user={user}>
@@ -100,17 +115,29 @@ export async function orderDetailPage(c: Context<AppEnv>) {
         </div>
 
         <div class="grid md:grid-cols-3 gap-6">
-          <div class="md:col-span-2 space-y-3">
-            {items.map((item) => (
-              <div class="flex gap-4 bg-white border border-gray-200 rounded-xl p-4">
-                <div class="w-16 h-16 shrink-0 rounded-lg bg-gray-100 overflow-hidden">
-                  <img src={item.image_snapshot} alt={item.title_snapshot} class="w-full h-full object-cover" />
+          <div class="md:col-span-2 space-y-4">
+            {Array.from(sellerGroups.entries()).map(([vendorId, group]) => (
+              <div class="border border-gray-200 rounded-xl overflow-hidden">
+                <div class="bg-gray-50 px-4 py-2 flex items-center gap-1.5">
+                  <span class="material-symbols-outlined text-primary text-base">storefront</span>
+                  <span class="text-sm font-bold text-gray-800">{group.vendorName}</span>
+                  <span class="text-xs text-gray-400">— fulfilled independently by this seller</span>
                 </div>
-                <div class="flex-1">
-                  <p class="text-sm font-medium text-gray-800 line-clamp-2">{item.title_snapshot}</p>
-                  <p class="text-xs text-gray-500 mt-1">Qty: {item.quantity} × {formatNaira(item.unit_price_kobo)}</p>
+                <div class="divide-y divide-gray-100 bg-white">
+                  {group.items.map((item) => (
+                    <div class="flex gap-4 p-4">
+                      <div class="w-16 h-16 shrink-0 rounded-lg bg-gray-100 overflow-hidden">
+                        <img src={item.image_snapshot} alt={item.title_snapshot} class="w-full h-full object-cover" />
+                      </div>
+                      <div class="flex-1">
+                        <p class="text-sm font-medium text-gray-800 line-clamp-2">{item.title_snapshot}</p>
+                        {item.variant_snapshot && <p class="text-xs text-gray-500">{item.variant_snapshot}</p>}
+                        <p class="text-xs text-gray-500 mt-1">Qty: {item.quantity} × {formatNaira(item.unit_price_kobo)}</p>
+                      </div>
+                      <p class="text-sm font-bold text-gray-900 shrink-0">{formatNaira(item.line_total_kobo)}</p>
+                    </div>
+                  ))}
                 </div>
-                <p class="text-sm font-bold text-gray-900 shrink-0">{formatNaira(item.line_total_kobo)}</p>
               </div>
             ))}
           </div>
@@ -124,12 +151,21 @@ export async function orderDetailPage(c: Context<AppEnv>) {
             </div>
             <div class="bg-white border border-gray-200 rounded-xl p-4">
               <h2 class="font-bold text-gray-800 mb-2 text-sm">Payment summary</h2>
+              <p class="text-xs text-gray-500 mb-2 flex items-center gap-1">
+                <span class="material-symbols-outlined text-sm">{order.delivery_method === 'express' ? 'bolt' : 'local_shipping'}</span>
+                {order.delivery_method === 'express' ? 'Express delivery (1-2 days)' : 'Standard delivery (3-7 days)'}
+              </p>
               <div class="flex justify-between text-sm text-gray-600 mb-1">
                 <span>Subtotal</span><span>{formatNaira(order.subtotal_kobo)}</span>
               </div>
               <div class="flex justify-between text-sm text-gray-600 mb-1">
                 <span>Delivery fee</span><span>{formatNaira(order.delivery_fee_kobo)}</span>
               </div>
+              {order.discount_kobo > 0 && (
+                <div class="flex justify-between text-sm text-primary mb-1">
+                  <span>Discount {order.coupon_code ? `(${order.coupon_code})` : ''}</span><span>-{formatNaira(order.discount_kobo)}</span>
+                </div>
+              )}
               <div class="flex justify-between text-sm font-bold text-gray-900 pt-1.5 border-t border-gray-100">
                 <span>Total</span><span>{formatNaira(order.total_kobo)}</span>
               </div>
