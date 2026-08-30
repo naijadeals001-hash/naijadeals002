@@ -61,6 +61,96 @@
     }).catch(function () {});
   })();
 
+  // ---------- Wishlist: nav badge count + sitewide toggle button on every ProductCard ----------
+  // wishlistIds mirrors the logged-in user's current wishlist product_ids. Populated once on load
+  // (guests / logged-out get an empty set — /api/wishlist/ids requires auth and returns 401, which
+  // we treat the same as "no wishlist yet" for badge/button purposes, no error surfaced to the user).
+  var wishlistIds = null;
+
+  function updateWishlistBadge(count) {
+    var el = document.getElementById('wishlist-count-badge');
+    if (!el) return;
+    el.textContent = String(count);
+    el.classList.toggle('hidden', !count);
+  }
+
+  function markWishlistButtons() {
+    if (!wishlistIds) return;
+    qsa('.wishlist-toggle-btn').forEach(function (btn) {
+      var pid = Number(btn.getAttribute('data-product-id'));
+      var active = wishlistIds.has(pid);
+      btn.setAttribute('data-active', active ? '1' : '0');
+      btn.classList.toggle('text-red-500', active);
+      var icon = btn.querySelector('.material-symbols-outlined');
+      if (icon) icon.style.fontVariationSettings = "'FILL' " + (active ? 1 : 0);
+    });
+  }
+
+  (function initWishlistNav() {
+    api('/api/wishlist/ids').then(function (res) {
+      wishlistIds = new Set((res.ok && res.data && res.data.product_ids) || []);
+      updateWishlistBadge(wishlistIds.size);
+      markWishlistButtons();
+    }).catch(function () { wishlistIds = new Set(); });
+  })();
+
+  // Delegated at document level so it covers every ProductCard on every page (home carousels,
+  // shop grid, PDP related-products row) without needing per-page wiring. The button itself
+  // already carries onclick="event.preventDefault()" to stop the surrounding <a> navigating to
+  // the PDP; we additionally stop propagation so nothing else on the card reacts to this click.
+  document.addEventListener('click', function (e) {
+    var btn = e.target.closest('.wishlist-toggle-btn');
+    if (!btn || btn.disabled) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (!wishlistIds) return; // initial fetch hasn't resolved yet — ignore this click rather than guess state
+
+    var pid = Number(btn.getAttribute('data-product-id'));
+    var wasActive = wishlistIds.has(pid);
+    btn.disabled = true;
+    var req = wasActive
+      ? api('/api/wishlist/' + pid, { method: 'DELETE' })
+      : api('/api/wishlist', { method: 'POST', body: JSON.stringify({ product_id: pid }) });
+    req.then(function (res) {
+      btn.disabled = false;
+      if (res.status === 401) { location.href = '/login?next=' + encodeURIComponent(location.pathname + location.search); return; }
+      if (!res.ok) { alert((res.data && res.data.error) || 'Could not update your wishlist.'); return; }
+      if (wasActive) wishlistIds.delete(pid); else wishlistIds.add(pid);
+      updateWishlistBadge(wishlistIds.size);
+      markWishlistButtons();
+    }).catch(function () { btn.disabled = false; });
+  });
+
+  // ---------- Dedicated Wishlist page (/account/wishlist): remove + move-to-cart ----------
+  (function initWishlistPage() {
+    const grid = document.getElementById('wishlist-grid');
+    if (!grid) return;
+
+    grid.addEventListener('click', function (e) {
+      const removeBtn = e.target.closest('.wishlist-remove-btn');
+      const moveBtn = e.target.closest('.wishlist-move-to-cart-btn');
+
+      if (removeBtn) {
+        e.preventDefault();
+        const pid = Number(removeBtn.getAttribute('data-product-id'));
+        removeBtn.disabled = true;
+        api('/api/wishlist/' + pid, { method: 'DELETE' }).then(function (res) {
+          if (!res.ok) { removeBtn.disabled = false; alert((res.data && res.data.error) || 'Could not remove item.'); return; }
+          location.reload(); // simplest correct way to re-render the grid + empty state + nav badge
+        });
+      } else if (moveBtn) {
+        e.preventDefault();
+        const pid = Number(moveBtn.getAttribute('data-product-id'));
+        moveBtn.disabled = true;
+        api('/api/wishlist/' + pid + '/move-to-cart', { method: 'POST' }).then(function (res) {
+          moveBtn.disabled = false;
+          if (!res.ok) { alert((res.data && res.data.error) || 'Could not move item to cart.'); return; }
+          location.reload(); // re-syncs wishlist grid, wishlist badge AND cart badge from fresh server state
+        });
+      }
+    });
+  })();
+
   // ---------- Newsletter signup (footer) ----------
   (function initNewsletter() {
     const form = document.getElementById('newsletter-form');

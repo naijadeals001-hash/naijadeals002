@@ -12,6 +12,7 @@ import { ordersApi } from './routes/api-orders'
 import { addressesApi } from './routes/api-addresses'
 import { walletApi } from './routes/api-wallet'
 import { webhooksApi } from './routes/api-webhooks'
+import { wishlistApi } from './routes/api-wishlist'
 import { placeholderRoute } from './routes/placeholder'
 
 // SSR pages
@@ -23,6 +24,7 @@ import { checkoutPage, checkoutCallbackPage } from './pages/checkout'
 import { loginPage, registerPage } from './pages/auth'
 import { ordersListPage, orderDetailPage } from './pages/orders'
 import { walletPage } from './pages/wallet'
+import { wishlistPage } from './pages/wishlist'
 import { ecosystemPage } from './pages/ecosystem'
 import { helpPage } from './pages/help'
 
@@ -48,6 +50,7 @@ app.route('/api/orders', ordersApi)
 app.route('/api/addresses', addressesApi)
 app.route('/api/wallet', walletApi)
 app.route('/api/webhooks', webhooksApi)
+app.route('/api/wishlist', wishlistApi)
 
 // ---------- SSR pages ----------
 app.get('/', homePage)
@@ -61,6 +64,7 @@ app.get('/register', registerPage)
 app.get('/orders', requireAuthPage, ordersListPage)
 app.get('/orders/:orderNumber', requireAuthPage, orderDetailPage)
 app.get('/wallet', requireAuthPage, walletPage)
+app.get('/account/wishlist', requireAuthPage, wishlistPage)
 app.get('/ecosystem', ecosystemPage)
 app.get('/help', helpPage)
 
