@@ -233,6 +233,32 @@ export interface EcosystemVerticalFeatureRow {
   display_order: number
 }
 
+/** Status lifecycle for a v2 ecosystem waitlist signup — see migration 0011. */
+export type EcosystemWaitlistStatus = 'pending' | 'notified' | 'contacted' | 'unsubscribed'
+
+/**
+ * One person on the v2 ecosystem waitlist (migration 0011 —
+ * ecosystem_waitlist_signups). Deliberately NOT the same shape as
+ * EcosystemVerticalRow/0010's per-vertical ecosystem_waitlist — this is the
+ * richer, real-fields-collected-via-modal system. See migration 0011's
+ * header comment for why this is a separate table.
+ */
+export interface EcosystemWaitlistSignupRow {
+  id: number
+  full_name: string
+  email: string
+  phone: string
+  city: string
+  state: string
+  naija_eats: number
+  naija_gigs: number
+  naija_stay: number
+  all_services: number
+  status: EcosystemWaitlistStatus
+  created_at: string
+  updated_at: string
+}
+
 export interface VariantRow {
   id: number
   listing_id: number

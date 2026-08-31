@@ -2,6 +2,7 @@ import type { Context } from 'hono'
 import { Layout } from '../components/Layout'
 import type { AppEnv } from '../types'
 import { getAllVerticals } from '../lib/ecosystem-verticals'
+import { EcosystemWaitlistModal } from '../components/EcosystemWaitlistModal'
 
 /**
  * /ecosystem — the "whole ecosystem at a glance" overview page. NaijaShop is
@@ -70,14 +71,21 @@ export async function ecosystemPage(c: Context<AppEnv>) {
 
         <div class="mt-10 bg-primary-light rounded-xl p-6 flex flex-col md:flex-row items-center justify-between gap-4">
           <div>
-            <h3 class="font-bold text-primary-dark">Want early access as each vertical launches?</h3>
-            <p class="text-sm text-gray-600 mt-1">Visit any vertical's preview page above and join its waitlist — we'll only notify you about the ones you actually asked about.</p>
+            <h3 class="font-bold text-primary-dark">Want early access to NaijaEats, NaijaGigs &amp; NaijaStay?</h3>
+            <p class="text-sm text-gray-600 mt-1">Join the waitlist below and we'll let you know the moment each service launches in your city.</p>
           </div>
-          <a href="/fresh" class="shrink-0 bg-primary text-white font-semibold px-6 py-3 rounded-lg hover:bg-primary-dark transition">
-            Explore NaijaFresh
-          </a>
+          <button
+            type="button"
+            data-open-waitlist-modal
+            data-preselect-service="allServices"
+            class="shrink-0 bg-primary text-white font-semibold px-6 py-3 rounded-lg hover:bg-primary-dark transition min-h-[44px]"
+          >
+            Join the waitlist
+          </button>
         </div>
       </div>
+
+      <EcosystemWaitlistModal />
     </Layout>
   )
 }

@@ -356,6 +356,157 @@
     });
   })();
 
+  // ---------- Ecosystem Waitlist Modal v2 (real "Join the waitlist" experience) ----------
+  // Backs the modal/bottom-sheet in EcosystemWaitlistModal.tsx, mounted once per page on
+  // /ecosystem and every /fresh, /eats, /gigs, /stay, /drive, /send, /stream, /aura preview
+  // page. Any element on the page with [data-open-waitlist-modal] opens it; an optional
+  // [data-preselect-service] attribute (e.g. "naijaEats") pre-checks that service checkbox.
+  (function initEcosystemWaitlistModal() {
+    const modal = document.getElementById('ecosystem-waitlist-modal');
+    const triggers = qsa('[data-open-waitlist-modal]');
+    if (!modal || triggers.length === 0) return;
+
+    const formState = document.getElementById('ewm-form-state');
+    const successState = document.getElementById('ewm-success-state');
+    const form = document.getElementById('ewm-form');
+    const formError = document.getElementById('ewm-form-error');
+    const serviceError = document.getElementById('ewm-service-error');
+    const closeBtn = document.getElementById('ewm-close-btn');
+    const successCloseBtn = document.getElementById('ewm-success-close-btn');
+    const stateSelect = document.getElementById('ewm-state');
+    const submitBtn = document.getElementById('ewm-submit-btn');
+    const successServices = document.getElementById('ewm-success-services');
+
+    const serviceCheckboxIds = { naijaEats: 'ewm-svc-eats', naijaGigs: 'ewm-svc-gigs', naijaStay: 'ewm-svc-stay', allServices: 'ewm-svc-all' };
+    const serviceLabels = { naijaEats: 'NaijaEats', naijaGigs: 'NaijaGigs', naijaStay: 'NaijaStay', allServices: 'All upcoming services' };
+
+    let lastFocusedTrigger = null;
+    let statesLoaded = false;
+
+    function loadStatesOnce() {
+      if (statesLoaded || !stateSelect) return;
+      statesLoaded = true;
+      api('/api/ecosystem/meta/states').then(function (res) {
+        if (!res.ok || !res.data || !Array.isArray(res.data.states)) return;
+        res.data.states.forEach(function (s) {
+          const opt = document.createElement('option');
+          opt.value = s.name;
+          opt.textContent = s.name; // nigerian_states.name already reads "Abuja (FCT)" for the FCT row
+          stateSelect.appendChild(opt);
+        });
+      }).catch(function () { statesLoaded = false; /* allow retry on next open */ });
+    }
+
+    function resetToFormState() {
+      if (formState) formState.classList.remove('hidden');
+      if (successState) successState.classList.add('hidden');
+    }
+
+    function openModal(preselectService) {
+      lastFocusedTrigger = document.activeElement;
+      loadStatesOnce();
+      resetToFormState();
+      hideError(formError);
+      if (serviceError) serviceError.classList.add('hidden');
+
+      // Clear all service checkboxes first, then apply this trigger's preselection —
+      // every open starts from a clean slate so switching pages never leaves a stale
+      // selection from a previous vertical's preselect.
+      Object.keys(serviceCheckboxIds).forEach(function (key) {
+        const el = document.getElementById(serviceCheckboxIds[key]);
+        if (el) el.checked = false;
+      });
+      if (preselectService && serviceCheckboxIds[preselectService]) {
+        const el = document.getElementById(serviceCheckboxIds[preselectService]);
+        if (el) el.checked = true;
+      }
+
+      modal.classList.remove('hidden');
+      document.body.classList.add('overflow-hidden');
+      const firstField = document.getElementById('ewm-full-name');
+      if (firstField) setTimeout(function () { firstField.focus(); }, 50);
+    }
+
+    function closeModal() {
+      modal.classList.add('hidden');
+      document.body.classList.remove('overflow-hidden');
+      if (lastFocusedTrigger && typeof lastFocusedTrigger.focus === 'function') lastFocusedTrigger.focus();
+    }
+
+    triggers.forEach(function (trigger) {
+      trigger.addEventListener('click', function () {
+        openModal(trigger.getAttribute('data-preselect-service'));
+      });
+    });
+
+    if (closeBtn) closeBtn.addEventListener('click', closeModal);
+    if (successCloseBtn) successCloseBtn.addEventListener('click', closeModal);
+    // Click on the dark overlay (outside the panel) closes it — click on the panel itself must not.
+    modal.addEventListener('click', function (e) { if (e.target === modal) closeModal(); });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && !modal.classList.contains('hidden')) closeModal();
+    });
+
+    if (form) {
+      form.addEventListener('submit', async function (e) {
+        e.preventDefault();
+        hideError(formError);
+        if (serviceError) serviceError.classList.add('hidden');
+
+        const payload = {
+          fullName: document.getElementById('ewm-full-name').value.trim(),
+          email: document.getElementById('ewm-email').value.trim(),
+          phone: document.getElementById('ewm-phone').value.trim(),
+          city: document.getElementById('ewm-city').value.trim(),
+          state: stateSelect ? stateSelect.value : '',
+          naijaEats: document.getElementById('ewm-svc-eats').checked,
+          naijaGigs: document.getElementById('ewm-svc-gigs').checked,
+          naijaStay: document.getElementById('ewm-svc-stay').checked,
+          allServices: document.getElementById('ewm-svc-all').checked
+        };
+
+        // Client-side pre-check for a fast, friendly error — the server re-validates
+        // everything regardless, since this must never be the only line of defence.
+        if (!payload.naijaEats && !payload.naijaGigs && !payload.naijaStay && !payload.allServices) {
+          if (serviceError) serviceError.classList.remove('hidden');
+          return;
+        }
+
+        submitBtn.disabled = true;
+        const originalBtnHTML = submitBtn.innerHTML;
+        submitBtn.innerHTML = '<span class="material-symbols-outlined text-lg animate-spin">progress_activity</span> Joining...';
+
+        const res = await api('/api/ecosystem/waitlist', { method: 'POST', body: JSON.stringify(payload) });
+
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = originalBtnHTML;
+
+        if (!res.ok) {
+          // Keep every entered field exactly as-is (no form.reset()) so the visitor
+          // never has to retype anything after a failed submission.
+          showError(formError, (res.data && res.data.error) || 'Something went wrong. Please try again.');
+          return;
+        }
+
+        // ---- Success state ----
+        if (successServices) {
+          successServices.innerHTML = '';
+          const selected = res.data && res.data.services ? res.data.services : payload;
+          Object.keys(serviceLabels).forEach(function (key) {
+            if (!selected[key]) return;
+            const chip = document.createElement('span');
+            chip.className = 'inline-flex items-center gap-1 text-xs font-semibold bg-primary-light text-primary-dark rounded-full px-3 py-1.5';
+            chip.textContent = serviceLabels[key];
+            successServices.appendChild(chip);
+          });
+        }
+        if (formState) formState.classList.add('hidden');
+        if (successState) successState.classList.remove('hidden');
+        form.reset(); // safe to clear now — submission succeeded, nothing to preserve
+      });
+    }
+  })();
+
   // ---------- Product Detail Page: quantity stepper, variant selection, add to cart ----------
   // BUY-BOX RULE: every add-to-cart call on this page (main buy box AND each Compare Sellers row)
   // must send listing_id, never product_id — a product can have several sellers/listings, and the

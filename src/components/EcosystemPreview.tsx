@@ -1,5 +1,6 @@
 import type { FC } from 'hono/jsx'
 import type { EcosystemVerticalRow, EcosystemVerticalFeatureRow } from '../types'
+import { EcosystemWaitlistModal } from './EcosystemWaitlistModal'
 
 /**
  * EcosystemPreview — the ONE reusable component that renders every planned
@@ -45,10 +46,25 @@ const STATUS_LABEL: Record<string, string> = {
   live: 'Live'
 }
 
+// Maps a vertical's slug to the service checkbox the waitlist modal should
+// preselect. Only 3 of the 8 verticals have a dedicated checkbox
+// (NaijaEats/NaijaGigs/NaijaStay per Pat's explicit field list) — for the
+// other 5 (fresh/drive/send/stream/aura) the modal preselects "Notify me
+// about all upcoming NaijaDeals services" instead of leaving nothing
+// checked, since a visitor arriving at any of those 5 pages has still shown
+// clear ecosystem-wide intent. Documented product decision, not an
+// oversight — the visitor can always change the selection in the modal.
+const SERVICE_PRESELECT: Record<string, string> = {
+  eats: 'naijaEats',
+  gigs: 'naijaGigs',
+  stay: 'naijaStay'
+}
+
 export const EcosystemPreview: FC<EcosystemPreviewProps> = ({ vertical, features }) => {
   const accent = ACCENT_CLASSES[vertical.accent_color] || ACCENT_CLASSES.green
   const statusLabel = STATUS_LABEL[vertical.status] || 'Coming Soon'
   const waitlistFormId = `waitlist-form-${vertical.slug}`
+  const preselectService = SERVICE_PRESELECT[vertical.slug] || 'allServices'
 
   return (
     <>
@@ -71,11 +87,16 @@ export const EcosystemPreview: FC<EcosystemPreviewProps> = ({ vertical, features
             <p class="text-lg md:text-xl font-medium text-white/90 mt-3">{vertical.tagline}</p>
             <p class="text-white/80 text-sm md:text-base mt-5 max-w-xl leading-relaxed">{vertical.description}</p>
             <div class="flex flex-col sm:flex-row gap-3 mt-8">
-              <a href={`#${waitlistFormId}`} class={`inline-flex items-center justify-center gap-2 ${accent.button} ${accent.buttonHover} text-white font-semibold px-6 py-3.5 rounded-lg transition shadow-lg`}>
+              <button
+                type="button"
+                data-open-waitlist-modal
+                data-preselect-service={preselectService}
+                class={`inline-flex items-center justify-center gap-2 ${accent.button} ${accent.buttonHover} text-white font-semibold px-6 py-3.5 rounded-lg transition shadow-lg min-h-[44px]`}
+              >
                 <span class="material-symbols-outlined text-lg">notifications_active</span>
-                {vertical.cta_label}
-              </a>
-              <a href="/shop" class="inline-flex items-center justify-center gap-2 bg-white/10 border border-white/30 text-white font-semibold px-6 py-3.5 rounded-lg hover:bg-white/20 transition backdrop-blur-sm">
+                Join the waitlist
+              </button>
+              <a href="/shop" class="inline-flex items-center justify-center gap-2 bg-white/10 border border-white/30 text-white font-semibold px-6 py-3.5 rounded-lg hover:bg-white/20 transition backdrop-blur-sm min-h-[44px]">
                 <span class="material-symbols-outlined text-lg">storefront</span>
                 Shop NaijaDeals
               </a>
@@ -115,24 +136,17 @@ export const EcosystemPreview: FC<EcosystemPreviewProps> = ({ vertical, features
           </span>
           <h2 class="text-xl md:text-2xl font-bold text-gray-900">Be the first to know when {vertical.name} launches</h2>
           <p class="text-sm text-gray-500 mt-2">
-            Leave your email and we'll notify you the moment {vertical.name} is ready — no spam, and you can unsubscribe any time.
+            Tell us a little about yourself and we'll notify you the moment {vertical.name} is ready — no spam, and you can unsubscribe any time.
           </p>
-          <form
-            class="ecosystem-waitlist-form flex flex-col sm:flex-row items-stretch gap-2 mt-6"
-            data-vertical-slug={vertical.slug}
+          <button
+            type="button"
+            data-open-waitlist-modal
+            data-preselect-service={preselectService}
+            class={`inline-flex items-center justify-center gap-2 ${accent.button} ${accent.buttonHover} text-white font-semibold px-7 py-3.5 rounded-lg transition mt-6 min-h-[44px]`}
           >
-            <input
-              type="email"
-              name="email"
-              required
-              placeholder="you@example.com"
-              class="flex-1 px-4 py-3 text-sm text-gray-800 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-offset-0"
-            />
-            <button type="submit" class={`inline-flex items-center justify-center gap-2 ${accent.button} ${accent.buttonHover} text-white font-semibold px-6 py-3 rounded-lg transition shrink-0`}>
-              {vertical.cta_label}
-            </button>
-          </form>
-          <p class="ecosystem-waitlist-msg text-xs text-gray-400 mt-3"></p>
+            <span class="material-symbols-outlined text-lg">how_to_reg</span>
+            Join the waitlist
+          </button>
         </div>
       </section>
 
@@ -155,6 +169,8 @@ export const EcosystemPreview: FC<EcosystemPreviewProps> = ({ vertical, features
           </div>
         </div>
       </section>
+
+      <EcosystemWaitlistModal />
     </>
   )
 }

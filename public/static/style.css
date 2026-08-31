@@ -1,5 +1,47 @@
 /* NaijaDeals — small hand-written overrides that don't belong in Tailwind's CDN config */
 
+/*
+ * Material Symbols fixed glyph box — fixes a real horizontal-overflow bug found during
+ * 390px breakpoint verification (root cause identified via Playwright: NOT a header/layout
+ * issue — a webfont FOUT).
+ *
+ * Root cause: `.material-symbols-outlined` spans contain literal ligature text
+ * (e.g. "shopping_cart", "auto_awesome", "chevron_right"). Google's "Material Symbols
+ * Outlined" webfont turns that text into a single square icon glyph, but the font is
+ * loaded asynchronously (Google Fonts `display=swap`). Until it finishes loading, the
+ * browser renders the literal fallback-font text at full width (e.g. "shopping_cart" ≈
+ * 136px) instead of a single ~24px icon. Several of these spans sit inside `shrink-0`
+ * flex containers in the header (Layout.tsx), which refuse to shrink them — so on first
+ * paint, before the font loads, the header's true content width balloons past the
+ * viewport (confirmed via Playwright: scrollWidth 649px vs clientWidth 390px while
+ * `document.fonts.status === 'loading'`; drops to exactly 390px once
+ * `document.fonts.status === 'loaded'`). This is site-wide (any page using these icons),
+ * not specific to /eats or /drive — those routes simply have icon-dense headers that made
+ * it visible first.
+ *
+ * Fix: constrain every icon span to a square box sized in `em` units (so it scales with
+ * each icon's own font-size) with `overflow: hidden`, before the font ever loads. `em`
+ * width is independent of font-metrics/ligature length, so the fallback-font text is
+ * clipped to a single glyph's worth of space immediately, and swapping in the real font
+ * later doesn't change box size (no reflow). This stylesheet is a normal <link>-loaded
+ * blocking stylesheet (loads/parses before body paints), unlike the async Tailwind CDN
+ * JIT classes — so there is no timing race to lose.
+ *
+ * Do not remove without re-verifying scrollWidth === innerWidth at 390px on /eats,
+ * /drive, /shop and / with a fresh (non-cached-font) page load.
+ */
+.material-symbols-outlined {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  overflow: hidden;
+  white-space: nowrap;
+  word-wrap: normal;
+  vertical-align: middle;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
 .line-clamp-1 {
   display: -webkit-box;
   -webkit-line-clamp: 1;
