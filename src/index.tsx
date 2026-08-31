@@ -3,6 +3,7 @@ import { renderer } from './renderer'
 import { serveStatic } from 'hono/cloudflare-workers'
 import type { AppEnv } from './types'
 import { attachUser, requireAuthPage } from './lib/auth'
+import { requireActiveSeller } from './lib/seller'
 
 // API sub-apps
 import { catalogApi } from './routes/api-catalog'
@@ -29,6 +30,8 @@ import { wishlistPage } from './pages/wishlist'
 import { addressesPage } from './pages/addresses'
 import { ecosystemPage } from './pages/ecosystem'
 import { helpPage } from './pages/help'
+import { sellerGatewayPage, sellerOnboardingPage } from './pages/seller'
+import { sellerDashboardPage, sellerProductsPage, sellerOrdersPage, sellerFinancePage } from './pages/seller-stubs'
 
 type Bindings = AppEnv['Bindings'] & { PAYSTACK_SECRET_KEY?: string }
 type Env = { Bindings: Bindings; Variables: AppEnv['Variables'] }
@@ -73,5 +76,23 @@ app.get('/account/wishlist', requireAuthPage, wishlistPage)
 app.get('/account/addresses', requireAuthPage, addressesPage)
 app.get('/ecosystem', ecosystemPage)
 app.get('/help', helpPage)
+
+// ---------- Seller Portal — Phase 2: gateway + ownership-gated stubs ----------
+// /seller is the single destination for every "Sell on NaijaDeals" CTA (see
+// Layout.tsx). It resolves Guest / Authenticated-non-seller / Existing-seller
+// state itself (src/pages/seller.tsx), so it deliberately has NO requireAuthPage
+// guard — a guest must be able to load it and see the landing page.
+app.get('/seller', sellerGatewayPage)
+// Destination of the "Start selling" CTA for a NO_SELLER user — requireAuthPage
+// only (must be signed in); does not require an existing vendor row, since its
+// whole purpose is to be reached BEFORE one exists.
+app.get('/seller/onboarding', requireAuthPage, sellerOnboardingPage)
+// Everything below IS ownership-gated: requireAuthPage first (must be signed in),
+// then requireActiveSeller (must have a verified, active vendor row owned by THIS
+// user) — see src/lib/seller.ts. Any other state is bounced back to /seller.
+app.get('/seller/dashboard', requireAuthPage, requireActiveSeller, sellerDashboardPage)
+app.get('/seller/products', requireAuthPage, requireActiveSeller, sellerProductsPage)
+app.get('/seller/orders', requireAuthPage, requireActiveSeller, sellerOrdersPage)
+app.get('/seller/finance', requireAuthPage, requireActiveSeller, sellerFinancePage)
 
 export default app

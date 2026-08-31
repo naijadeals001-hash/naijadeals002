@@ -8,6 +8,8 @@ export type AppEnv = {
   Bindings: Bindings
   Variables: {
     user: AuthUser | null
+    /** Set by requireActiveSeller (src/lib/seller.ts) once ownership is resolved server-side. Never trust a client-supplied vendor id — this is the ONLY legitimate source. */
+    sellerVendor?: VendorRow
   }
 }
 
