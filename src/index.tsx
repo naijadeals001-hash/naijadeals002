@@ -14,6 +14,7 @@ import { walletApi } from './routes/api-wallet'
 import { webhooksApi } from './routes/api-webhooks'
 import { wishlistApi } from './routes/api-wishlist'
 import { placeholderRoute } from './routes/placeholder'
+import { versionRoute } from './routes/version'
 
 // SSR pages
 import { homePage } from './pages/home'
@@ -44,6 +45,9 @@ app.use('/static/*', serveStatic({ root: './public' }))
 app.route('/', placeholderRoute)
 
 // ---------- API routes ----------
+// /api/version: deployment identity + live migration-parity check. Read this FIRST
+// whenever verifying "what's actually running" — see src/routes/version.ts for why.
+app.route('/api', versionRoute)
 app.route('/api/catalog', catalogApi)
 app.route('/api/cart', cartApi)
 app.route('/api/auth', authApi)
