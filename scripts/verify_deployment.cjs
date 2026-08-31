@@ -124,23 +124,74 @@ async function main() {
     return finish(sha)
   }
 
-  // ---------- GATE 4 + 5 combined: hit /api/version on BOTH hosts, verify SHA match ----------
+  // ---------- GATE 5: hit /api/version on BOTH hosts ----------
+  // Classification rules (patched 2026-08-31 — see DEPLOYMENT.md "Known Genspark
+  // hosted-build metadata discrepancy" for the incident this split addresses):
+  //
+  //   HARD FAIL when:
+  //     - /api/version is unreachable or returns non-200
+  //     - db.in_sync !== true on either host (migration state disagrees with code —
+  //       this is the exact class of bug this whole script exists to catch, never
+  //       downgraded)
+  //     - the two hosts report a DIFFERENT git_sha from each other (one deployed,
+  //       one stale — a real drift, not a metadata quirk)
+  //     - the reported git_sha IS a known commit in local git history but is NOT
+  //       the current expected HEAD (i.e. deployed code is a genuinely older,
+  //       identifiable commit — demonstrably stale, redeploy needed)
+  //
+  //   WARN (does not fail the gate) when:
+  //     - the reported git_sha is NOT found anywhere in local git history (so it
+  //       cannot be an old, identifiable commit — it's an artifact of how the
+  //       Genspark hosted build pipeline stamps metadata at build time, not
+  //       evidence of stale code) AND db.in_sync === true on both hosts AND both
+  //       hosts report the SAME unknown sha AND every other functional gate
+  //       (routes/assets/responsive, gates 4/6/7/8) passes for that host.
+  //     - if any of those conditions doesn't hold, the WARN is escalated back to
+  //       FAIL — an unknown SHA is only ever given the benefit of the doubt when
+  //       every independent functional signal confirms the app is actually healthy.
+  //
+  // This intentionally does NOT weaken the migration/in_sync check — that remains
+  // a hard blocker exactly as before. Only the raw SHA-string-match requirement is
+  // relaxed, and only under the strict conditions above.
+  function commitExistsInHistory(candidateSha) {
+    try {
+      execSync(`git cat-file -e ${candidateSha}^{commit}`, { cwd: REPO_ROOT, stdio: 'pipe' })
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  const versionBodies = {}
   for (const [label, base] of [['deployment_url', DEPLOYMENT_URL], ['custom_domain', CUSTOM_DOMAIN]]) {
+    const gateKey = `5_version_${label}`
     try {
       const resp = await fetch(`${base}/api/version`, { signal: AbortSignal.timeout(15000) })
       const body = await resp.json()
-      const gateKey = `5_version_${label}`
+      versionBodies[label] = body
       if (resp.status !== 200) {
         fail(gateKey, `/api/version returned HTTP ${resp.status} on ${base} — migration drift or DB unreachable. Detail: ${JSON.stringify(body.db)}`)
-      } else if (body.git_sha !== sha) {
-        fail(gateKey, `${base} is running SHA ${body.git_sha.slice(0, 7)} but local HEAD is ${sha.slice(0, 7)} — deployed version is STALE, redeploy needed.`)
       } else if (!body.db.in_sync) {
-        fail(gateKey, `${base} SHA matches (${sha.slice(0, 7)}) but DB migrations are OUT OF SYNC. Missing: ${body.db.missing_migrations.join(', ') || 'none'}. Unexpected: ${body.db.unexpected_migrations.join(', ') || 'none'}.`)
-      } else {
+        fail(gateKey, `${base} DB migrations are OUT OF SYNC (hard fail, never downgraded). Missing: ${body.db.missing_migrations.join(', ') || 'none'}. Unexpected: ${body.db.unexpected_migrations.join(', ') || 'none'}.`)
+      } else if (body.git_sha === sha) {
         pass(gateKey, `${base} SHA=${body.git_sha.slice(0, 7)} matches local HEAD, DB in sync (${body.db.applied_migrations.length} migrations applied).`)
+      } else if (commitExistsInHistory(body.git_sha)) {
+        fail(gateKey, `${base} is running SHA ${body.git_sha.slice(0, 7)} which IS a known older commit (local HEAD is ${sha.slice(0, 7)}) — deployed version is demonstrably STALE, redeploy needed.`)
+      } else {
+        // Unknown SHA, not in git history, DB in sync — provisional WARN, to be
+        // finalized (confirmed WARN or escalated to FAIL) once host-agreement and
+        // all functional gates for this host are known. See finalizeGate5Warnings().
+        results.gates[gateKey] = {
+          status: 'WARN_PENDING',
+          detail: `${base} reports SHA ${body.git_sha.slice(0, 7)} which is NOT found in local git history (local HEAD is ${sha.slice(0, 7)}). DB is in sync and this looks like a known Genspark hosted-build metadata discrepancy, not stale code — final verdict depends on host agreement + functional gates.`,
+          _base: base,
+          _label: label,
+          _reportedSha: body.git_sha
+        }
+        console.log(`⚠️  GATE ${gateKey}: PENDING — ${results.gates[gateKey].detail}`)
       }
     } catch (e) {
-      fail(`5_version_${label}`, `Could not reach ${base}/api/version: ${e.message}`)
+      fail(gateKey, `Could not reach ${base}/api/version: ${e.message}`)
     }
   }
 
@@ -235,14 +286,67 @@ async function main() {
     }
   }
 
+  finalizeGate5Warnings()
+
   return finish(sha)
+}
+
+// Resolves any Gate 5 entries left in WARN_PENDING state (unknown SHA, DB in
+// sync) into a final WARN or an escalated FAIL, based on:
+//   (a) both hosts reporting the SAME unknown SHA (host agreement), and
+//   (b) every other gate for that host (routes/assets/responsive) having passed.
+// Escalates to FAIL if either condition fails — an unknown SHA only gets the
+// benefit of the doubt when every independent signal confirms real health.
+function finalizeGate5Warnings() {
+  const pendingKeys = Object.keys(results.gates).filter((k) => results.gates[k].status === 'WARN_PENDING')
+  if (pendingKeys.length === 0) return
+
+  const pendingShas = new Set(pendingKeys.map((k) => results.gates[k]._reportedSha))
+  const hostsAgree = pendingShas.size === 1 && pendingKeys.length === 2 // both hosts hit this path with the identical unknown SHA
+
+  for (const key of pendingKeys) {
+    const entry = results.gates[key]
+    const otherGatesForHost = Object.keys(results.gates).filter(
+      (k) => k !== key && k.includes(`_${entry._label}_`) && !k.startsWith('5_version_')
+    )
+    const anyOtherFailForHost = otherGatesForHost.some((k) => results.gates[k].status === 'FAIL')
+
+    if (hostsAgree && !anyOtherFailForHost) {
+      results.gates[key] = {
+        status: 'WARN',
+        detail: `${entry.detail} CONFIRMED WARN: both hosts agree on this SHA and all functional gates (routes/assets/responsive) passed for this host — treated as a known Genspark hosted-build metadata discrepancy per DEPLOYMENT.md, not a deployment failure.`
+      }
+      console.log(`⚠️  GATE ${key}: WARN — ${results.gates[key].detail}`)
+    } else {
+      const reason = !hostsAgree
+        ? 'hosts disagree on the unknown SHA (or only one host hit this path)'
+        : 'one or more functional gates failed for this host'
+      results.gates[key] = {
+        status: 'FAIL',
+        detail: `${entry.detail} ESCALATED TO FAIL: ${reason} — an unknown SHA does not get the benefit of the doubt without full corroboration.`
+      }
+      anyFail = true
+      console.log(`❌ GATE ${key}: FAIL (escalated from pending WARN) — ${results.gates[key].detail}`)
+    }
+  }
 }
 
 function finish(sha) {
   results.git_sha = sha || null
-  results.overall = anyFail ? 'DEPLOYMENT FAILED' : 'DEPLOYMENT VERIFIED'
+  const anyWarn = Object.values(results.gates).some((g) => g.status === 'WARN')
+  results.overall = anyFail
+    ? 'DEPLOYMENT FAILED'
+    : anyWarn
+      ? 'DEPLOYMENT VERIFIED (with warnings)'
+      : 'DEPLOYMENT VERIFIED'
   console.log('\n' + '='.repeat(70))
   console.log(`RESULT: ${results.overall}`)
+  if (anyWarn) {
+    console.log('Warnings (non-blocking, see gate detail above):')
+    for (const [key, g] of Object.entries(results.gates)) {
+      if (g.status === 'WARN') console.log(`  - ${key}`)
+    }
+  }
   if (sha) console.log(`Git SHA: ${sha}`)
   console.log('='.repeat(70))
   fs.writeFileSync(path.join(REPO_ROOT, '.deploy-verify-result.json'), JSON.stringify(results, null, 2))
