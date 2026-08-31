@@ -331,6 +331,31 @@
     });
   })();
 
+  // ---------- Ecosystem Preview waitlist signup (/fresh, /eats, /gigs, /stay, /drive, /send, /stream, /aura) ----------
+  (function initEcosystemWaitlist() {
+    const form = qs('.ecosystem-waitlist-form');
+    if (!form) return;
+    const msg = qs('.ecosystem-waitlist-msg');
+    const slug = form.getAttribute('data-vertical-slug');
+    form.addEventListener('submit', async function (e) {
+      e.preventDefault();
+      const emailInput = form.querySelector('input[name="email"]');
+      const email = emailInput ? emailInput.value.trim() : '';
+      if (!email) return;
+      const submitBtn = form.querySelector('button[type="submit"]');
+      if (submitBtn) submitBtn.disabled = true;
+      const res = await api('/api/ecosystem/' + slug + '/waitlist', { method: 'POST', body: JSON.stringify({ email: email }) });
+      if (submitBtn) submitBtn.disabled = false;
+      if (res.ok) {
+        form.reset();
+        if (msg) { msg.textContent = "You're on the list! We'll email you the moment this launches."; msg.classList.add('text-primary', 'font-medium'); }
+      } else if (msg) {
+        msg.textContent = (res.data && res.data.error) || 'Something went wrong. Please try again.';
+        msg.classList.add('text-red-500');
+      }
+    });
+  })();
+
   // ---------- Product Detail Page: quantity stepper, variant selection, add to cart ----------
   // BUY-BOX RULE: every add-to-cart call on this page (main buy box AND each Compare Sellers row)
   // must send listing_id, never product_id — a product can have several sellers/listings, and the

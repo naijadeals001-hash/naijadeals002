@@ -14,6 +14,7 @@ import { addressesApi } from './routes/api-addresses'
 import { walletApi } from './routes/api-wallet'
 import { webhooksApi } from './routes/api-webhooks'
 import { wishlistApi } from './routes/api-wishlist'
+import { ecosystemApi } from './routes/api-ecosystem'
 import { placeholderRoute } from './routes/placeholder'
 import { versionRoute } from './routes/version'
 
@@ -29,6 +30,7 @@ import { walletPage } from './pages/wallet'
 import { wishlistPage } from './pages/wishlist'
 import { addressesPage } from './pages/addresses'
 import { ecosystemPage } from './pages/ecosystem'
+import { ecosystemPreviewPage } from './pages/ecosystem-preview'
 import { helpPage } from './pages/help'
 import { sellerGatewayPage, sellerOnboardingPage } from './pages/seller'
 import { sellerDashboardPage, sellerProductsPage, sellerOrdersPage, sellerFinancePage } from './pages/seller-stubs'
@@ -59,6 +61,7 @@ app.route('/api/addresses', addressesApi)
 app.route('/api/wallet', walletApi)
 app.route('/api/webhooks', webhooksApi)
 app.route('/api/wishlist', wishlistApi)
+app.route('/api/ecosystem', ecosystemApi)
 
 // ---------- SSR pages ----------
 app.get('/', homePage)
@@ -76,6 +79,23 @@ app.get('/account/wishlist', requireAuthPage, wishlistPage)
 app.get('/account/addresses', requireAuthPage, addressesPage)
 app.get('/ecosystem', ecosystemPage)
 app.get('/help', helpPage)
+
+// ---------- Ecosystem Preview Pages — one handler, 8 routes ----------
+// Every planned NaijaDeals vertical that isn't built yet gets a real, honest
+// product-preview page instead of a 404. Content for all 8 routes below is
+// 100% config-driven from ecosystem_verticals (migration 0010) via
+// ecosystemPreviewPage — there is no per-vertical page file. Flipping any of
+// these from coming_soon -> live later is a data change (and, when a real
+// engine exists, simply repointing that one line to a different handler),
+// never a rebuild of this list.
+app.get('/fresh', ecosystemPreviewPage)
+app.get('/eats', ecosystemPreviewPage)
+app.get('/gigs', ecosystemPreviewPage)
+app.get('/stay', ecosystemPreviewPage)
+app.get('/drive', ecosystemPreviewPage)
+app.get('/send', ecosystemPreviewPage)
+app.get('/stream', ecosystemPreviewPage)
+app.get('/aura', ecosystemPreviewPage)
 
 // ---------- Seller Portal — Phase 2: gateway + ownership-gated stubs ----------
 // /seller is the single destination for every "Sell on NaijaDeals" CTA (see

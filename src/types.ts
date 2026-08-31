@@ -201,6 +201,38 @@ export interface HeroCampaignRow {
   display_order: number
 }
 
+/** Status lifecycle for an ecosystem vertical preview — see src/lib/ecosystem-verticals.ts. */
+export type EcosystemVerticalStatus = 'coming_soon' | 'in_development' | 'beta' | 'live'
+
+/** One planned NaijaDeals vertical (NaijaFresh, NaijaEats, etc.) — see migration 0010. */
+export interface EcosystemVerticalRow {
+  id: number
+  slug: string
+  route: string
+  name: string
+  tagline: string
+  description: string
+  icon: string
+  accent_color: string
+  hero_image_desktop: string
+  hero_image_mobile: string
+  status: EcosystemVerticalStatus
+  cta_label: string
+  seo_title: string
+  seo_description: string
+  display_order: number
+}
+
+/** One planned feature card on an ecosystem vertical preview page. */
+export interface EcosystemVerticalFeatureRow {
+  id: number
+  vertical_id: number
+  icon: string
+  title: string
+  description: string
+  display_order: number
+}
+
 export interface VariantRow {
   id: number
   listing_id: number

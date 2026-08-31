@@ -1,101 +1,80 @@
 import type { Context } from 'hono'
 import { Layout } from '../components/Layout'
 import type { AppEnv } from '../types'
+import { getAllVerticals } from '../lib/ecosystem-verticals'
 
-const SERVICES = [
-  {
-    key: 'shop',
-    name: 'NaijaShop',
-    tagline: 'Live now',
-    icon: 'storefront',
-    color: 'bg-primary',
-    desc: 'Nigeria\'s escrow-protected marketplace. Thousands of products from verified local vendors, delivered nationwide.',
-    cta: 'Start shopping',
-    href: '/shop',
-    live: true
-  },
-  {
-    key: 'eats',
-    name: 'NaijaEats',
-    tagline: 'Coming soon',
-    icon: 'restaurant',
-    color: 'bg-amber-500',
-    desc: 'Order from your favourite local restaurants and get hot meals delivered straight to your door.',
-    cta: 'Notify me',
-    href: '#',
-    live: false
-  },
-  {
-    key: 'gigs',
-    name: 'NaijaGigs',
-    tagline: 'Coming soon',
-    icon: 'engineering',
-    color: 'bg-blue-500',
-    desc: 'Book trusted, vetted local professionals for home repairs, design work, tutoring, events and more.',
-    cta: 'Notify me',
-    href: '#',
-    live: false
-  },
-  {
-    key: 'stay',
-    name: 'NaijaStay',
-    tagline: 'Coming soon',
-    icon: 'apartment',
-    color: 'bg-purple-500',
-    desc: 'Find and book apartments, rooms and short-let stays anywhere in the country — verified hosts only.',
-    cta: 'Notify me',
-    href: '#',
-    live: false
-  }
-]
+/**
+ * /ecosystem — the "whole ecosystem at a glance" overview page. NaijaShop is
+ * hardcoded here (it's not a "preview", it's the one live vertical and isn't
+ * a row in ecosystem_verticals — see migration 0010's header comment). The
+ * other 8 cards are read straight from ecosystem_verticals (migration 0010),
+ * so this page and the individual /fresh, /eats, etc. preview pages can never
+ * drift out of sync with each other — same source of truth, same routes.
+ */
+const STATUS_BADGE: Record<string, { label: string; cls: string }> = {
+  coming_soon: { label: 'Coming soon', cls: 'bg-gray-100 text-gray-500' },
+  in_development: { label: 'In development', cls: 'bg-blue-100 text-blue-600' },
+  beta: { label: 'Beta', cls: 'bg-amber-100 text-amber-700' },
+  live: { label: 'Live now', cls: 'bg-primary-light text-primary-dark' }
+}
+
+const ICON_BG: Record<string, string> = {
+  green: 'bg-green-500', amber: 'bg-amber-500', blue: 'bg-blue-500', purple: 'bg-purple-500',
+  slate: 'bg-slate-500', orange: 'bg-orange-500', red: 'bg-red-500', indigo: 'bg-indigo-500'
+}
 
 export async function ecosystemPage(c: Context<AppEnv>) {
   const user = c.get('user')
+  const verticals = await getAllVerticals(c.env.DB)
 
   return c.render(
-    <Layout title="Ecosystem" user={user} description="One NaijaDeals account for shopping, food, gigs and stays across Nigeria.">
+    <Layout title="Ecosystem" user={user} description="One NaijaDeals account for shopping, fresh food, eats, gigs, stays, mobility, delivery, entertainment and AI — across Nigeria.">
       <section class="bg-gradient-to-br from-primary-dark to-primary text-white">
         <div class="max-w-[100rem] mx-auto px-6 lg:px-8 py-12 text-center">
           <span class="material-symbols-outlined text-4xl text-primary-fixed">workspace_premium</span>
           <h1 class="text-3xl lg:text-4xl font-bold mt-3">One account. One ecosystem.</h1>
           <p class="text-white/80 mt-3 max-w-xl mx-auto">
-            Shopping today. Food, gigs and stays coming soon — all under one NaijaDeals account and wallet.
+            NaijaShop is live today. Fresh food, eats, gigs, stays, mobility, delivery, entertainment and AI are all coming — under the same NaijaDeals account and wallet.
           </p>
         </div>
       </section>
 
-      <div class="max-w-5xl mx-auto px-6 lg:px-8 py-10">
-        <div class="grid md:grid-cols-2 gap-5">
-          {SERVICES.map((s) => (
-            <div class="bg-white border border-gray-200 rounded-2xl p-6 flex flex-col relative overflow-hidden">
-              <span class={`absolute top-4 right-4 text-xs font-semibold px-2.5 py-1 rounded-full ${s.live ? 'bg-primary-light text-primary-dark' : 'bg-gray-100 text-gray-500'}`}>
-                {s.tagline}
-              </span>
-              <span class={`material-symbols-outlined text-3xl text-white w-14 h-14 rounded-xl flex items-center justify-center mb-4 ${s.color}`}>
-                {s.icon}
-              </span>
-              <h2 class="text-lg font-bold text-gray-800 mb-1">{s.name}</h2>
-              <p class="text-sm text-gray-500 mb-5 flex-1">{s.desc}</p>
-              {s.live ? (
-                <a href={s.href} class="text-center bg-primary text-white font-semibold py-2.5 rounded-lg hover:bg-primary-dark transition">
-                  {s.cta}
+      <div class="max-w-6xl mx-auto px-6 lg:px-8 py-10">
+        <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
+          {/* NaijaShop — the one already-live vertical, not a DB row */}
+          <div class="bg-white border border-gray-200 rounded-2xl p-6 flex flex-col relative overflow-hidden">
+            <span class={`absolute top-4 right-4 text-xs font-semibold px-2.5 py-1 rounded-full ${STATUS_BADGE.live.cls}`}>{STATUS_BADGE.live.label}</span>
+            <span class="material-symbols-outlined text-3xl text-white w-14 h-14 rounded-xl flex items-center justify-center mb-4 bg-primary">storefront</span>
+            <h2 class="text-lg font-bold text-gray-800 mb-1">NaijaShop</h2>
+            <p class="text-sm text-gray-500 mb-5 flex-1">Nigeria's escrow-protected marketplace. Thousands of products from verified local vendors, delivered nationwide.</p>
+            <a href="/shop" class="text-center bg-primary text-white font-semibold py-2.5 rounded-lg hover:bg-primary-dark transition">Start shopping</a>
+          </div>
+
+          {verticals.map((v) => {
+            const badge = STATUS_BADGE[v.status] || STATUS_BADGE.coming_soon
+            return (
+              <div class="bg-white border border-gray-200 rounded-2xl p-6 flex flex-col relative overflow-hidden">
+                <span class={`absolute top-4 right-4 text-xs font-semibold px-2.5 py-1 rounded-full ${badge.cls}`}>{badge.label}</span>
+                <span class={`material-symbols-outlined text-3xl text-white w-14 h-14 rounded-xl flex items-center justify-center mb-4 ${ICON_BG[v.accent_color] || 'bg-gray-400'}`}>
+                  {v.icon}
+                </span>
+                <h2 class="text-lg font-bold text-gray-800 mb-1">{v.name}</h2>
+                <p class="text-sm text-gray-500 mb-5 flex-1">{v.description}</p>
+                <a href={v.route} class="text-center bg-white border border-gray-300 text-gray-700 font-semibold py-2.5 rounded-lg hover:bg-gray-50 transition">
+                  Preview {v.name}
                 </a>
-              ) : (
-                <button type="button" disabled class="text-center bg-gray-100 text-gray-400 font-semibold py-2.5 rounded-lg cursor-not-allowed">
-                  {s.cta}
-                </button>
-              )}
-            </div>
-          ))}
+              </div>
+            )
+          })}
         </div>
 
         <div class="mt-10 bg-primary-light rounded-xl p-6 flex flex-col md:flex-row items-center justify-between gap-4">
           <div>
-            <h3 class="font-bold text-primary-dark">Want early access to NaijaEats, NaijaGigs & NaijaStay?</h3>
-            <p class="text-sm text-gray-600 mt-1">Subscribe below and we'll let you know the moment each service launches in your city.</p>
+            <h3 class="font-bold text-primary-dark">Want early access as each vertical launches?</h3>
+            <p class="text-sm text-gray-600 mt-1">Visit any vertical's preview page above and join its waitlist — we'll only notify you about the ones you actually asked about.</p>
           </div>
-          <a href="/#footer" class="shrink-0 bg-primary text-white font-semibold px-6 py-3 rounded-lg hover:bg-primary-dark transition">
-            Join the waitlist
+          <a href="/fresh" class="shrink-0 bg-primary text-white font-semibold px-6 py-3 rounded-lg hover:bg-primary-dark transition">
+            Explore NaijaFresh
           </a>
         </div>
       </div>
