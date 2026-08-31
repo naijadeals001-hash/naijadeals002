@@ -1,5 +1,13 @@
 # NaijaDeals — Marketplace MVP (Phase 1)
 
+> **Ecosystem architecture**: NaijaDeals is being built as a Super Ecosystem — one platform,
+> a set of shared engines (identity, marketplace, payments, bookings, logistics, trust,
+> search, etc.), and many vertical product layers (NaijaShop, NaijaEats, NaijaPay, and 19
+> others, live + reserved). See
+> [`docs/NAIJADEALS_MASTER_ARCHITECTURE.md`](docs/NAIJADEALS_MASTER_ARCHITECTURE.md) for the
+> full engine model, vertical roadmap, and architectural rules. This README stays focused on
+> what's built and how to run it; the architecture doc is the forward-looking reference.
+
 ## Project Overview
 - **Name**: NaijaDeals
 - **Goal**: Nigeria's escrow-protected super-app. Phase 1 = a fully working **Shop/Marketplace** vertical (catalog, cart, checkout, orders, wallet). Eats/Gigs/Stays are teaser-only until later phases.
