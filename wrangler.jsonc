@@ -12,9 +12,20 @@
       "database_name": "naijadeals-production",
       "database_id": "00000000-0000-0000-0000-000000000000"
     }
-  ]
+  ],
   // NOTE: database_id above is a local-dev placeholder. Before deploying to a real
   // Cloudflare account, run `npx wrangler d1 create naijadeals-production` and
   // replace this id with the one it returns (or use the Genspark-hosted deploy
   // skill, which provisions this automatically).
+  "r2_buckets": [
+    {
+      "binding": "SELLER_UPLOADS",
+      "bucket_name": "naijadeals-seller-uploads"
+    }
+  ]
+  // Seller-uploaded store logos/banners/product images. Distinct from the
+  // curated, git-tracked public/static/* seed content — this bucket holds
+  // real seller uploads with no fixed set of filenames, served through an
+  // ownership-checked route (see src/routes/api-seller-uploads.ts), never
+  // through serveStatic directly.
 }

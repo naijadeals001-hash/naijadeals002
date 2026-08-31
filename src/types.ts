@@ -1,5 +1,7 @@
 export type Bindings = {
   DB: D1Database
+  SELLER_UPLOADS: R2Bucket
+  PAYOUT_ENCRYPTION_KEY: string
 }
 
 export type AppEnv = {
@@ -51,6 +53,78 @@ export interface VendorRow {
   positive_feedback_percent: number
   response_time_hours: number
   joined_year: number
+  // --- Seller Portal foundation (migration 0009) ---
+  /** NULL for the 20 pre-seeded catalog vendors. Set once a real user claims/creates this store. */
+  user_id: number | null
+  business_name: string | null
+  business_type: 'individual' | 'company' | null
+  business_email: string | null
+  business_phone: string | null
+  /** Admin-controlled verification state machine. is_verified above is kept in sync for backward compat with existing catalog queries. */
+  verification_status: 'pending' | 'verified' | 'rejected' | 'suspended'
+  verification_note: string | null
+  /** Which of the 6 onboarding wizard steps to resume at. */
+  onboarding_step: number
+  onboarding_completed_at: string | null
+  terms_accepted_at: string | null
+  terms_version: string | null
+  /** Seller-controlled "pause my store" — distinct from admin-controlled verification_status. */
+  store_status: 'active' | 'paused' | 'suspended'
+}
+
+export interface NigerianBankRow {
+  id: number
+  name: string
+  code: string
+  sort_order: number
+}
+
+/**
+ * A seller's bank account for receiving payouts. account_number_encrypted is
+ * NEVER returned to normal seller-facing reads — always project account_number_last4
+ * instead for masked display ("•••••• + last4"). See src/lib/payouts.ts.
+ */
+export interface SellerPayoutAccountRow {
+  id: number
+  vendor_id: number
+  bank_name: string
+  bank_code: string
+  account_name: string
+  account_number_encrypted: string
+  account_number_last4: string
+  is_default: number
+  status: 'active' | 'removed'
+  created_at: string
+  updated_at: string
+}
+
+/** Masked/safe shape of a payout account for any seller-facing API response — never includes the encrypted field. */
+export interface SellerPayoutAccountPublic {
+  id: number
+  vendor_id: number
+  bank_name: string
+  account_name: string
+  account_number_masked: string // e.g. "••••••1234"
+  is_default: boolean
+  status: 'active' | 'removed'
+  created_at: string
+}
+
+export interface SellerPayoutAccountAuditRow {
+  id: number
+  payout_account_id: number | null
+  vendor_id: number
+  action: 'created' | 'updated' | 'set_default' | 'removed'
+  performed_by_user_id: number
+  detail: string
+  created_at: string
+}
+
+/** Cached available-earnings balance, keyed by vendor_id (the store), NOT user_id — see migration 0009 comments. */
+export interface SellerFinanceAccountRow {
+  vendor_id: number
+  cached_available_kobo: number
+  updated_at: string
 }
 
 /** Canonical catalog entry — NOT tied to a specific seller. */
