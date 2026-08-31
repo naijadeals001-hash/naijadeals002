@@ -79,14 +79,14 @@ export async function addressesPage(c: Context<AppEnv>) {
                     <span class="material-symbols-outlined text-base">check_circle</span>Default address
                   </span>
                 ) : (
-                  <button type="button" class="address-set-default-btn text-primary font-semibold hover:underline flex items-center gap-1" data-address-id={addr.id}>
+                  <button type="button" class="address-set-default-btn text-primary font-semibold hover:underline flex items-center gap-1 py-3 -my-3 min-h-[44px]" data-address-id={addr.id}>
                     <span class="material-symbols-outlined text-base">radio_button_unchecked</span>Set as default
                   </button>
                 )}
-                <button type="button" class="address-edit-btn text-gray-600 font-medium hover:underline ml-auto" data-address-id={addr.id}>
+                <button type="button" class="address-edit-btn text-gray-600 font-medium hover:underline ml-auto flex items-center py-3 -my-3 min-h-[44px]" data-address-id={addr.id}>
                   Edit
                 </button>
-                <button type="button" class="address-delete-btn text-red-600 font-medium hover:underline" data-address-id={addr.id} data-address-label={addr.label}>
+                <button type="button" class="address-delete-btn text-red-600 font-medium hover:underline flex items-center py-3 -my-3 min-h-[44px]" data-address-id={addr.id} data-address-label={addr.label}>
                   Delete
                 </button>
               </div>
@@ -94,7 +94,7 @@ export async function addressesPage(c: Context<AppEnv>) {
           ))}
         </div>
 
-        <button type="button" id="show-add-address-btn" class={`inline-flex items-center gap-1.5 text-primary font-semibold hover:underline ${addresses.length === 0 ? 'hidden' : ''}`}>
+        <button type="button" id="show-add-address-btn" class={`inline-flex items-center gap-1.5 text-primary font-semibold hover:underline py-3 -my-1 min-h-[44px] ${addresses.length === 0 ? 'hidden' : ''}`}>
           <span class="material-symbols-outlined text-base">add</span>Add a new address
         </button>
 
@@ -153,7 +153,7 @@ export async function addressesPage(c: Context<AppEnv>) {
         </section>
 
         {/* ============ Delete confirmation (inline, non-modal — avoids any mobile overflow/drawer risk) ============ */}
-        <div id="delete-confirm-overlay" class="hidden fixed inset-0 bg-black/40 z-50 flex items-end sm:items-center justify-center p-4">
+        <div id="delete-confirm-overlay" class="hidden fixed inset-0 bg-black/40 z-50 flex items-end sm:items-center justify-center sm:p-4">
           <div class="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-sm p-5">
             <h3 class="font-bold text-gray-800">Delete this address?</h3>
             <p id="delete-confirm-text" class="text-sm text-gray-600 mt-1.5">This will permanently remove this saved address from your account.</p>
