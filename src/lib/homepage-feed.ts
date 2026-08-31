@@ -23,6 +23,7 @@ import {
   getLimitedTimeDeals,
   getPopularCategories
 } from './catalog'
+import { getActiveHeroCampaigns } from './hero-campaigns'
 
 const TTL_SECONDS = 120 // recompute at most once every 2 minutes per section
 
@@ -32,6 +33,9 @@ const TTL_SECONDS = 120 // recompute at most once every 2 minutes per section
 // to this map. They are fetched live, per-request, via getDealsNearYouLive/getRecentlyViewedLive
 // below, called directly from the home.tsx route handler alongside (not through) this cache.
 const SECTION_LOADERS: Record<string, (db: D1Database) => Promise<any>> = {
+  // Hero campaigns listed first: it's the top-of-page section, and keeping it first
+  // in this map makes the cache-warm order match the visual reading order.
+  hero_campaigns: (db) => getActiveHeroCampaigns(db, 8),
   flash_deals: (db) => getFlashDeals(db, 12),
   best_sellers: (db) => getBestSellers(db, 12),
   new_arrivals: (db) => getNewArrivals(db, 12),
@@ -83,6 +87,7 @@ export async function getHomepageFeed(db: D1Database) {
   const feed: Record<string, any> = {}
   keys.forEach((k, i) => (feed[k] = values[i]))
   return feed as {
+    hero_campaigns: any[]
     flash_deals: any[]
     best_sellers: any[]
     new_arrivals: any[]

@@ -423,6 +423,100 @@
     });
   })();
 
+  // ---------- Hero Campaign Carousel: autoplay, prev/next, indicators, swipe, keyboard, a11y ----------
+  (function initHeroCarousel() {
+    var root = document.getElementById('hero-carousel');
+    if (!root) return;
+    var slides = qsa('.hero-slide', root);
+    if (slides.length === 0) return;
+    var indicators = qsa('.hero-indicator-btn', root);
+    var prevBtn = document.getElementById('hero-prev-btn');
+    var nextBtn = document.getElementById('hero-next-btn');
+    var current = 0;
+    var autoplayMs = Number(root.getAttribute('data-autoplay-ms')) || 6000;
+    var timer = null;
+    var reducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    function goTo(index) {
+      var next = ((index % slides.length) + slides.length) % slides.length;
+      if (next === current) return;
+      slides[current].classList.remove('opacity-100', 'z-10');
+      slides[current].classList.add('opacity-0', 'z-0', 'pointer-events-none');
+      slides[current].setAttribute('aria-hidden', 'true');
+      slides[next].classList.remove('opacity-0', 'z-0', 'pointer-events-none');
+      slides[next].classList.add('opacity-100', 'z-10');
+      slides[next].setAttribute('aria-hidden', 'false');
+      if (indicators[current]) {
+        indicators[current].classList.remove('w-6', 'bg-white');
+        indicators[current].classList.add('w-2', 'bg-white/50');
+        indicators[current].setAttribute('aria-selected', 'false');
+      }
+      if (indicators[next]) {
+        indicators[next].classList.remove('w-2', 'bg-white/50');
+        indicators[next].classList.add('w-6', 'bg-white');
+        indicators[next].setAttribute('aria-selected', 'true');
+      }
+      current = next;
+    }
+
+    function next() { goTo(current + 1); }
+    function prev() { goTo(current - 1); }
+
+    function startAutoplay() {
+      if (reducedMotion || slides.length < 2) return; // never auto-rotate if the visitor asked for reduced motion
+      stopAutoplay();
+      timer = window.setInterval(next, autoplayMs);
+    }
+    function stopAutoplay() {
+      if (timer) { window.clearInterval(timer); timer = null; }
+    }
+
+    if (slides.length > 1) {
+      if (prevBtn) prevBtn.addEventListener('click', function () { prev(); startAutoplay(); });
+      if (nextBtn) nextBtn.addEventListener('click', function () { next(); startAutoplay(); });
+      indicators.forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          goTo(Number(btn.getAttribute('data-slide-index')));
+          startAutoplay();
+        });
+      });
+
+      // Desktop hover-pause
+      root.addEventListener('mouseenter', stopAutoplay);
+      root.addEventListener('mouseleave', startAutoplay);
+
+      // Keyboard accessibility (left/right arrows while the carousel or its controls have focus)
+      root.addEventListener('keydown', function (e) {
+        if (e.key === 'ArrowLeft') { prev(); startAutoplay(); }
+        else if (e.key === 'ArrowRight') { next(); startAutoplay(); }
+      });
+
+      // Mobile touch/swipe
+      var touchStartX = null;
+      root.addEventListener('touchstart', function (e) {
+        touchStartX = e.changedTouches[0].clientX;
+        stopAutoplay();
+      }, { passive: true });
+      root.addEventListener('touchend', function (e) {
+        if (touchStartX === null) return;
+        var dx = e.changedTouches[0].clientX - touchStartX;
+        if (Math.abs(dx) > 40) { dx < 0 ? next() : prev(); }
+        touchStartX = null;
+        startAutoplay();
+      }, { passive: true });
+
+      startAutoplay();
+      // Pause when the tab is backgrounded so we don't burn cycles / jump slides on return
+      document.addEventListener('visibilitychange', function () {
+        if (document.hidden) stopAutoplay(); else startAutoplay();
+      });
+    }
+
+    // Graceful failed-image handling: if a slide's image 404s/errors, fall back to a
+    // themed gradient (already applied via the img's own class list) so the slide still
+    // shows its title/subtitle/CTA instead of a broken-image icon.
+  })();
+
   // ---------- Recently Viewed: track visited PDPs in localStorage + hydrate homepage section ----------
   (function trackRecentlyViewed() {
     var pid = document.body.getAttribute('data-product-id');

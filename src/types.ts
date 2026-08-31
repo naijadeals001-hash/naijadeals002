@@ -110,6 +110,21 @@ export interface ProductWithListingRow extends ProductRow {
   seller_count?: number
 }
 
+/** One slide in the homepage Hero Campaign Carousel — see src/lib/hero-campaigns.ts. */
+export interface HeroCampaignRow {
+  id: number
+  slug: string
+  title: string
+  subtitle: string | null
+  image_desktop_url: string
+  image_mobile_url: string
+  cta_label: string
+  cta_href: string
+  vertical: string
+  theme: 'dark' | 'light'
+  display_order: number
+}
+
 export interface VariantRow {
   id: number
   listing_id: number
