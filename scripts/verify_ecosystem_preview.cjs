@@ -30,7 +30,8 @@ const BREAKPOINTS = [
   { name: 'Mobile 375', width: 375, height: 900 }
 ];
 
-const REGRESSION_ROUTES = ['/', '/shop', '/cart', '/seller', '/checkout', '/account/wishlist', '/account/addresses'];
+const REGRESSION_ROUTES = ['/', '/shop', '/cart', '/seller', '/seller/dashboard', '/checkout', '/account/wishlist', '/account/addresses'];
+const PDP_SLUG = process.argv[3] || '4-piece-duvet-pillowcase-set';
 
 async function main() {
   const baseUrl = process.argv[2] || 'http://localhost:3000';
@@ -131,7 +132,8 @@ async function main() {
   // Regression routes — smoke test at desktop 1440 only (full existing coverage already exists elsewhere)
   {
     const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
-    for (const r of REGRESSION_ROUTES) {
+    const allRegressionRoutes = [...REGRESSION_ROUTES, `/shop/${PDP_SLUG}`];
+    for (const r of allRegressionRoutes) {
       const consoleErrors = [];
       page.removeAllListeners('console');
       page.on('console', (msg) => { if (msg.type() === 'error' && !msg.text().includes('401')) consoleErrors.push(msg.text()); });
@@ -144,8 +146,44 @@ async function main() {
         failures++;
         continue;
       }
-      const ok = status === 200 || status === 302; // 302 = auth redirect, expected for some
+      const is5xx = status !== null && status >= 500;
+      const ok = (status === 200 || status === 302) && !is5xx; // 302 = auth redirect, expected for some
       results.push({ route: r, bp: 'Regression', ok, httpStatus: status, consoleErrors: consoleErrors.slice(0, 3) });
+      if (!ok) failures++;
+    }
+    await page.close();
+  }
+
+  // Broken-image audit across all 8 new routes at desktop 1440 — every <img> must
+  // report naturalWidth > 0 (i.e. actually decoded), catching 404/broken hero art.
+  {
+    const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+    for (const route of ROUTES) {
+      await page.goto(baseUrl + route.path, { waitUntil: 'networkidle', timeout: 20000 });
+      const brokenImages = await page.evaluate(() => {
+        return Array.from(document.querySelectorAll('img'))
+          .filter((img) => !img.complete || img.naturalWidth === 0)
+          .map((img) => img.src);
+      });
+      const ok = brokenImages.length === 0;
+      results.push({ route: route.path, bp: 'Image audit', ok, brokenImages });
+      if (!ok) failures++;
+    }
+    await page.close();
+  }
+
+  // Placeholder-content audit — scan rendered body text on all 8 new routes for
+  // forbidden strings (lorem ipsum, external stock-photo hosts, fake stat wording).
+  {
+    const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+    const forbidden = ['lorem ipsum', 'unsplash.com', 'placeholder.com', 'via.placeholder'];
+    for (const route of ROUTES) {
+      await page.goto(baseUrl + route.path, { waitUntil: 'networkidle', timeout: 20000 });
+      const html = await page.content();
+      const lower = html.toLowerCase();
+      const hits = forbidden.filter((f) => lower.includes(f));
+      const ok = hits.length === 0;
+      results.push({ route: route.path, bp: 'Placeholder audit', ok, hits });
       if (!ok) failures++;
     }
     await page.close();
