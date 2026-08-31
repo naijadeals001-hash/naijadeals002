@@ -2,6 +2,7 @@ import type { Context } from 'hono'
 import { getCookie } from 'hono/cookie'
 import { Layout } from '../components/Layout'
 import { ProductCarousel } from '../components/ProductCard'
+import { HeroCarousel } from '../components/HeroCarousel'
 import {
   getTopLevelCategories,
   getDealsNearYou
@@ -28,28 +29,93 @@ export async function homePage(c: Context<AppEnv>) {
     getDealsNearYou(db, selectedCity, 10)
   ])
 
+  // ---- Hybrid hero supporting-panel data (reuses feed sections already loaded above —
+  // zero new queries, zero fake data). See section 1 below for rationale. ----
+  const flashPromo = feed.flash_deals[0] ?? feed.todays_deals[0] ?? null
+  const flashPromoDiscount =
+    flashPromo && flashPromo.compare_at_price_kobo
+      ? Math.round(((flashPromo.compare_at_price_kobo - flashPromo.price_kobo) / flashPromo.compare_at_price_kobo) * 100)
+      : null
+  const spotlightVendor: VendorRow | null = feed.popular_vendors[0] ?? null
+  const bothPromosPresent = Boolean(flashPromo) && Boolean(spotlightVendor)
+  const soloPromoClass = bothPromosPresent ? '' : ' col-span-2 lg:col-span-1 lg:row-span-2'
+
   return c.render(
     <Layout title="Home" user={user} selectedCity={selectedCity}>
-      {/* ============ 1. HERO — 3-panel promo grid ============ */}
+      {/* ============ 1. HYBRID HERO — DB-driven campaign carousel + real merchandising panels ============
+          Main: <HeroCarousel> renders feed.hero_campaigns (hero_campaigns table via
+          getActiveHeroCampaigns(), cached by homepage-feed.ts's SECTION_LOADERS — this data was
+          already being fetched every request, just never rendered). Fully DB-driven: no campaign
+          content is hardcoded here, matching every other section on this page.
+          Side/below panels ("Flash Deals" + "Vendor Spotlight") reuse REAL rows already present in
+          `feed` (a real flash-deal product, the top popular vendor) — no new queries, no invented
+          products/prices/stats, no second carousel or hero table. This preserves the old hero's
+          merchandising *function* (quick links into flash deals / a featured seller) while the
+          main slot becomes the new rotating, admin-configurable-later campaign carousel. */}
       <section class="bg-white border-b border-gray-100">
         <div class="max-w-[100rem] mx-auto px-3 md:px-6 lg:px-8 py-3 md:py-5">
-          <div class="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
-            <a href="/shop?category=electronics&deals=1" class="col-span-2 md:col-span-2 row-span-2 relative rounded-xl overflow-hidden group aspect-[16/9] md:aspect-auto md:h-full">
-              <img src="/static/banners/banner-1.jpg" alt="Electronics mega sale, up to 50% off laptops and phones" class="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-300" />
-            </a>
-            <a href="/shop?category=fashion" class="relative rounded-xl overflow-hidden group aspect-square">
-              <img src="/static/banners/banner-2.jpg" alt="Fashion collection, Ankara prints and accessories" class="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-300" />
-            </a>
-            <a href="/shop?category=home-kitchen" class="relative rounded-xl overflow-hidden group aspect-square">
-              <img src="/static/banners/banner-4.jpg" alt="Home and kitchen appliances" class="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-300" />
-            </a>
-            <a href="/shop?category=groceries" class="relative rounded-xl overflow-hidden group aspect-square">
-              <img src="/static/banners/banner-3.jpg" alt="Groceries delivered to your doorstep" class="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-300" />
-            </a>
-            <a href="/ecosystem" class="relative rounded-xl overflow-hidden group aspect-square">
-              <img src="/static/banners/banner-5.jpg" alt="NaijaSend nationwide delivery riders" class="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-300" />
-              <span class="absolute bottom-0 inset-x-0 bg-black/50 text-white text-xs font-semibold px-3 py-1.5">Explore the ecosystem →</span>
-            </a>
+          <div class="grid gap-3 lg:grid-cols-[1fr_300px]">
+            {/* Main hero: existing HeroCarousel component, existing hero_campaigns architecture */}
+            <div class="rounded-xl overflow-hidden">
+              <HeroCarousel campaigns={feed.hero_campaigns} />
+            </div>
+
+            {/* Supporting promo panels — 2-up row on mobile (below hero), stacked column beside hero on desktop */}
+            {(flashPromo || spotlightVendor) && (
+              <div class="grid grid-cols-2 gap-3 lg:grid-cols-1 lg:grid-rows-2">
+                {flashPromo && (
+                  <a
+                    href="/shop?deals=1"
+                    class={`relative rounded-xl overflow-hidden group aspect-square lg:aspect-auto lg:h-full block bg-gray-100${soloPromoClass}`}
+                  >
+                    <img
+                      src={flashPromo.image_url}
+                      alt={flashPromo.title}
+                      loading="lazy"
+                      class="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-300"
+                    />
+                    <div class="absolute inset-0 bg-gradient-to-t from-black/75 via-black/10 to-transparent flex flex-col justify-end p-3 md:p-4">
+                      <span class="inline-flex items-center gap-1 bg-red-600 text-white text-[10px] md:text-xs font-bold px-2 py-0.5 rounded w-fit mb-1.5">
+                        <span class="material-symbols-outlined text-xs md:text-sm">bolt</span>
+                        FLASH DEALS
+                      </span>
+                      <p class="text-white font-bold text-sm md:text-base leading-tight line-clamp-1">{flashPromo.title}</p>
+                      {flashPromoDiscount !== null ? (
+                        <p class="text-white/90 text-xs md:text-sm mt-0.5">Up to {flashPromoDiscount}% off — shop now →</p>
+                      ) : (
+                        <p class="text-white/90 text-xs md:text-sm mt-0.5">Shop today's deals →</p>
+                      )}
+                    </div>
+                  </a>
+                )}
+
+                {spotlightVendor && (
+                  <a
+                    href={`/shop?q=${encodeURIComponent(spotlightVendor.name)}`}
+                    class={`relative rounded-xl overflow-hidden group aspect-square lg:aspect-auto lg:h-full flex flex-col items-center justify-center gap-1.5 bg-gradient-to-br from-primary-dark to-primary p-4 text-center${soloPromoClass}`}
+                  >
+                    <div class="w-14 h-14 md:w-16 md:h-16 rounded-full bg-white flex items-center justify-center overflow-hidden shrink-0 shadow-md group-hover:scale-105 transition-transform duration-300">
+                      {spotlightVendor.logo_url && (
+                        <img src={spotlightVendor.logo_url} alt={spotlightVendor.name} class="max-w-[75%] max-h-[75%] object-contain" />
+                      )}
+                    </div>
+                    <span class="inline-flex items-center gap-1 bg-white/15 text-white text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wide">
+                      Vendor Spotlight
+                    </span>
+                    <p class="text-white font-bold text-sm md:text-base leading-tight flex items-center justify-center gap-1 min-w-0">
+                      <span class="truncate max-w-[9rem]">{spotlightVendor.name}</span>
+                      {spotlightVendor.is_verified === 1 && (
+                        <span class="material-symbols-outlined text-sm shrink-0" style="font-variation-settings:'FILL' 1">verified</span>
+                      )}
+                    </p>
+                    <p class="text-white/85 text-xs flex items-center justify-center gap-1">
+                      <span class="material-symbols-outlined text-amber-300 text-sm" style="font-variation-settings:'FILL' 1">star</span>
+                      {spotlightVendor.rating_avg.toFixed(1)} · {spotlightVendor.city}
+                    </p>
+                  </a>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </section>
