@@ -164,20 +164,31 @@ export async function homePage(c: Context<AppEnv>) {
 
       {/* ============ 8. TOP BRANDS ============ */}
       {feed.top_brands.length > 0 && (
-        <section class="py-6 md:py-8 border-t border-gray-100">
+        <section id="top-brands-section" class="py-6 md:py-8 border-t border-gray-100">
           <div class="max-w-[100rem] mx-auto px-4 md:px-6 lg:px-8">
             <h2 class="text-lg md:text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
               <span class="material-symbols-outlined text-primary">verified</span>
               Top Brands
             </h2>
-            <div class="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4 md:mx-0 md:px-0 snap-x scroll-smooth [&::-webkit-scrollbar]:hidden">
+            <div class="grid grid-cols-3 sm:grid-cols-4 md:flex md:overflow-x-auto gap-3 md:gap-4 pb-2 md:-mx-4 md:px-4 lg:mx-0 lg:px-0 snap-x scroll-smooth [&::-webkit-scrollbar]:hidden">
               {feed.top_brands.map((b: any) => (
-                <a href={`/shop?brand=${b.slug}`} class="shrink-0 snap-start flex flex-col items-center gap-2 bg-white border border-gray-200 rounded-xl p-4 w-32 hover:shadow-md hover:border-primary transition-all">
-                  <div class="w-12 h-12 rounded-full bg-primary-light text-primary-dark font-bold text-lg flex items-center justify-center">
-                    {b.name.slice(0, 2).toUpperCase()}
+                <a
+                  href={`/shop?brand=${b.slug}`}
+                  class="brand-card group md:shrink-0 md:snap-start flex flex-col items-center bg-white border border-gray-200 rounded-2xl p-4 md:p-5 md:w-40 hover:shadow-lg hover:border-primary transition-all"
+                >
+                  <div class="w-16 h-16 md:w-20 md:h-20 rounded-xl bg-gray-50 flex items-center justify-center mb-3 overflow-hidden">
+                    <img
+                      src={b.logo_url}
+                      alt={`${b.name} logo`}
+                      loading="lazy"
+                      class="max-w-[80%] max-h-[80%] object-contain"
+                    />
                   </div>
-                  <p class="text-xs font-semibold text-gray-800 text-center truncate w-full">{b.name}</p>
-                  <p class="text-[11px] text-gray-500">{b.product_count} items</p>
+                  <p class="text-sm font-semibold text-gray-900 text-center truncate w-full">{b.name}</p>
+                  <p class="text-xs font-medium text-primary mt-1 group-hover:underline flex items-center gap-0.5">
+                    Shop {b.name}
+                    <span class="material-symbols-outlined text-[14px]">arrow_forward</span>
+                  </p>
                 </a>
               ))}
             </div>

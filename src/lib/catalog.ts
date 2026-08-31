@@ -89,12 +89,27 @@ export async function getByCategory(db: D1Database, categorySlug: string, limit 
   return results
 }
 
+/**
+ * "Top Brands" — hybrid merchandising ranking:
+ *   1. Curated/featured brands first (is_featured = 1), ordered by display_order.
+ *   2. Remaining brands fall back to real catalog activity (product_count DESC).
+ * Only brands with logo_url set AND at least one active product are eligible —
+ * a brand can never render in this section without a real, git-tracked asset.
+ * status = 'active' gates future Admin Panel soft-hide without deleting rows.
+ * This function is the ONLY place brand ordering/eligibility is decided; the UI
+ * must never hardcode brand names, order, or image paths.
+ */
 export async function getTopBrands(db: D1Database, limit = 12) {
   const { results } = await db
     .prepare(
-      `SELECT b.id, b.slug, b.name, b.is_nigerian, COUNT(p.id) as product_count
-       FROM brands b JOIN products p ON p.brand_id = b.id AND p.is_active = 1
-       GROUP BY b.id ORDER BY product_count DESC LIMIT ?`
+      `SELECT b.id, b.slug, b.name, b.is_nigerian, b.logo_url, b.is_featured, b.display_order,
+              COUNT(p.id) as product_count
+       FROM brands b
+       JOIN products p ON p.brand_id = b.id AND p.is_active = 1
+       WHERE b.logo_url IS NOT NULL AND b.status = 'active'
+       GROUP BY b.id
+       ORDER BY b.is_featured DESC, b.display_order ASC, product_count DESC
+       LIMIT ?`
     )
     .bind(limit)
     .all()
