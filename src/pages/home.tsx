@@ -174,9 +174,9 @@ export async function homePage(c: Context<AppEnv>) {
               {feed.top_brands.map((b: any) => (
                 <a
                   href={`/shop?brand=${b.slug}`}
-                  class="brand-card group md:shrink-0 md:snap-start flex flex-col items-center bg-white border border-gray-200 rounded-2xl p-4 md:p-5 md:w-40 hover:shadow-lg hover:border-primary transition-all"
+                  class="brand-card group md:shrink-0 md:snap-start min-w-0 flex flex-col items-center bg-white border border-gray-200 rounded-2xl p-4 md:p-5 md:w-40 hover:shadow-lg hover:border-primary transition-all"
                 >
-                  <div class="w-16 h-16 md:w-20 md:h-20 rounded-xl bg-gray-50 flex items-center justify-center mb-3 overflow-hidden">
+                  <div class="w-16 h-16 md:w-20 md:h-20 rounded-xl bg-gray-50 flex items-center justify-center mb-3 overflow-hidden shrink-0">
                     <img
                       src={b.logo_url}
                       alt={`${b.name} logo`}
@@ -184,9 +184,9 @@ export async function homePage(c: Context<AppEnv>) {
                       class="max-w-[80%] max-h-[80%] object-contain"
                     />
                   </div>
-                  <p class="text-sm font-semibold text-gray-900 text-center truncate w-full">{b.name}</p>
-                  <p class="text-xs font-medium text-primary mt-1 group-hover:underline flex items-center gap-0.5">
-                    Shop {b.name}
+                  <p class="text-sm font-semibold text-gray-900 text-center truncate w-full min-w-0">{b.name}</p>
+                  <p class="text-xs font-medium text-primary mt-1 whitespace-nowrap group-hover:underline flex items-center gap-0.5">
+                    Shop now
                     <span class="material-symbols-outlined text-[14px]">arrow_forward</span>
                   </p>
                 </a>
