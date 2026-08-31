@@ -423,15 +423,131 @@
     });
   })();
 
-  // ---------- Hero Campaign Carousel: autoplay, prev/next, indicators, swipe, keyboard, a11y ----------
-  (function initHeroCarousel() {
-    var root = document.getElementById('hero-carousel');
+  // ---------- Hero: DESKTOP 5-panel mosaic — rotates campaign CONTENT through fixed
+  // panel slots (never removes/hides panels), autoplay, prev/next, indicators, keyboard,
+  // hover-pause, reduced-motion, visibility-pause. Mobile carousel is a separate IIFE below. ----------
+  (function initHeroGrid() {
+    var root = document.getElementById('hero-grid');
     if (!root) return;
-    var slides = qsa('.hero-slide', root);
+    var campaigns = JSON.parse(root.getAttribute('data-campaigns') || '[]');
+    var total = campaigns.length;
+    if (total === 0) return;
+    var panels = qsa('.hero-panel', root); // fixed DOM slots: [0]=primary, [1..n]=support
+    var slotCount = panels.length;
+    if (slotCount === 0) return;
+    var indicators = qsa('.hero-grid-indicator-btn', root);
+    var prevBtn = document.getElementById('hero-grid-prev-btn');
+    var nextBtn = document.getElementById('hero-grid-next-btn');
+    var windowStart = 0; // index into `campaigns` of whichever campaign currently sits in slot 0
+    var autoplayMs = Number(root.getAttribute('data-autoplay-ms')) || 6000;
+    var timer = null;
+    var reducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    function renderPanel(panel, campaign) {
+      var img = panel.querySelector('[data-hero-img]');
+      var mobileSrc = panel.querySelector('[data-hero-mobile-src]');
+      var title = panel.querySelector('[data-hero-title]');
+      var subtitle = panel.querySelector('[data-hero-subtitle]');
+      var cta = panel.querySelector('[data-hero-cta]');
+      var overlay = panel.querySelector('[data-hero-overlay]');
+      var textLight = campaign.theme === 'dark';
+
+      panel.setAttribute('href', campaign.cta_href);
+      if (img) {
+        img.src = campaign.image_desktop_url;
+        img.classList.remove('hero-img-failed');
+      }
+      if (mobileSrc) mobileSrc.setAttribute('srcset', campaign.image_mobile_url);
+      if (title) title.textContent = campaign.title;
+      if (subtitle) {
+        if (campaign.subtitle) { subtitle.textContent = campaign.subtitle; subtitle.classList.remove('hidden'); }
+        else { subtitle.classList.add('hidden'); }
+      }
+      if (cta) {
+        // preserve the trailing icon span, only replace the label text node
+        var iconSpan = cta.querySelector('.material-symbols-outlined');
+        cta.textContent = campaign.cta_label + ' ';
+        if (iconSpan) cta.appendChild(iconSpan);
+      }
+      if (title) title.classList.toggle('text-white', textLight);
+      if (title) title.classList.toggle('text-gray-900', !textLight);
+      if (subtitle) subtitle.classList.toggle('text-white/85', textLight);
+      if (subtitle) subtitle.classList.toggle('text-gray-700', !textLight);
+      if (overlay) {
+        overlay.classList.toggle('from-black/75', textLight);
+        overlay.classList.toggle('via-black/15', textLight);
+        overlay.classList.toggle('from-white/80', !textLight);
+        overlay.classList.toggle('via-white/25', !textLight);
+      }
+    }
+
+    function renderWindow() {
+      for (var slot = 0; slot < slotCount; slot++) {
+        var campaignIndex = (windowStart + slot) % total;
+        renderPanel(panels[slot], campaigns[campaignIndex]);
+      }
+      indicators.forEach(function (btn, i) {
+        var active = i === windowStart;
+        btn.classList.toggle('w-6', active);
+        btn.classList.toggle('bg-white', active);
+        btn.classList.toggle('w-2', !active);
+        btn.classList.toggle('bg-white/50', !active);
+        btn.setAttribute('aria-selected', active ? 'true' : 'false');
+      });
+    }
+
+    function rotateBy(delta) {
+      windowStart = ((windowStart + delta) % total + total) % total;
+      renderWindow();
+    }
+    function next() { rotateBy(1); }
+    function prev() { rotateBy(-1); }
+
+    function startAutoplay() {
+      if (reducedMotion || total < 2) return;
+      stopAutoplay();
+      timer = window.setInterval(next, autoplayMs);
+    }
+    function stopAutoplay() {
+      if (timer) { window.clearInterval(timer); timer = null; }
+    }
+
+    if (total > 1) {
+      if (prevBtn) prevBtn.addEventListener('click', function () { prev(); startAutoplay(); });
+      if (nextBtn) nextBtn.addEventListener('click', function () { next(); startAutoplay(); });
+      indicators.forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          windowStart = Number(btn.getAttribute('data-window-start'));
+          renderWindow();
+          startAutoplay();
+        });
+      });
+
+      root.addEventListener('mouseenter', stopAutoplay);
+      root.addEventListener('mouseleave', startAutoplay);
+
+      root.addEventListener('keydown', function (e) {
+        if (e.key === 'ArrowLeft') { prev(); startAutoplay(); }
+        else if (e.key === 'ArrowRight') { next(); startAutoplay(); }
+      });
+
+      startAutoplay();
+      document.addEventListener('visibilitychange', function () {
+        if (document.hidden) stopAutoplay(); else startAutoplay();
+      });
+    }
+  })();
+
+  // ---------- Hero: MOBILE/TABLET single-campaign carousel — autoplay, prev/next,
+  // indicators, swipe, keyboard, hover-pause, reduced-motion, visibility-pause ----------
+  (function initHeroMobileCarousel() {
+    var root = document.getElementById('hero-mobile-carousel');
+    if (!root) return;
+    var slides = qsa('.hero-mobile-slide', root);
     if (slides.length === 0) return;
-    var indicators = qsa('.hero-indicator-btn', root);
-    var prevBtn = document.getElementById('hero-prev-btn');
-    var nextBtn = document.getElementById('hero-next-btn');
+    var indicators = qsa('.hero-mobile-indicator-btn', root);
+    var prevBtn = document.getElementById('hero-mobile-prev-btn');
+    var nextBtn = document.getElementById('hero-mobile-next-btn');
     var current = 0;
     var autoplayMs = Number(root.getAttribute('data-autoplay-ms')) || 6000;
     var timer = null;
@@ -481,7 +597,7 @@
         });
       });
 
-      // Desktop hover-pause
+      // Desktop hover-pause (harmless no-op on touch-only devices where this carousel is hidden anyway)
       root.addEventListener('mouseenter', stopAutoplay);
       root.addEventListener('mouseleave', startAutoplay);
 
