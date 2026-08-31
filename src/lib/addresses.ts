@@ -24,7 +24,16 @@ export interface AddressInput {
   line1: string
   city: string
   state: string
+  delivery_instructions?: string | null
   is_default?: boolean
+}
+
+/** Reference list of Nigerian states, DB-sourced (never hardcoded in a page/component). */
+export async function getNigerianStates(db: D1Database): Promise<{ id: number; name: string; is_fct: number }[]> {
+  const { results } = await db
+    .prepare('SELECT id, name, is_fct FROM nigerian_states ORDER BY sort_order ASC')
+    .all<{ id: number; name: string; is_fct: number }>()
+  return results
 }
 
 export async function createAddress(db: D1Database, userId: number, input: AddressInput): Promise<number> {
@@ -38,10 +47,10 @@ export async function createAddress(db: D1Database, userId: number, input: Addre
 
   const result = await db
     .prepare(
-      `INSERT INTO addresses (user_id, label, recipient_name, phone, line1, city, state, is_default)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO addresses (user_id, label, recipient_name, phone, line1, city, state, is_default, delivery_instructions)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
-    .bind(userId, input.label, input.recipient_name, input.phone, input.line1, input.city, input.state, makeDefault ? 1 : 0)
+    .bind(userId, input.label, input.recipient_name, input.phone, input.line1, input.city, input.state, makeDefault ? 1 : 0, input.delivery_instructions ?? null)
     .run()
   return result.meta.last_row_id as number
 }
@@ -52,10 +61,10 @@ export async function updateAddress(db: D1Database, userId: number, addressId: n
   }
   await db
     .prepare(
-      `UPDATE addresses SET label = ?, recipient_name = ?, phone = ?, line1 = ?, city = ?, state = ?, is_default = ?
+      `UPDATE addresses SET label = ?, recipient_name = ?, phone = ?, line1 = ?, city = ?, state = ?, is_default = ?, delivery_instructions = ?
        WHERE id = ? AND user_id = ?`
     )
-    .bind(input.label, input.recipient_name, input.phone, input.line1, input.city, input.state, input.is_default ? 1 : 0, addressId, userId)
+    .bind(input.label, input.recipient_name, input.phone, input.line1, input.city, input.state, input.is_default ? 1 : 0, input.delivery_instructions ?? null, addressId, userId)
     .run()
 }
 

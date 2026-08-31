@@ -220,6 +220,7 @@ export interface AddressRow {
   city: string
   state: string
   is_default: number
+  delivery_instructions: string | null
 }
 
 export interface WishlistRow {

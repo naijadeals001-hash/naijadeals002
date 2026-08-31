@@ -151,6 +151,164 @@
     });
   })();
 
+  // ---------- Account: Saved Addresses (/account/addresses) ----------
+  // Uses the same /api/addresses endpoints as Checkout's address book (lib/addresses.ts) —
+  // no separate address store. location.reload() after every mutation is the same
+  // "simplest correct way to re-render" pattern used by initWishlistPage/initCheckout above.
+  (function initAddressesPage() {
+    const listEl = document.getElementById('addresses-list');
+    const formSection = document.getElementById('address-form-section');
+    if (!listEl || !formSection) return;
+
+    const emptyState = document.getElementById('addresses-empty-state');
+    const showAddBtn = document.getElementById('show-add-address-btn');
+    const emptyAddBtn = document.getElementById('empty-state-add-btn');
+    const cancelBtn = document.getElementById('cancel-address-btn');
+    const saveBtn = document.getElementById('save-address-btn');
+    const formTitle = document.getElementById('address-form-title');
+    const formError = document.getElementById('address-form-error');
+    const idField = document.getElementById('af-address-id');
+
+    const fields = {
+      label: document.getElementById('af-label'),
+      recipient_name: document.getElementById('af-recipient'),
+      phone: document.getElementById('af-phone'),
+      line1: document.getElementById('af-line1'),
+      city: document.getElementById('af-city'),
+      state: document.getElementById('af-state'),
+      delivery_instructions: document.getElementById('af-instructions'),
+      is_default: document.getElementById('af-default')
+    };
+
+    function resetForm() {
+      idField.value = '';
+      fields.label.value = 'Home';
+      fields.recipient_name.value = '';
+      fields.phone.value = '';
+      fields.line1.value = '';
+      fields.city.value = '';
+      fields.state.value = '';
+      fields.delivery_instructions.value = '';
+      fields.is_default.checked = false;
+      hideError(formError);
+    }
+
+    function openForAdd() {
+      resetForm();
+      formTitle.textContent = 'Add a new address';
+      formSection.classList.remove('hidden');
+      formSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      fields.recipient_name.focus();
+    }
+
+    function openForEdit(card) {
+      resetForm();
+      idField.value = card.getAttribute('data-address-id');
+      fields.label.value = card.getAttribute('data-label') || 'Home';
+      fields.recipient_name.value = card.getAttribute('data-recipient') || '';
+      fields.phone.value = card.getAttribute('data-phone') || '';
+      fields.line1.value = card.getAttribute('data-line1') || '';
+      fields.city.value = card.getAttribute('data-city') || '';
+      fields.state.value = card.getAttribute('data-state') || '';
+      fields.delivery_instructions.value = card.getAttribute('data-instructions') || '';
+      fields.is_default.checked = card.getAttribute('data-is-default') === '1';
+      formTitle.textContent = 'Edit address';
+      formSection.classList.remove('hidden');
+      formSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      fields.recipient_name.focus();
+    }
+
+    function closeForm() {
+      formSection.classList.add('hidden');
+    }
+
+    if (showAddBtn) showAddBtn.addEventListener('click', openForAdd);
+    if (emptyAddBtn) emptyAddBtn.addEventListener('click', openForAdd);
+    if (cancelBtn) cancelBtn.addEventListener('click', closeForm);
+
+    if (saveBtn) {
+      saveBtn.addEventListener('click', async function () {
+        hideError(formError);
+        const payload = {
+          label: fields.label.value,
+          recipient_name: fields.recipient_name.value.trim(),
+          phone: fields.phone.value.trim(),
+          line1: fields.line1.value.trim(),
+          city: fields.city.value.trim(),
+          state: fields.state.value,
+          delivery_instructions: fields.delivery_instructions.value.trim(),
+          is_default: fields.is_default.checked
+        };
+        if (!payload.recipient_name || !payload.phone || !payload.line1 || !payload.city || !payload.state) {
+          showError(formError, 'Please fill in every required field.');
+          return;
+        }
+        const editId = idField.value;
+        saveBtn.disabled = true;
+        const res = editId
+          ? await api('/api/addresses/' + editId, { method: 'PUT', body: JSON.stringify(payload) })
+          : await api('/api/addresses', { method: 'POST', body: JSON.stringify(payload) });
+        saveBtn.disabled = false;
+        if (!res.ok) { showError(formError, (res.data && res.data.error) || 'Could not save address.'); return; }
+        location.reload();
+      });
+    }
+
+    listEl.addEventListener('click', function (e) {
+      const editBtn = e.target.closest('.address-edit-btn');
+      const deleteBtn = e.target.closest('.address-delete-btn');
+      const defaultBtn = e.target.closest('.address-set-default-btn');
+
+      if (editBtn) {
+        const card = editBtn.closest('.address-card');
+        if (card) openForEdit(card);
+      } else if (deleteBtn) {
+        openDeleteConfirm(deleteBtn.getAttribute('data-address-id'), deleteBtn.getAttribute('data-address-label'));
+      } else if (defaultBtn) {
+        e.preventDefault();
+        const addressId = defaultBtn.getAttribute('data-address-id');
+        defaultBtn.disabled = true;
+        api('/api/addresses/' + addressId + '/default', { method: 'POST' }).then(function (res) {
+          if (!res.ok) { defaultBtn.disabled = false; alert((res.data && res.data.error) || 'Could not set default address.'); return; }
+          location.reload();
+        });
+      }
+    });
+
+    // ---------- Delete confirmation (inline bottom-sheet/modal, not a native confirm()) ----------
+    const deleteOverlay = document.getElementById('delete-confirm-overlay');
+    const deleteConfirmText = document.getElementById('delete-confirm-text');
+    const deleteConfirmBtn = document.getElementById('delete-confirm-btn');
+    const deleteCancelBtn = document.getElementById('delete-confirm-cancel-btn');
+    let pendingDeleteId = null;
+
+    function openDeleteConfirm(addressId, label) {
+      pendingDeleteId = addressId;
+      if (deleteConfirmText) {
+        deleteConfirmText.textContent = 'This will permanently remove your "' + (label || 'saved') + '" address from your account.';
+      }
+      if (deleteOverlay) deleteOverlay.classList.remove('hidden');
+    }
+    function closeDeleteConfirm() {
+      pendingDeleteId = null;
+      if (deleteOverlay) deleteOverlay.classList.add('hidden');
+    }
+    if (deleteCancelBtn) deleteCancelBtn.addEventListener('click', closeDeleteConfirm);
+    if (deleteOverlay) {
+      deleteOverlay.addEventListener('click', function (e) { if (e.target === deleteOverlay) closeDeleteConfirm(); });
+    }
+    if (deleteConfirmBtn) {
+      deleteConfirmBtn.addEventListener('click', async function () {
+        if (!pendingDeleteId) return;
+        deleteConfirmBtn.disabled = true;
+        const res = await api('/api/addresses/' + pendingDeleteId, { method: 'DELETE' });
+        deleteConfirmBtn.disabled = false;
+        if (!res.ok) { alert((res.data && res.data.error) || 'Could not delete address.'); closeDeleteConfirm(); return; }
+        location.reload();
+      });
+    }
+  })();
+
   // ---------- Newsletter signup (footer) ----------
   (function initNewsletter() {
     const form = document.getElementById('newsletter-form');

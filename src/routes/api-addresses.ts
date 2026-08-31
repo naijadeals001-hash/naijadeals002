@@ -8,6 +8,7 @@ import {
   updateAddress,
   deleteAddress,
   setDefaultAddress,
+  getNigerianStates,
   type AddressInput
 } from '../lib/addresses'
 
@@ -28,6 +29,7 @@ function validateInput(body: any): { valid: boolean; error?: string; input?: Add
       line1: String(body.line1).trim(),
       city: String(body.city).trim(),
       state: String(body.state).trim(),
+      delivery_instructions: body.delivery_instructions ? String(body.delivery_instructions).trim() : null,
       is_default: Boolean(body.is_default)
     }
   }
@@ -37,6 +39,12 @@ addressesApi.get('/', async (c) => {
   const user = c.get('user')!
   const addresses = await getAddressesForUser(c.env.DB, user.id)
   return c.json({ addresses })
+})
+
+/** DB-sourced Nigerian states list for the state <select> — never hardcoded in a page/component. */
+addressesApi.get('/meta/states', async (c) => {
+  const states = await getNigerianStates(c.env.DB)
+  return c.json({ states })
 })
 
 addressesApi.get('/:addressId', async (c) => {

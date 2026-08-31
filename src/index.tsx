@@ -25,6 +25,7 @@ import { loginPage, registerPage } from './pages/auth'
 import { ordersListPage, orderDetailPage } from './pages/orders'
 import { walletPage } from './pages/wallet'
 import { wishlistPage } from './pages/wishlist'
+import { addressesPage } from './pages/addresses'
 import { ecosystemPage } from './pages/ecosystem'
 import { helpPage } from './pages/help'
 
@@ -65,6 +66,7 @@ app.get('/orders', requireAuthPage, ordersListPage)
 app.get('/orders/:orderNumber', requireAuthPage, orderDetailPage)
 app.get('/wallet', requireAuthPage, walletPage)
 app.get('/account/wishlist', requireAuthPage, wishlistPage)
+app.get('/account/addresses', requireAuthPage, addressesPage)
 app.get('/ecosystem', ecosystemPage)
 app.get('/help', helpPage)
 
