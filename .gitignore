@@ -35,3 +35,5 @@ lerna-debug.log*
 # Deployment verification artifacts (regenerated every run, not source)
 .deploy-verify-result.json
 .deploy-verify-screenshots/
+prod_screenshots/
+prod_verify_results.json
