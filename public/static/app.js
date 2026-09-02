@@ -36,6 +36,94 @@
     });
   }
 
+  // ---------- Mobile nav drawer (hamburger menu) ----------
+  // Root cause of the ORIGINAL bug: the button/drawer markup existed but NO
+  // event handler was ever attached anywhere in this file. This block is that
+  // handler — a single source of truth for open/close state, driven purely by
+  // toggling classes on the drawer/backdrop elements (no framework, no hidden
+  // duplicate instances, since getElementById only ever finds the one drawer
+  // Layout.tsx renders).
+  //
+  // A SECOND, subtler bug surfaced during real click-testing: #site-header and
+  // the drawer/backdrop are all `fixed`/`sticky` at `top:0`, so they spatially
+  // overlap in the same top band. Whichever one has the higher z-index there
+  // "wins" ALL clicks in that band — including clicks meant for the OTHER
+  // element. There is no z-index value that lets both #mobile-menu-btn (inside
+  // the header) AND #mobile-nav-close-btn (inside the drawer's own top strip)
+  // be independently clickable while they occupy the same pixels; one always
+  // shadows the other. The fix is spatial, not z-order: the drawer/backdrop
+  // are shifted to start BELOW the header's actual rendered height (measured
+  // at runtime via getBoundingClientRect — the mobile header is a variable-
+  // height 3-row stack, not a fixed constant), so they never occupy the same
+  // pixels as the header in the first place. z-index is still kept sane
+  // (header > drawer > backdrop > the sticky bottom nav bar) purely as a
+  // defensive fallback, not as the primary fix.
+  (function initMobileNavDrawer() {
+    const openBtn = document.getElementById('mobile-menu-btn');
+    const closeBtn = document.getElementById('mobile-nav-close-btn');
+    const drawer = document.getElementById('mobile-nav-drawer');
+    const backdrop = document.getElementById('mobile-nav-backdrop');
+    const header = document.getElementById('site-header');
+    if (!openBtn || !drawer || !backdrop) return; // guard: page doesn't render Layout's mobile header
+
+    let isOpen = false;
+
+    // Positions drawer/backdrop to start exactly below the header's current
+    // rendered height, so they never spatially overlap it. Re-run on resize/
+    // orientation change (header height can change) and right before opening
+    // (covers any late reflow, e.g. web font swap, that happened after load).
+    function syncHeaderOffset() {
+      const h = header ? Math.ceil(header.getBoundingClientRect().height) : 0;
+      drawer.style.top = h + 'px';
+      drawer.style.height = 'calc(100% - ' + h + 'px)';
+      backdrop.style.top = h + 'px';
+      backdrop.style.height = 'calc(100% - ' + h + 'px)';
+    }
+    syncHeaderOffset();
+    window.addEventListener('resize', syncHeaderOffset);
+    window.addEventListener('orientationchange', syncHeaderOffset);
+
+    function openDrawer() {
+      if (isOpen) return;
+      isOpen = true;
+      syncHeaderOffset(); // re-measure in case header height drifted since load
+      drawer.classList.remove('-translate-x-full');
+      drawer.setAttribute('aria-hidden', 'false');
+      backdrop.classList.remove('opacity-0', 'pointer-events-none');
+      backdrop.setAttribute('aria-hidden', 'false');
+      document.body.classList.add('overflow-hidden'); // scroll lock
+      openBtn.setAttribute('aria-expanded', 'true');
+    }
+
+    function closeDrawer() {
+      if (!isOpen) return;
+      isOpen = false;
+      drawer.classList.add('-translate-x-full');
+      drawer.setAttribute('aria-hidden', 'true');
+      backdrop.classList.add('opacity-0', 'pointer-events-none');
+      backdrop.setAttribute('aria-hidden', 'true');
+      document.body.classList.remove('overflow-hidden'); // release scroll lock
+      openBtn.setAttribute('aria-expanded', 'false');
+    }
+
+    openBtn.setAttribute('aria-expanded', 'false');
+    openBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      if (isOpen) { closeDrawer(); } else { openDrawer(); }
+    });
+    if (closeBtn) closeBtn.addEventListener('click', closeDrawer);
+    backdrop.addEventListener('click', closeDrawer); // tap outside
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && isOpen) closeDrawer();
+    });
+    // Close automatically if the viewport grows past the mobile breakpoint
+    // (e.g. device rotation / responsive resize) so the drawer never stays
+    // "open" with a locked body behind a desktop layout.
+    window.addEventListener('resize', function () {
+      if (isOpen && window.innerWidth >= 768) closeDrawer();
+    });
+  })();
+
   // ---------- Wallet balance in header nav ----------
   (function initWalletNav() {
     const el = document.getElementById('wallet-balance-nav');

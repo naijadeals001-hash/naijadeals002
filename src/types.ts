@@ -10,6 +10,8 @@ export type AppEnv = {
     user: AuthUser | null
     /** Set by requireActiveSeller (src/lib/seller.ts) once ownership is resolved server-side. Never trust a client-supplied vendor id — this is the ONLY legitimate source. */
     sellerVendor?: VendorRow
+    /** Set by attachLocale (src/lib/auth.ts) on every request — resolved language/dir/source, never a raw IP. See src/i18n/. */
+    locale: import('./i18n/types').LocaleContext
   }
 }
 
@@ -19,6 +21,8 @@ export interface AuthUser {
   phone: string | null
   name: string
   role: string
+  /** Nullable — NULL means "no saved preference yet", detector falls through to cookie/browser/country. Migration 0012. */
+  preferred_language?: string | null
 }
 
 export interface CategoryRow {

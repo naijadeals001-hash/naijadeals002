@@ -1,0 +1,108 @@
+// NaijaDeals — Yoruba (yo)
+//
+// AI-generated first draft, NOT yet reviewed by a native Yoruba speaker —
+// tonal diacritics are especially easy for an LLM to get subtly wrong and
+// change meaning, so this file is explicitly flagged unreviewed in
+// languages.ts (`reviewed: false`) pending native-speaker QA. Brand names
+// left untranslated per Section 4/7.
+
+import type { TranslationDict } from '../types'
+
+export const yo: TranslationDict = {
+  nav_home: 'Ile',
+  nav_shop: 'Ile\u1eb9\u1eb9r\u00fa',
+  nav_fresh: 'Titun',
+  nav_eats: 'Je\u1eb9un',
+  nav_gigs: 'I\u1e63\u1eb9',
+  nav_stay: 'Duro',
+  nav_drive: 'Wak\u1eb9',
+  nav_send: 'Fi\u1eb9ranse',
+  nav_stream: 'Fiimu',
+  nav_aura: 'Aura AI',
+  nav_sell_on_naijadeals: 'T\u00e0 l\u00f3r\u00ed NaijaDeals',
+  nav_account: 'Ak\u00f9nt\u00ed',
+  nav_cart: 'Ago',
+  nav_wishlist: 'At\u00f9ns\u00e1n',
+  nav_search: 'Wa',
+  nav_categories: 'A\u1e63\u00e0y\u00e0n',
+  nav_deals: 'Ile\u1e63e\u1eb9 Onib\u00e1r\u00e1 Loni',
+  nav_all: 'Gbogbo',
+  nav_help_center: 'Ile-i\u1e63\u1eb9 Iranl\u1eb9w\u1eb9',
+  nav_orders_returns: 'Ohun T\u00cd A P\u00e0 & \u00c0p\u00e0d\u00e0',
+  nav_balance: 'Iye Ow\u00f3 T\u00f3 K\u00fa',
+  nav_hello_sign_in: 'Bawo, w\u1ecdle',
+  nav_deliver_to: 'F\u00ecra ranse si',
+
+  eco_naijashop: 'NaijaShop',
+  eco_naijafresh: 'NaijaFresh',
+  eco_naijaeats: 'NaijaEats',
+  eco_naijagigs: 'NaijaGigs',
+  eco_naijastay: 'NaijaStay',
+  eco_naijadrive: 'NaijaDrive',
+  eco_naijasend: 'NaijaSend',
+  eco_naijastream: 'NaijaStream',
+  eco_aura_ai: 'Aura AI',
+
+  preview_coming_soon: 'N\u1e63\u1eb9 Bo\u1eb9',
+  preview_available_in_city_soon: 'Y\u00f3\u00f3 w\u00e0 n\u00ed il\u00fa r\u1eb9 laip\u1eb9',
+  preview_join_waitlist: 'Wole si at\u00f2k\u00e1 idurow\u00f3',
+  preview_learn_more: 'K\u1eb9\u1eb9k\u1ecds\u00ed S\u00edi',
+  preview_coming_to_your_city: 'N\u1e63\u1eb9 b\u1ecd s\u00ed il\u00fa r\u1eb9',
+  preview_be_first_to_know: 'J\u1eb9 e\u1e63is\u1eb9 akok\u1ecd t\u00ed y\u00f3\u00f3 m\u1eb9',
+  preview_soon_badge: 'Laip\u1eb9',
+
+  commerce_add_to_cart: 'Fi si Ago',
+  commerce_buy_now: 'Ra Bay\u00ec\u00ed',
+  commerce_checkout: 'San\u00e1 T\u00e0 T\u00e0',
+  commerce_continue_shopping: 'T\u1eb9siwaju rira',
+  commerce_quantity: 'Iye',
+  commerce_price: 'Ow\u00f3',
+  commerce_total: 'Apap\u1eb9',
+  commerce_subtotal: 'Apap\u1eb9 K\u1eb9\u1eb9r\u1eb9',
+  commerce_delivery: 'Ifiranse',
+  commerce_payment: 'Isanwo',
+  commerce_order: 'At\u00e0',
+  commerce_orders: 'At\u00e0',
+  commerce_available: 'W\u00e0 N\u00cbb\u00ec',
+  commerce_out_of_stock: 'T\u00e1n',
+  commerce_today_deals: 'Ile\u1e63e\u1eb9 Onib\u00e1r\u00e1 Loni',
+
+  form_name: 'Or\u00fak\u1ecd',
+  form_full_name: 'Or\u00fak\u1ecd K\u00edk\u00fa',
+  form_email: 'Imeli',
+  form_phone: 'Foonu',
+  form_country: '\u00c0gb\u00e0y\u00e9',
+  form_state: 'Ipinl\u1eb9',
+  form_city: 'Il\u00fa',
+  form_submit: 'F\u1eb9r\u00e1nse',
+  form_cancel: 'Fagil\u00e9',
+  form_save: 'F\u00ecp\u1eb9',
+  form_continue: 'T\u1eb9siwaju',
+  form_back: 'Padasehin',
+  form_required_field: 'Ap\u00e1 y\u00eci j\u1eb9 p\u00e0t\u00e0k\u00ec',
+  form_something_went_wrong: 'Nkan k\u00f2 t\u1e63\u1eb9',
+
+  auth_login: 'W\u1ecdle',
+  auth_sign_up: 'For\u00fajo',
+  auth_logout: 'J\u1eb9de',
+  auth_forgot_password: 'O g\u00e0nk\u00e0 oro-ig\u1eb9de r\u1eb9?',
+  auth_create_account: 'Da Ak\u00f9nt\u00ed',
+  auth_hello_greeting: 'Bawo, {name}',
+
+  waitlist_title: 'Wole si at\u00f2k\u00e1 idurow\u00f3 NaijaDeals',
+  waitlist_success_title: 'O ti wa lati at\u00f2k\u00e1!',
+  waitlist_select_at_least_one_service: 'J\u1ecdw\u1ecd y\u00e0n \u00cds\u1eb9 kan.',
+  waitlist_submit_btn: 'Wole si At\u00f2k\u00e1',
+
+  footer_get_to_know_us: 'Mo Wa',
+  footer_customer_service: 'Is\u00e9 Onib\u00e1r\u00e1',
+  footer_payments_delivery: 'Isanwo & Ifiranse',
+  footer_ecosystem: 'Ay\u00e9k\u00fady\u00e9',
+  footer_policies: 'Ofin',
+  footer_trust_safety: 'Igb\u1eb9k\u1eb9l\u00e9 & Aabo',
+  footer_newsletter_heading: 'O tuntun s\u00ed NaijaDeals?',
+  footer_newsletter_body: 'For\u00fajo l\u00e1ti g\u1ecd \u00ecw\u00f3l\u1eb9\u1eb9 nipa \u1eb9r\u1eb9 t\u00edt\u1e63e j\u00fal\u1ecd, \u00e0y\u00e0k\u00e1n\u1e63e ati ib\u1eb9r\u1eb9 aye k\u00fady\u00e9.',
+  footer_rights: '© 2026 NaijaDeals. Gbogbo \u1eb9t\u1eb9 wa. \u00c0y\u00e9k\u00fady\u00e9 kow\u00f3 owo alagbase ti N\u00e1\u00edj\u00edr\u00eda.',
+
+  misc_language_coming_soon_notice: 'Ede yi ns\u1eb9 bo. A o fi Gess\u00ed han fun \u1eb9\u00fa.',
+}

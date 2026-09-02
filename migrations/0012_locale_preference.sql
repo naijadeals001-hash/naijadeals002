@@ -1,0 +1,31 @@
+-- NaijaDeals — Multilingual Foundation: User Locale Preference
+--
+-- Adds ONE nullable, additive column to the existing `users` table so a
+-- logged-in user's manually-chosen language survives across devices/sessions,
+-- exactly the way `preferred_language` is described in TASK N Section 12
+-- ("language_source = manual" must persist and must not be overridden by
+-- automatic detection on a later visit).
+--
+-- Design precedent followed (same as 0009_seller_portal.sql): purely additive
+-- ALTER TABLE ADD COLUMN, nullable, no default that would silently assign a
+-- language to existing users. No existing table is touched, no existing query
+-- (auth, catalog, cart, checkout, orders, wallet) needs to change to keep
+-- working. NULL means "no explicit saved preference yet" — the detection
+-- chain (src/i18n/detector.ts) falls through to cookie -> Accept-Language ->
+-- country -> English exactly as it would for a guest.
+--
+-- Deliberately NOT added here (per Section 6's own instruction to keep this
+-- task's DB footprint minimal): preferred_country, preferred_currency. This
+-- migration is scoped to LANGUAGE only. Country/currency/timezone/unit
+-- detection remain request-time/cookie-derived for now (Section 6: "prepare
+-- the architecture... do not implement the entire currency engine").
+--
+-- Guest (non-logged-in) preference persistence uses a cookie (nd_lang),
+-- following the exact precedent already established by nd_city and
+-- nd_session (see src/lib/auth.ts, public/static/app.js) — no schema change
+-- needed for that path at all.
+
+ALTER TABLE users ADD COLUMN preferred_language TEXT;
+
+-- No index needed: this column is never used in a WHERE/JOIN filter, only
+-- read directly off the single row already fetched by getUserFromToken().

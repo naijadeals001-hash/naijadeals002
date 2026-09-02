@@ -1,5 +1,8 @@
 import type { FC } from 'hono/jsx'
 import type { AuthUser } from '../types'
+import type { LocaleContext } from '../i18n'
+import { createTranslator, LANGUAGES, LIVE_LANGUAGES, LANG_QUERY_PARAM } from '../i18n'
+import { LanguageSelector } from './LanguageSelector'
 
 interface LayoutProps {
   title?: string
@@ -10,6 +13,8 @@ interface LayoutProps {
   activeNav?: string
   /** City the visitor picked for delivery (nd_city cookie). Defaults to Lagos. */
   selectedCity?: string
+  /** Resolved by attachLocale middleware — see src/i18n/. Defaults to English if a page hasn't been updated to pass it yet, so this is a purely additive prop (no existing page call site breaks). */
+  locale?: LocaleContext
   children: any
 }
 
@@ -39,9 +44,12 @@ const CATEGORY_NAV = [
   { href: '/shop?category=automotive', label: 'Automotive' }
 ]
 
-export const Layout: FC<LayoutProps> = ({ title, description, user, cartCount = 0, wishlistCount = 0, selectedCity = 'Lagos', children }) => {
+const DEFAULT_LOCALE: LocaleContext = { language: 'en', source: 'default', countryCode: null, dir: 'ltr' }
+
+export const Layout: FC<LayoutProps> = ({ title, description, user, cartCount = 0, wishlistCount = 0, selectedCity = 'Lagos', locale = DEFAULT_LOCALE, children }) => {
+  const t = createTranslator(locale)
   return (
-    <html lang="en">
+    <html lang={locale.language} dir={locale.dir}>
       <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -68,7 +76,17 @@ export const Layout: FC<LayoutProps> = ({ title, description, user, cartCount = 
         <link href="/static/style.css" rel="stylesheet" />
       </head>
       <body class="min-h-screen flex flex-col bg-gray-50 font-sans text-gray-900">
-        <header class="sticky top-0 z-40 shadow-sm">
+        {/* z-[60]: kept above the drawer/backdrop/bottom-nav as a defensive
+            fallback, but the PRIMARY fix that makes #mobile-menu-btn and
+            #mobile-nav-close-btn both independently clickable is spatial, not
+            z-order: app.js's initMobileNavDrawer measures this header's actual
+            rendered height at runtime and shifts #mobile-nav-drawer /
+            #mobile-nav-backdrop to start below it, so the two elements never
+            occupy the same pixels. Pure z-index cannot fix two `fixed`/`sticky
+            top:0` elements fighting over the SAME band — whichever wins
+            z-order swallows clicks meant for the other, no matter which one
+            is "on top". See app.js for the full writeup. */}
+        <header id="site-header" class="sticky top-0 z-[60] shadow-sm bg-primary-dark">
           {/* ===== DESKTOP: utility bar + main header + category nav ===== */}
           <div class="hidden md:block bg-primary-dark text-white">
             {/* Utility bar */}
@@ -78,9 +96,9 @@ export const Layout: FC<LayoutProps> = ({ title, description, user, cartCount = 
                   <span>Nigeria's Super App — Shop · Fresh · Eats · Gigs · Stay · Drive · Send · Stream</span>
                 </div>
                 <div class="flex items-center gap-4">
-                  <a href="/seller" class="hover:text-white transition-colors">Sell on NaijaDeals</a>
-                  <a href="/help" class="hover:text-white transition-colors">Help Center</a>
-                  <span class="flex items-center gap-1">EN | ₦ NGN</span>
+                  <a href="/seller" class="hover:text-white transition-colors">{t('nav_sell_on_naijadeals')}</a>
+                  <a href="/help" class="hover:text-white transition-colors">{t('nav_help_center')}</a>
+                  <LanguageSelector locale={locale} variant="utility-bar" />
                 </div>
               </div>
             </div>
@@ -90,7 +108,7 @@ export const Layout: FC<LayoutProps> = ({ title, description, user, cartCount = 
                 <span class="text-xl font-bold tracking-tight">Naija<span class="text-primary-fixed">Deals</span></span>
               </a>
               <label class="hidden lg:flex flex-col justify-center leading-tight px-2 py-1 rounded-lg hover:bg-white/10 transition-colors shrink-0 cursor-pointer">
-                <span class="text-[11px] text-white/70">Deliver to</span>
+                <span class="text-[11px] text-white/70">{t('nav_deliver_to')}</span>
                 <select id="city-selector" class="text-sm font-semibold bg-transparent outline-none cursor-pointer [&>option]:text-gray-900">
                   {CITIES.map((city) => <option value={city} selected={city === selectedCity}>{city}</option>)}
                 </select>
@@ -112,7 +130,7 @@ export const Layout: FC<LayoutProps> = ({ title, description, user, cartCount = 
               </form>
               <div class="flex items-center gap-0.5 ml-auto shrink-0">
                 <a href="/wallet" class="hidden lg:flex flex-col justify-center leading-tight px-2.5 py-1.5 rounded-lg hover:bg-white/10 transition-colors">
-                  <span class="text-[11px] text-white/70">Balance</span>
+                  <span class="text-[11px] text-white/70">{t('nav_balance')}</span>
                   <span class="text-sm font-semibold" id="wallet-balance-nav">--</span>
                 </a>
                 <a href="/account/wishlist" class="hidden lg:flex relative flex-col justify-center leading-tight px-2.5 py-1.5 rounded-lg hover:bg-white/10 transition-colors">
@@ -121,18 +139,17 @@ export const Layout: FC<LayoutProps> = ({ title, description, user, cartCount = 
                 </a>
                 {user ? (
                   <a href="/account" class="flex flex-col justify-center leading-tight px-2.5 py-1.5 rounded-lg hover:bg-white/10 transition-colors">
-                    <span class="text-[11px] text-white/70 truncate max-w-28">Hello, {user.name.split(' ')[0]}</span>
-                    <span class="text-sm font-semibold">Account &amp; Lists</span>
+                    <span class="text-[11px] text-white/70 truncate max-w-28">{t('auth_hello_greeting', { name: user.name.split(' ')[0] })}</span>
+                    <span class="text-sm font-semibold">{t('nav_account')}</span>
                   </a>
                 ) : (
                   <a href="/login" class="flex flex-col justify-center leading-tight px-2.5 py-1.5 rounded-lg hover:bg-white/10 transition-colors">
-                    <span class="text-[11px] text-white/70">Hello, sign in</span>
-                    <span class="text-sm font-semibold">Account &amp; Lists</span>
+                    <span class="text-[11px] text-white/70">{t('nav_hello_sign_in')}</span>
+                    <span class="text-sm font-semibold">{t('nav_account')}</span>
                   </a>
                 )}
                 <a href="/orders" class="hidden lg:flex flex-col justify-center leading-tight px-2.5 py-1.5 rounded-lg hover:bg-white/10 transition-colors">
-                  <span class="text-[11px] text-white/70">Returns</span>
-                  <span class="text-sm font-semibold">&amp; Orders</span>
+                  <span class="text-sm font-semibold">{t('nav_orders_returns')}</span>
                 </a>
                 <a href="/cart" class="relative flex items-end gap-1 px-2.5 py-1.5 rounded-lg hover:bg-white/10 transition-colors">
                   <span class="material-symbols-outlined text-2xl">shopping_cart</span>
@@ -140,7 +157,7 @@ export const Layout: FC<LayoutProps> = ({ title, description, user, cartCount = 
                     id="cart-count-badge-desktop"
                     class={`absolute -top-0.5 right-0.5 bg-primary-fixed text-primary-dark text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center ${cartCount > 0 ? '' : 'hidden'}`}
                   >{cartCount}</span>
-                  <span class="text-sm font-semibold hidden xl:inline">Cart</span>
+                  <span class="text-sm font-semibold hidden xl:inline">{t('nav_cart')}</span>
                 </a>
               </div>
             </div>
@@ -148,7 +165,7 @@ export const Layout: FC<LayoutProps> = ({ title, description, user, cartCount = 
             <nav class="bg-primary border-t border-white/10">
               <div class="max-w-[100rem] mx-auto flex items-center gap-1 px-6 lg:px-8 py-2 text-sm font-medium overflow-x-auto">
                 <a href="/shop" class="flex items-center gap-1.5 shrink-0 px-2 py-1 rounded hover:bg-white/10 transition-colors font-semibold">
-                  <span class="material-symbols-outlined text-lg">menu</span>All
+                  <span class="material-symbols-outlined text-lg">menu</span>{t('nav_all')}
                 </a>
                 {CATEGORY_NAV.map((link) => (
                   <a href={link.href} class="flex items-center gap-1 shrink-0 px-2 py-1 rounded hover:bg-white/10 transition-colors">
@@ -156,7 +173,7 @@ export const Layout: FC<LayoutProps> = ({ title, description, user, cartCount = 
                   </a>
                 ))}
                 <span class="w-px h-4 bg-white/20 shrink-0 mx-1"></span>
-                <a href="/shop?deals=1" class="flex items-center gap-1 shrink-0 px-2 py-1 rounded hover:bg-white/10 transition-colors text-primary-fixed font-semibold">Today's Deals</a>
+                <a href="/shop?deals=1" class="flex items-center gap-1 shrink-0 px-2 py-1 rounded hover:bg-white/10 transition-colors text-primary-fixed font-semibold">{t('nav_deals')}</a>
                 <a href="/wallet" class="flex items-center gap-1 shrink-0 px-2 py-1 rounded hover:bg-white/10 transition-colors">NaijaDeals Plus</a>
               </div>
             </nav>
@@ -178,7 +195,7 @@ export const Layout: FC<LayoutProps> = ({ title, description, user, cartCount = 
           <div class="md:hidden bg-primary-dark text-white">
             {/* Row 1: menu, brand, location, account, cart */}
             <div class="flex items-center gap-2 px-3 py-2.5">
-              <button id="mobile-menu-btn" aria-label="Menu" class="p-1.5 -ml-1">
+              <button id="mobile-menu-btn" aria-label={t('nav_categories')} class="p-1.5 -ml-1">
                 <span class="material-symbols-outlined text-2xl">menu</span>
               </button>
               <a href="/" class="shrink-0" aria-label="NaijaDeals home">
@@ -188,17 +205,18 @@ export const Layout: FC<LayoutProps> = ({ title, description, user, cartCount = 
                 <span class="material-symbols-outlined text-sm">location_on</span>{selectedCity}
                 <span class="material-symbols-outlined text-sm">expand_more</span>
               </button>
-              <div class="ml-auto flex items-center gap-3 shrink-0">
+              <div class="ml-auto flex items-center gap-2 shrink-0">
+                <LanguageSelector locale={locale} variant="mobile-icon" />
                 {user ? (
-                  <a href="/account" aria-label="Account" class="flex items-center justify-center w-8 h-8 rounded-full bg-white/10">
+                  <a href="/account" aria-label={t('nav_account')} class="flex items-center justify-center w-8 h-8 rounded-full bg-white/10">
                     <span class="material-symbols-outlined text-xl">person</span>
                   </a>
                 ) : (
                   <a href="/login" class="flex items-center text-sm font-normal">
-                    Sign in<span class="material-symbols-outlined text-sm">chevron_right</span>
+                    {t('auth_login')}<span class="material-symbols-outlined text-sm">chevron_right</span>
                   </a>
                 )}
-                <a href="/cart" aria-label="Cart" class="relative p-1">
+                <a href="/cart" aria-label={t('nav_cart')} class="relative p-1">
                   <span class="material-symbols-outlined text-2xl">shopping_cart</span>
                   <span
                     id="cart-count-badge-mobile"
@@ -210,8 +228,8 @@ export const Layout: FC<LayoutProps> = ({ title, description, user, cartCount = 
             {/* Row 2: search */}
             <div class="px-3 pb-2.5">
               <form action="/shop" method="get" class="w-full flex items-stretch rounded-md overflow-hidden bg-white">
-                <input type="text" name="q" placeholder="Search products, brands, sellers..." class="flex-1 px-3 py-2.5 text-sm text-gray-800 outline-none min-w-0" />
-                <button type="submit" class="flex items-center justify-center px-3.5 bg-primary-fixed text-primary-dark shrink-0">
+                <input type="text" name="q" placeholder="Search products, brands, sellers..." aria-label={t('nav_search')} class="flex-1 px-3 py-2.5 text-sm text-gray-800 outline-none min-w-0" />
+                <button type="submit" aria-label={t('nav_search')} class="flex items-center justify-center px-3.5 bg-primary-fixed text-primary-dark shrink-0">
                   <span class="material-symbols-outlined text-lg">search</span>
                 </button>
               </form>
@@ -230,6 +248,71 @@ export const Layout: FC<LayoutProps> = ({ title, description, user, cartCount = 
           </div>
         </header>
 
+        {/* ===== MOBILE NAV DRAWER (off-canvas) =====
+            Hidden on desktop (md:hidden). Two pieces: a click-to-close backdrop
+            and the sliding panel itself. Both start closed (`hidden` +
+            `-translate-x-full`) and are toggled purely by app.js adding/removing
+            the `mobile-nav-open` class on <html> — no framework, no hydration,
+            matches this app's existing hand-rolled event-binding style. */}
+        <div
+          id="mobile-nav-backdrop"
+          class="md:hidden fixed inset-0 bg-black/50 z-50 opacity-0 pointer-events-none transition-opacity duration-200"
+          aria-hidden="true"
+        ></div>
+        <nav
+          id="mobile-nav-drawer"
+          class="md:hidden fixed top-0 left-0 h-full w-[82%] max-w-xs bg-white z-[55] -translate-x-full transition-transform duration-200 overflow-y-auto shadow-xl"
+          aria-label={t('nav_categories')}
+          aria-hidden="true"
+        >
+          <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100 sticky top-0 bg-white">
+            <span class="text-lg font-bold tracking-tight text-gray-900">Naija<span class="text-primary">Deals</span></span>
+            <button id="mobile-nav-close-btn" aria-label="Close menu" class="p-1.5 -mr-1 text-gray-500 hover:text-gray-800">
+              <span class="material-symbols-outlined text-2xl">close</span>
+            </button>
+          </div>
+          <div class="py-2">
+            <a href="/" class="flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-gray-800 hover:bg-gray-50">
+              <span class="material-symbols-outlined text-xl text-gray-500">home</span>{t('nav_home')}
+            </a>
+            <a href="/shop" class="flex items-center gap-3 px-4 py-2.5 text-sm font-semibold text-gray-800 hover:bg-gray-50">
+              <span class="material-symbols-outlined text-xl text-gray-500">menu</span>{t('nav_all')}
+            </a>
+            {CATEGORY_NAV.map((link) => (
+              <a href={link.href} class="flex items-center gap-3 pl-11 pr-4 py-2 text-sm text-gray-600 hover:bg-gray-50">
+                {link.label}
+              </a>
+            ))}
+            <a href="/shop?deals=1" class="flex items-center gap-3 px-4 py-2.5 text-sm font-semibold text-primary hover:bg-gray-50 border-t border-gray-100 mt-1">
+              <span class="material-symbols-outlined text-xl">bolt</span>{t('nav_deals')}
+            </a>
+          </div>
+          <div class="py-2 border-t border-gray-100">
+            <p class="px-4 pt-1 pb-1.5 text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Ecosystem</p>
+            {ECOSYSTEM_LINKS.map((eco) => (
+              <a href={eco.href} class="flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
+                <span class="material-symbols-outlined text-xl text-gray-500">{eco.icon}</span>
+                <span class="flex-1">{eco.label}</span>
+                {!eco.live && <span class="text-[9px] bg-gray-100 text-gray-500 rounded px-1.5 py-0.5">Soon</span>}
+              </a>
+            ))}
+          </div>
+          <div class="py-2 border-t border-gray-100">
+            <a href={user ? '/account' : '/login'} class="flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-gray-800 hover:bg-gray-50">
+              <span class="material-symbols-outlined text-xl text-gray-500">person</span>{user ? t('nav_account') : t('auth_login')}
+            </a>
+            <a href="/orders" class="flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-gray-800 hover:bg-gray-50">
+              <span class="material-symbols-outlined text-xl text-gray-500">receipt_long</span>{t('nav_orders_returns')}
+            </a>
+            <a href="/seller" class="flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-gray-800 hover:bg-gray-50">
+              <span class="material-symbols-outlined text-xl text-gray-500">storefront</span>{t('nav_sell_on_naijadeals')}
+            </a>
+            <a href="/help" class="flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-gray-800 hover:bg-gray-50">
+              <span class="material-symbols-outlined text-xl text-gray-500">help</span>{t('nav_help_center')}
+            </a>
+          </div>
+        </nav>
+
         <main class="flex-1">{children}</main>
 
         {/* ===== MEGA FOOTER ===== */}
@@ -237,8 +320,8 @@ export const Layout: FC<LayoutProps> = ({ title, description, user, cartCount = 
           <div class="max-w-[100rem] mx-auto px-6 lg:px-8 py-10">
             <div class="border-b border-white/10 pb-8 mb-8">
               <div class="max-w-md">
-                <h3 class="font-semibold mb-1">New to NaijaDeals?</h3>
-                <p class="text-sm text-white/70 mb-3">Subscribe for updates on the latest offers, deals and ecosystem launches.</p>
+                <h3 class="font-semibold mb-1">{t('footer_newsletter_heading')}</h3>
+                <p class="text-sm text-white/70 mb-3">{t('footer_newsletter_body')}</p>
                 <form id="newsletter-form" class="flex items-stretch rounded-md overflow-hidden bg-white/5 border border-white/20">
                   <input type="email" name="email" required placeholder="you@example.com" class="flex-1 px-3 py-2 text-sm bg-transparent outline-none placeholder:text-white/50" />
                   <button type="submit" class="px-4 bg-primary-fixed text-primary-dark flex items-center justify-center">
@@ -250,28 +333,28 @@ export const Layout: FC<LayoutProps> = ({ title, description, user, cartCount = 
             </div>
             <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-6 text-sm">
               <div>
-                <h4 class="font-semibold mb-3">Get to Know Us</h4>
+                <h4 class="font-semibold mb-3">{t('footer_get_to_know_us')}</h4>
                 <a href="/about" class="block text-white/70 hover:text-white py-1">About NaijaDeals</a>
-                <a href="/seller" class="block text-white/70 hover:text-white py-1">Sell on NaijaDeals</a>
+                <a href="/seller" class="block text-white/70 hover:text-white py-1">{t('nav_sell_on_naijadeals')}</a>
                 <a href="/admin" class="block text-white/70 hover:text-white py-1">Careers</a>
                 <a href="/help" class="block text-white/70 hover:text-white py-1">Press</a>
               </div>
               <div>
-                <h4 class="font-semibold mb-3">Customer Service</h4>
-                <a href="/help" class="block text-white/70 hover:text-white py-1">Help Center</a>
+                <h4 class="font-semibold mb-3">{t('footer_customer_service')}</h4>
+                <a href="/help" class="block text-white/70 hover:text-white py-1">{t('nav_help_center')}</a>
                 <a href="/orders" class="block text-white/70 hover:text-white py-1">Track Order</a>
                 <a href="/help" class="block text-white/70 hover:text-white py-1">Returns &amp; Refunds</a>
                 <a href="/help" class="block text-white/70 hover:text-white py-1">Report a Seller</a>
               </div>
               <div>
-                <h4 class="font-semibold mb-3">Payments &amp; Delivery</h4>
+                <h4 class="font-semibold mb-3">{t('footer_payments_delivery')}</h4>
                 <a href="/wallet" class="block text-white/70 hover:text-white py-1">NaijaDeals Wallet</a>
                 <a href="/help" class="block text-white/70 hover:text-white py-1">Payment Methods</a>
                 <a href="/help" class="block text-white/70 hover:text-white py-1">Delivery Options</a>
                 <a href="/help" class="block text-white/70 hover:text-white py-1">Buyer Protection</a>
               </div>
               <div>
-                <h4 class="font-semibold mb-3">Ecosystem</h4>
+                <h4 class="font-semibold mb-3">{t('footer_ecosystem')}</h4>
                 <a href="/fresh" class="block text-white/70 hover:text-white py-1">NaijaFresh</a>
                 <a href="/eats" class="block text-white/70 hover:text-white py-1">NaijaEats</a>
                 <a href="/gigs" class="block text-white/70 hover:text-white py-1">NaijaGigs</a>
@@ -282,14 +365,14 @@ export const Layout: FC<LayoutProps> = ({ title, description, user, cartCount = 
                 <a href="/aura" class="block text-white/70 hover:text-white py-1">Aura AI</a>
               </div>
               <div>
-                <h4 class="font-semibold mb-3">Policies</h4>
+                <h4 class="font-semibold mb-3">{t('footer_policies')}</h4>
                 <a href="/help" class="block text-white/70 hover:text-white py-1">Privacy Policy</a>
                 <a href="/help" class="block text-white/70 hover:text-white py-1">Terms of Service</a>
                 <a href="/help" class="block text-white/70 hover:text-white py-1">Seller Terms</a>
                 <a href="/help" class="block text-white/70 hover:text-white py-1">Payment Terms</a>
               </div>
               <div>
-                <h4 class="font-semibold mb-3">Trust &amp; Safety</h4>
+                <h4 class="font-semibold mb-3">{t('footer_trust_safety')}</h4>
                 <span class="flex items-center gap-1.5 text-white/70 py-1"><span class="material-symbols-outlined text-base">verified_user</span>Escrow protected</span>
                 <span class="flex items-center gap-1.5 text-white/70 py-1"><span class="material-symbols-outlined text-base">local_shipping</span>Nationwide delivery</span>
                 <span class="flex items-center gap-1.5 text-white/70 py-1"><span class="material-symbols-outlined text-base">payments</span>Pay in Naira</span>
@@ -297,9 +380,9 @@ export const Layout: FC<LayoutProps> = ({ title, description, user, cartCount = 
               </div>
             </div>
             <div class="flex flex-col md:flex-row items-center justify-between gap-3 mt-8 pt-6 border-t border-white/10 text-xs text-white/50">
-              <span>© 2026 NaijaDeals. All rights reserved. A Nigerian digital commerce ecosystem.</span>
+              <span>{t('footer_rights')}</span>
               <div class="flex items-center gap-3">
-                <span>EN | ₦ NGN</span>
+                <LanguageSelector locale={locale} variant="footer" />
                 <span class="flex items-center gap-1"><span class="material-symbols-outlined text-sm">download</span>Get the app (coming soon)</span>
               </div>
             </div>

@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import { renderer } from './renderer'
 import { serveStatic } from 'hono/cloudflare-workers'
 import type { AppEnv } from './types'
-import { attachUser, requireAuthPage } from './lib/auth'
+import { attachUser, attachLocale, requireAuthPage } from './lib/auth'
 import { requireActiveSeller } from './lib/seller'
 
 // API sub-apps
@@ -17,6 +17,7 @@ import { wishlistApi } from './routes/api-wishlist'
 import { ecosystemApi } from './routes/api-ecosystem'
 import { placeholderRoute } from './routes/placeholder'
 import { versionRoute } from './routes/version'
+import { i18nApi } from './routes/api-i18n'
 
 // SSR pages
 import { homePage } from './pages/home'
@@ -42,6 +43,9 @@ const app = new Hono<Env>()
 
 app.use(renderer)
 app.use('*', attachUser)
+// MUST run after attachUser — reads c.get('user') for the logged-in "saved
+// preference" priority level. Never blocks the request; see src/i18n/.
+app.use('*', attachLocale)
 
 // Static assets (public/static/* -> /static/*)
 app.use('/static/*', serveStatic({ root: './public' }))
@@ -62,6 +66,7 @@ app.route('/api/wallet', walletApi)
 app.route('/api/webhooks', webhooksApi)
 app.route('/api/wishlist', wishlistApi)
 app.route('/api/ecosystem', ecosystemApi)
+app.route('/api/i18n', i18nApi)
 
 // ---------- SSR pages ----------
 app.get('/', homePage)

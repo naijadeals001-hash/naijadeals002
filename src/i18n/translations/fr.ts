@@ -1,0 +1,108 @@
+// NaijaDeals — French (fr)
+//
+// AI-generated first draft. French is a language I have high confidence in
+// producing natural commerce copy for, but per project policy this is still
+// disclosed as `reviewed: false` in languages.ts until a native/fluent
+// reviewer has actually checked it. Brand names left untranslated per
+// Section 4/7.
+
+import type { TranslationDict } from '../types'
+
+export const fr: TranslationDict = {
+  nav_home: 'Accueil',
+  nav_shop: 'Boutique',
+  nav_fresh: 'Frais',
+  nav_eats: 'Repas',
+  nav_gigs: 'Services',
+  nav_stay: 'Séjours',
+  nav_drive: 'Trajets',
+  nav_send: 'Envoi',
+  nav_stream: 'Streaming',
+  nav_aura: 'Aura IA',
+  nav_sell_on_naijadeals: 'Vendre sur NaijaDeals',
+  nav_account: 'Compte',
+  nav_cart: 'Panier',
+  nav_wishlist: 'Liste de souhaits',
+  nav_search: 'Rechercher',
+  nav_categories: 'Catégories',
+  nav_deals: "Offres du jour",
+  nav_all: 'Tout',
+  nav_help_center: "Centre d'aide",
+  nav_orders_returns: 'Commandes & Retours',
+  nav_balance: 'Solde',
+  nav_hello_sign_in: 'Bonjour, connectez-vous',
+  nav_deliver_to: 'Livrer à',
+
+  eco_naijashop: 'NaijaShop',
+  eco_naijafresh: 'NaijaFresh',
+  eco_naijaeats: 'NaijaEats',
+  eco_naijagigs: 'NaijaGigs',
+  eco_naijastay: 'NaijaStay',
+  eco_naijadrive: 'NaijaDrive',
+  eco_naijasend: 'NaijaSend',
+  eco_naijastream: 'NaijaStream',
+  eco_aura_ai: 'Aura IA',
+
+  preview_coming_soon: 'Bientôt disponible',
+  preview_available_in_city_soon: 'Bientôt disponible dans votre ville',
+  preview_join_waitlist: "Rejoindre la liste d'attente",
+  preview_learn_more: 'En savoir plus',
+  preview_coming_to_your_city: 'Arrive dans votre ville',
+  preview_be_first_to_know: 'Soyez informé en premier',
+  preview_soon_badge: 'Bientôt',
+
+  commerce_add_to_cart: 'Ajouter au panier',
+  commerce_buy_now: 'Acheter maintenant',
+  commerce_checkout: 'Commander',
+  commerce_continue_shopping: 'Continuer les achats',
+  commerce_quantity: 'Quantité',
+  commerce_price: 'Prix',
+  commerce_total: 'Total',
+  commerce_subtotal: 'Sous-total',
+  commerce_delivery: 'Livraison',
+  commerce_payment: 'Paiement',
+  commerce_order: 'Commande',
+  commerce_orders: 'Commandes',
+  commerce_available: 'Disponible',
+  commerce_out_of_stock: 'Rupture de stock',
+  commerce_today_deals: "Offres du jour",
+
+  form_name: 'Nom',
+  form_full_name: 'Nom complet',
+  form_email: 'E-mail',
+  form_phone: 'Téléphone',
+  form_country: 'Pays',
+  form_state: 'État/Région',
+  form_city: 'Ville',
+  form_submit: 'Envoyer',
+  form_cancel: 'Annuler',
+  form_save: 'Enregistrer',
+  form_continue: 'Continuer',
+  form_back: 'Retour',
+  form_required_field: 'Champ obligatoire',
+  form_something_went_wrong: "Une erreur s'est produite",
+
+  auth_login: 'Connexion',
+  auth_sign_up: "S'inscrire",
+  auth_logout: 'Déconnexion',
+  auth_forgot_password: 'Mot de passe oublié ?',
+  auth_create_account: 'Créer un compte',
+  auth_hello_greeting: 'Bonjour, {name}',
+
+  waitlist_title: "Rejoindre la liste d'attente NaijaDeals",
+  waitlist_success_title: 'Vous êtes sur la liste !',
+  waitlist_select_at_least_one_service: 'Veuillez sélectionner au moins un service.',
+  waitlist_submit_btn: "Rejoindre la liste d'attente",
+
+  footer_get_to_know_us: 'Apprenez à nous connaître',
+  footer_customer_service: 'Service client',
+  footer_payments_delivery: 'Paiements & Livraison',
+  footer_ecosystem: 'Écosystème',
+  footer_policies: 'Politiques',
+  footer_trust_safety: 'Confiance & Sécurité',
+  footer_newsletter_heading: 'Nouveau sur NaijaDeals ?',
+  footer_newsletter_body: 'Abonnez-vous pour recevoir les dernières offres, promotions et lancements.',
+  footer_rights: '© 2026 NaijaDeals. Tous droits réservés. Un écosystème de commerce numérique nigérian.',
+
+  misc_language_coming_soon_notice: "Cette langue arrive bientôt. Nous affichons l'anglais pour le moment.",
+}
