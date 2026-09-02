@@ -26,10 +26,11 @@ const ICON_BG: Record<string, string> = {
 
 export async function ecosystemPage(c: Context<AppEnv>) {
   const user = c.get('user')
+  const locale = c.get('locale')
   const verticals = await getAllVerticals(c.env.DB)
 
   return c.render(
-    <Layout title="Ecosystem" user={user} description="One NaijaDeals account for shopping, fresh food, eats, gigs, stays, mobility, delivery, entertainment and AI — across Nigeria.">
+    <Layout title="Ecosystem" user={user} locale={locale} description="One NaijaDeals account for shopping, fresh food, eats, gigs, stays, mobility, delivery, entertainment and AI — across Nigeria.">
       <section class="bg-gradient-to-br from-primary-dark to-primary text-white">
         <div class="max-w-[100rem] mx-auto px-6 lg:px-8 py-12 text-center">
           <span class="material-symbols-outlined text-4xl text-primary-fixed">workspace_premium</span>

@@ -13,8 +13,16 @@ interface LayoutProps {
   activeNav?: string
   /** City the visitor picked for delivery (nd_city cookie). Defaults to Lagos. */
   selectedCity?: string
-  /** Resolved by attachLocale middleware — see src/i18n/. Defaults to English if a page hasn't been updated to pass it yet, so this is a purely additive prop (no existing page call site breaks). */
-  locale?: LocaleContext
+  /**
+   * Resolved by attachLocale middleware (src/lib/auth.ts) and stored on the
+   * Hono context — every page handler MUST pass `locale={c.get('locale')}`.
+   * This prop is intentionally REQUIRED (not optional): making it required
+   * turns a forgotten pass-through into a TypeScript build failure instead of
+   * a silent English fallback, which is exactly the bug class that caused
+   * `?lang=fr` to render English on every single page before this fix (Phase
+   * C, Section 3). Do not reintroduce a default value here.
+   */
+  locale: LocaleContext
   children: any
 }
 
@@ -44,9 +52,7 @@ const CATEGORY_NAV = [
   { href: '/shop?category=automotive', label: 'Automotive' }
 ]
 
-const DEFAULT_LOCALE: LocaleContext = { language: 'en', source: 'default', countryCode: null, dir: 'ltr' }
-
-export const Layout: FC<LayoutProps> = ({ title, description, user, cartCount = 0, wishlistCount = 0, selectedCity = 'Lagos', locale = DEFAULT_LOCALE, children }) => {
+export const Layout: FC<LayoutProps> = ({ title, description, user, cartCount = 0, wishlistCount = 0, selectedCity = 'Lagos', locale, children }) => {
   const t = createTranslator(locale)
   return (
     <html lang={locale.language} dir={locale.dir}>

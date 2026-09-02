@@ -43,9 +43,10 @@ function ComingSoonPanel({ icon, title, desc }: { icon: string; title: string; d
 export async function sellerDashboardPage(c: Context<AppEnv>) {
   const user = c.get('user')!
   const vendor = c.get('sellerVendor')!
+  const locale = c.get('locale')
 
   return c.render(
-    <SellerLayout title="Overview" user={user} vendor={vendor} active="overview">
+    <SellerLayout title="Overview" user={user} vendor={vendor} active="overview" locale={locale}>
       <div class="max-w-3xl mx-auto px-4 md:px-6 lg:px-8 py-10">
         <div class="bg-white border border-gray-200 rounded-xl p-6 md:p-8 text-center">
           <span class="material-symbols-outlined text-4xl text-primary bg-primary-light w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-5">
@@ -68,8 +69,9 @@ export async function sellerDashboardPage(c: Context<AppEnv>) {
 export async function sellerProductsPage(c: Context<AppEnv>) {
   const user = c.get('user')!
   const vendor = c.get('sellerVendor')!
+  const locale = c.get('locale')
   return c.render(
-    <SellerLayout title="Products" user={user} vendor={vendor} active="products">
+    <SellerLayout title="Products" user={user} vendor={vendor} active="products" locale={locale}>
       <ComingSoonPanel
         icon="inventory_2"
         title="Product management is on its way"
@@ -82,8 +84,9 @@ export async function sellerProductsPage(c: Context<AppEnv>) {
 export async function sellerOrdersPage(c: Context<AppEnv>) {
   const user = c.get('user')!
   const vendor = c.get('sellerVendor')!
+  const locale = c.get('locale')
   return c.render(
-    <SellerLayout title="Orders" user={user} vendor={vendor} active="orders">
+    <SellerLayout title="Orders" user={user} vendor={vendor} active="orders" locale={locale}>
       <ComingSoonPanel
         icon="receipt_long"
         title="Order management is on its way"
@@ -96,8 +99,9 @@ export async function sellerOrdersPage(c: Context<AppEnv>) {
 export async function sellerFinancePage(c: Context<AppEnv>) {
   const user = c.get('user')!
   const vendor = c.get('sellerVendor')!
+  const locale = c.get('locale')
   return c.render(
-    <SellerLayout title="Finance" user={user} vendor={vendor} active="finance">
+    <SellerLayout title="Finance" user={user} vendor={vendor} active="finance" locale={locale}>
       <ComingSoonPanel
         icon="payments"
         title="Seller Finance is on its way"

@@ -8,6 +8,7 @@ import { getListingsForProduct, getVariantsForListing } from '../lib/catalog'
 export async function productPage(c: Context<AppEnv>) {
   const db = c.env.DB
   const user = c.get('user')
+  const locale = c.get('locale')
   const slug = c.req.param('slug')
 
   // Canonical product row + its PRIMARY (buy-box winning) listing, joined the same way
@@ -34,7 +35,7 @@ export async function productPage(c: Context<AppEnv>) {
 
   if (!product) {
     return c.render(
-      <Layout title="Not found" user={user}>
+      <Layout title="Not found" user={user} locale={locale}>
         <div class="max-w-2xl mx-auto text-center py-20">
           <span class="material-symbols-outlined text-5xl text-gray-300">search_off</span>
           <h1 class="text-xl font-bold mt-4">Product not found</h1>
@@ -116,7 +117,7 @@ export async function productPage(c: Context<AppEnv>) {
   const fbtTotal = product.price_kobo + fbtItems.reduce((sum, it) => sum + it.price_kobo, 0)
 
   return c.render(
-    <Layout title={product.title} user={user}>
+    <Layout title={product.title} user={user} locale={locale}>
       <div class="max-w-7xl mx-auto px-4 md:px-6 lg:px-8 py-6" data-product-id={product.id}>
         {/* ============ Breadcrumb ============ */}
         <nav class="text-xs text-gray-500 mb-4 flex items-center gap-1.5 flex-wrap">

@@ -10,9 +10,10 @@ import { formatNaira } from '../lib/money'
 /** Landing page the customer is redirected to after paying on Paystack's hosted checkout. */
 export async function checkoutCallbackPage(c: Context<AppEnv>) {
   const user = c.get('user')
+  const locale = c.get('locale')
 
   return c.render(
-    <Layout title="Confirming payment" user={user}>
+    <Layout title="Confirming payment" user={user} locale={locale}>
       <div class="max-w-md mx-auto px-6 py-24 text-center">
         <span class="material-symbols-outlined text-4xl text-primary animate-spin">progress_activity</span>
         <p id="checkout-callback-status" class="text-gray-600 mt-4">Confirming your payment, please wait...</p>
@@ -24,6 +25,7 @@ export async function checkoutCallbackPage(c: Context<AppEnv>) {
 export async function checkoutPage(c: Context<AppEnv>) {
   const db = c.env.DB
   const user = c.get('user')!
+  const locale = c.get('locale')
 
   // ---------- Resolve items: either the persisted cart, or a single fresh-resolved "Buy Now" listing ----------
   const buyNowListingId = c.req.query('buy_now_listing')
@@ -37,7 +39,7 @@ export async function checkoutPage(c: Context<AppEnv>) {
     const item = await getBuyNowItem(db, Number(buyNowListingId), buyNowQty)
     if (!item || item.stock <= 0) {
       return c.render(
-        <Layout title="Checkout" user={user}>
+        <Layout title="Checkout" user={user} locale={locale}>
           <div class="max-w-2xl mx-auto text-center py-20">
             <span class="material-symbols-outlined text-5xl text-gray-300">error</span>
             <h1 class="text-xl font-bold mt-4">This listing is no longer available</h1>
@@ -55,7 +57,7 @@ export async function checkoutPage(c: Context<AppEnv>) {
 
   if (items.length === 0) {
     return c.render(
-      <Layout title="Checkout" user={user}>
+      <Layout title="Checkout" user={user} locale={locale}>
         <div class="max-w-2xl mx-auto text-center py-20">
           <span class="material-symbols-outlined text-5xl text-gray-300">shopping_cart</span>
           <h1 class="text-xl font-bold mt-4">Your cart is empty</h1>
@@ -90,7 +92,7 @@ export async function checkoutPage(c: Context<AppEnv>) {
   }
 
   return c.render(
-    <Layout title="Checkout" user={user} cartCount={cartCount}>
+    <Layout title="Checkout" user={user} cartCount={cartCount} locale={locale}>
       <div class="max-w-6xl mx-auto px-4 md:px-6 lg:px-8 py-6">
         <h1 class="text-2xl font-bold text-gray-800 mb-2">Checkout</h1>
         {isBuyNow && (

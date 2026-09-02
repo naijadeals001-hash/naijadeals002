@@ -8,6 +8,7 @@ const PER_PAGE = 24
 export async function shopPage(c: Context<AppEnv>) {
   const db = c.env.DB
   const user = c.get('user')
+  const locale = c.get('locale')
   const category = c.req.query('category')
   const q = c.req.query('q')
   const deals = c.req.query('deals')
@@ -116,7 +117,7 @@ export async function shopPage(c: Context<AppEnv>) {
   }
 
   return c.render(
-    <Layout title={pageTitle} user={user}>
+    <Layout title={pageTitle} user={user} locale={locale}>
       <div class="max-w-[100rem] mx-auto px-4 md:px-6 lg:px-8 py-6 flex gap-6">
         {/* ============ Sidebar filters (desktop) ============ */}
         <aside class="hidden md:block w-60 shrink-0 space-y-6">

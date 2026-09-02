@@ -9,6 +9,7 @@ const QUICK_AMOUNTS_KOBO = [500000, 1000000, 2500000, 5000000] // ₦5,000 / ₦
 export async function walletPage(c: Context<AppEnv>) {
   const db = c.env.DB
   const user = c.get('user')!
+  const locale = c.get('locale')
 
   const [balance, history] = await Promise.all([
     getWalletBalance(db, user.id),
@@ -16,7 +17,7 @@ export async function walletPage(c: Context<AppEnv>) {
   ])
 
   return c.render(
-    <Layout title="Wallet" user={user}>
+    <Layout title="Wallet" user={user} locale={locale}>
       <div class="max-w-3xl mx-auto px-6 lg:px-8 py-6">
         <h1 class="text-2xl font-bold text-gray-800 mb-6">NaijaDeals Wallet</h1>
 

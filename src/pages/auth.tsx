@@ -28,6 +28,7 @@ function isSellerIntent(c: Context<AppEnv>): boolean {
 
 export async function loginPage(c: Context<AppEnv>) {
   const user = c.get('user')
+  const locale = c.get('locale')
   const next = c.req.query('next') || '/'
   const isSellerFlow = next === '/seller' || next.startsWith('/seller/')
 
@@ -40,7 +41,7 @@ export async function loginPage(c: Context<AppEnv>) {
     : `/register?next=${encodeURIComponent(next)}`
 
   return c.render(
-    <Layout title="Sign in" user={user}>
+    <Layout title="Sign in" user={user} locale={locale}>
       <div class="max-w-md mx-auto px-6 py-12">
         <h1 class="text-2xl font-bold text-gray-800 mb-1">Sign in</h1>
         <p class="text-sm text-gray-500 mb-6">
@@ -80,6 +81,7 @@ export async function loginPage(c: Context<AppEnv>) {
 
 export async function registerPage(c: Context<AppEnv>) {
   const user = c.get('user')
+  const locale = c.get('locale')
   const isSeller = isSellerIntent(c)
   const next = c.req.query('next') || (isSeller ? '/seller' : '/')
 
@@ -96,7 +98,7 @@ export async function registerPage(c: Context<AppEnv>) {
   const sellerHref = `/register?intent=seller&next=${encodeURIComponent(!isSeller && next === '/' ? '/seller' : next)}`
 
   return c.render(
-    <Layout title={isSeller ? 'Create a Seller Account' : 'Create a Customer Account'} user={user}>
+    <Layout title={isSeller ? 'Create a Seller Account' : 'Create a Customer Account'} user={user} locale={locale}>
       <div class="max-w-md mx-auto px-6 py-12">
         {/* Phase B: Customer vs Seller signup fork */}
         <div id="signup-intent-toggle" class="flex gap-1 bg-gray-100 rounded-lg p-1 mb-6" role="tablist" aria-label="Account type">

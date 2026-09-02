@@ -24,11 +24,12 @@ import { resolveSellerStatus } from '../lib/seller'
 export async function sellerGatewayPage(c: Context<AppEnv>) {
   const db = c.env.DB
   const user = c.get('user')
+  const locale = c.get('locale')
 
   // ---------- State A: Guest ----------
   if (!user) {
     return c.render(
-      <Layout title="Sell on NaijaDeals" user={null} description="Create your own store on NaijaDeals and reach millions of Nigerian shoppers.">
+      <Layout title="Sell on NaijaDeals" user={null} locale={locale} description="Create your own store on NaijaDeals and reach millions of Nigerian shoppers.">
         <SellerGuestLanding />
       </Layout>
     )
@@ -39,7 +40,7 @@ export async function sellerGatewayPage(c: Context<AppEnv>) {
   // ---------- State B: authenticated, no seller/vendor relationship yet ----------
   if (state === 'NO_SELLER') {
     return c.render(
-      <Layout title="Sell on NaijaDeals" user={user}>
+      <Layout title="Sell on NaijaDeals" user={user} locale={locale}>
         <SellerOnboardingInvite name={user.name.split(' ')[0]} />
       </Layout>
     )
@@ -56,7 +57,7 @@ export async function sellerGatewayPage(c: Context<AppEnv>) {
   // fake page, it reflects the seller's real DB state, just without the wizard
   // UI built yet).
   return c.render(
-    <SellerLayout title="Seller status" user={user} vendor={vendor!} active="overview">
+    <SellerLayout title="Seller status" user={user} vendor={vendor!} active="overview" locale={locale}>
       <SellerStatusScreen state={state} />
     </SellerLayout>
   )
@@ -201,8 +202,9 @@ function SellerOnboardingInvite({ name }: { name: string }) {
  */
 export async function sellerOnboardingPage(c: Context<AppEnv>) {
   const user = c.get('user')!
+  const locale = c.get('locale')
   return c.render(
-    <Layout title="Start selling" user={user}>
+    <Layout title="Start selling" user={user} locale={locale}>
       <div class="max-w-lg mx-auto px-4 md:px-6 py-14 md:py-20 text-center">
         <span class="material-symbols-outlined text-4xl text-primary bg-primary-light w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-5">
           rocket_launch

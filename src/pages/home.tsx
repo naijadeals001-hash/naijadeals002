@@ -21,6 +21,7 @@ import type { AppEnv } from '../types'
 export async function homePage(c: Context<AppEnv>) {
   const db = c.env.DB
   const user = c.get('user')
+  const locale = c.get('locale')
   const selectedCity = getCookie(c, 'nd_city') || 'Lagos'
 
   const [categories, feed, dealsNearYou] = await Promise.all([
@@ -30,7 +31,7 @@ export async function homePage(c: Context<AppEnv>) {
   ])
 
   return c.render(
-    <Layout title="Home" user={user} selectedCity={selectedCity}>
+    <Layout title="Home" user={user} selectedCity={selectedCity} locale={locale}>
       {/* ============ 1. HERO — DB-driven 5-panel campaign mosaic (desktop) / carousel (mobile) ============
           <HeroCarousel> renders feed.hero_campaigns (hero_campaigns table via getActiveHeroCampaigns(),
           cached by homepage-feed.ts's SECTION_LOADERS — this data was already being fetched every

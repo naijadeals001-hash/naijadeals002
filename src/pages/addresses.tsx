@@ -6,6 +6,7 @@ import { getAddressesForUser, getNigerianStates } from '../lib/addresses'
 export async function addressesPage(c: Context<AppEnv>) {
   const db = c.env.DB
   const user = c.get('user')!
+  const locale = c.get('locale')
 
   const [addresses, states] = await Promise.all([
     getAddressesForUser(db, user.id),
@@ -13,7 +14,7 @@ export async function addressesPage(c: Context<AppEnv>) {
   ])
 
   return c.render(
-    <Layout title="Saved Addresses" user={user}>
+    <Layout title="Saved Addresses" user={user} locale={locale}>
       <div class="max-w-3xl mx-auto px-4 md:px-6 lg:px-8 py-6">
         <div class="flex items-center justify-between mb-2">
           <h1 class="text-xl md:text-2xl font-bold text-gray-800">Saved Addresses</h1>

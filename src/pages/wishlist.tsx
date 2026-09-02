@@ -7,11 +7,12 @@ import { getWishlistForUser } from '../lib/wishlist'
 export async function wishlistPage(c: Context<AppEnv>) {
   const db = c.env.DB
   const user = c.get('user')!
+  const locale = c.get('locale')
 
   const items = await getWishlistForUser(db, user.id)
 
   return c.render(
-    <Layout title="Your Wishlist" user={user} wishlistCount={items.length}>
+    <Layout title="Your Wishlist" user={user} wishlistCount={items.length} locale={locale}>
       <div class="max-w-6xl mx-auto px-4 md:px-6 lg:px-8 py-6">
         <div class="flex items-center justify-between mb-2">
           <h1 class="text-xl md:text-2xl font-bold text-gray-800">Your Wishlist</h1>

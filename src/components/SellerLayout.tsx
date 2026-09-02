@@ -1,5 +1,6 @@
 import type { FC } from 'hono/jsx'
 import type { AuthUser, VendorRow } from '../types'
+import type { LocaleContext } from '../i18n'
 
 interface SellerLayoutProps {
   title?: string
@@ -7,6 +8,8 @@ interface SellerLayoutProps {
   vendor: VendorRow
   /** Which Seller Center nav item is current. Must match one of NAV_ITEMS[].key. */
   active: string
+  /** Resolved by attachLocale middleware — required, mirrors Layout.tsx's contract exactly (see Layout.tsx for why this must not be optional). */
+  locale: LocaleContext
   children: any
 }
 
@@ -37,10 +40,10 @@ const VERIFICATION_BADGE: Record<string, { label: string; class: string }> = {
   suspended: { label: 'Suspended', class: 'bg-red-50 text-red-700' }
 }
 
-export const SellerLayout: FC<SellerLayoutProps> = ({ title, user, vendor, active, children }) => {
+export const SellerLayout: FC<SellerLayoutProps> = ({ title, user, vendor, active, locale, children }) => {
   const badge = VERIFICATION_BADGE[vendor.verification_status] || VERIFICATION_BADGE.pending
   return (
-    <html lang="en">
+    <html lang={locale.language} dir={locale.dir}>
       <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />

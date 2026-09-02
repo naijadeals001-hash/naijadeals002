@@ -73,6 +73,7 @@ function SavedRow({ item }: { item: CartItemRow }) {
 export async function cartPage(c: Context<AppEnv>) {
   const db = c.env.DB
   const user = c.get('user')
+  const locale = c.get('locale')
   const guestToken = user ? null : getOrSetGuestToken(c)
   const cartId = await getOrCreateCartId(db, user?.id ?? null, guestToken)
   const [items, saved] = await Promise.all([getCartItems(db, cartId), getSavedForLaterItems(db, cartId)])
@@ -81,7 +82,7 @@ export async function cartPage(c: Context<AppEnv>) {
   const sellerGroups = Array.from(groupByVendor(items).entries())
 
   return c.render(
-    <Layout title="Your Cart" user={user} cartCount={cartCount}>
+    <Layout title="Your Cart" user={user} cartCount={cartCount} locale={locale}>
       <div class="max-w-5xl mx-auto px-4 md:px-6 lg:px-8 py-6">
         <h1 class="text-2xl font-bold text-gray-800 mb-6">Your Cart</h1>
 

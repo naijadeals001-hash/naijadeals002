@@ -19,6 +19,7 @@ import { getVerticalByRoute, getFeaturesForVertical } from '../lib/ecosystem-ver
 export async function ecosystemPreviewPage(c: Context<AppEnv>) {
   const db = c.env.DB
   const user = c.get('user')
+  const locale = c.get('locale')
 
   const vertical = await getVerticalByRoute(db, c.req.path)
   if (!vertical) {
@@ -28,7 +29,7 @@ export async function ecosystemPreviewPage(c: Context<AppEnv>) {
   const features = await getFeaturesForVertical(db, vertical.id)
 
   return c.render(
-    <Layout title={vertical.seo_title} description={vertical.seo_description} user={user}>
+    <Layout title={vertical.seo_title} description={vertical.seo_description} user={user} locale={locale}>
       <EcosystemPreview vertical={vertical} features={features} />
     </Layout>
   )

@@ -16,6 +16,7 @@ const STATUS_LABEL: Record<string, { label: string; color: string }> = {
 export async function ordersListPage(c: Context<AppEnv>) {
   const db = c.env.DB
   const user = c.get('user')!
+  const locale = c.get('locale')
 
   const { results: orders } = await db
     .prepare('SELECT * FROM orders WHERE user_id = ? ORDER BY id DESC')
@@ -23,7 +24,7 @@ export async function ordersListPage(c: Context<AppEnv>) {
     .all<OrderRow>()
 
   return c.render(
-    <Layout title="Your Orders" user={user}>
+    <Layout title="Your Orders" user={user} locale={locale}>
       <div class="max-w-4xl mx-auto px-6 lg:px-8 py-6">
         <h1 class="text-2xl font-bold text-gray-800 mb-6">Your Orders</h1>
 
@@ -62,6 +63,7 @@ export async function ordersListPage(c: Context<AppEnv>) {
 export async function orderDetailPage(c: Context<AppEnv>) {
   const db = c.env.DB
   const user = c.get('user')!
+  const locale = c.get('locale')
   const orderNumber = c.req.param('orderNumber')
 
   const order = await db.prepare('SELECT * FROM orders WHERE order_number = ? AND user_id = ?')
@@ -70,7 +72,7 @@ export async function orderDetailPage(c: Context<AppEnv>) {
 
   if (!order) {
     return c.render(
-      <Layout title="Order not found" user={user}>
+      <Layout title="Order not found" user={user} locale={locale}>
         <div class="max-w-2xl mx-auto text-center py-20">
           <span class="material-symbols-outlined text-5xl text-gray-300">search_off</span>
           <h1 class="text-xl font-bold mt-4">Order not found</h1>
@@ -100,7 +102,7 @@ export async function orderDetailPage(c: Context<AppEnv>) {
   }
 
   return c.render(
-    <Layout title={order.order_number} user={user}>
+    <Layout title={order.order_number} user={user} locale={locale}>
       <div class="max-w-4xl mx-auto px-6 lg:px-8 py-6">
         <a href="/orders" class="text-sm text-primary font-medium hover:underline flex items-center gap-1 mb-4">
           <span class="material-symbols-outlined text-base">arrow_back</span>Back to orders

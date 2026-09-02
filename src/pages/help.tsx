@@ -35,9 +35,10 @@ const FAQS = [
 
 export async function helpPage(c: Context<AppEnv>) {
   const user = c.get('user')
+  const locale = c.get('locale')
 
   return c.render(
-    <Layout title="Help & Support" user={user}>
+    <Layout title="Help & Support" user={user} locale={locale}>
       <div class="max-w-3xl mx-auto px-6 lg:px-8 py-10">
         <div class="text-center mb-10">
           <span class="material-symbols-outlined text-4xl text-primary">support_agent</span>
