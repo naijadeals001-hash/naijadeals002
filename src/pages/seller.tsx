@@ -96,16 +96,16 @@ function SellerGuestLanding() {
             </p>
             <div class="flex flex-col sm:flex-row gap-3 mt-8">
               <a
-                href="/login?next=%2Fseller"
+                href="/register?intent=seller&next=%2Fseller"
                 class="inline-flex items-center justify-center gap-2 bg-primary-fixed text-primary-dark font-semibold px-6 py-3.5 rounded-lg hover:brightness-95 transition"
               >
-                Sign in to sell
+                Create a Seller Account
               </a>
               <a
-                href="/register?next=%2Fseller"
+                href="/login?next=%2Fseller"
                 class="inline-flex items-center justify-center gap-2 bg-white/10 border border-white/30 text-white font-semibold px-6 py-3.5 rounded-lg hover:bg-white/20 transition"
               >
-                Create your NaijaDeals account
+                Sign in to sell
               </a>
             </div>
           </div>
@@ -153,11 +153,11 @@ function SellerGuestLanding() {
           <h2 class="text-xl md:text-2xl font-bold text-gray-900 mb-3">Ready to grow your business on NaijaDeals?</h2>
           <p class="text-sm text-gray-500 mb-6">Escrow-protected payments, nationwide delivery reach, and a dashboard built for the Nigerian market.</p>
           <div class="flex flex-col sm:flex-row items-center justify-center gap-3">
-            <a href="/login?next=%2Fseller" class="inline-flex items-center justify-center gap-2 bg-primary text-white font-semibold px-6 py-3.5 rounded-lg hover:bg-primary-dark transition w-full sm:w-auto">
-              Sign in to sell
+            <a href="/register?intent=seller&next=%2Fseller" class="inline-flex items-center justify-center gap-2 bg-primary text-white font-semibold px-6 py-3.5 rounded-lg hover:bg-primary-dark transition w-full sm:w-auto">
+              Create a Seller Account
             </a>
-            <a href="/register?next=%2Fseller" class="inline-flex items-center justify-center gap-2 border border-gray-300 text-gray-700 font-semibold px-6 py-3.5 rounded-lg hover:bg-gray-50 transition w-full sm:w-auto">
-              Create your NaijaDeals account
+            <a href="/login?next=%2Fseller" class="inline-flex items-center justify-center gap-2 border border-gray-300 text-gray-700 font-semibold px-6 py-3.5 rounded-lg hover:bg-gray-50 transition w-full sm:w-auto">
+              Sign in to sell
             </a>
           </div>
         </div>
