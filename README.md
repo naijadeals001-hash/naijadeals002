@@ -1,5 +1,15 @@
 # NaijaDeals — Marketplace MVP (Phase 1)
 
+> **⚠️ STATUS NOTE (2026-09-02)**: Large parts of this README (Deployment,
+> "Not Yet Implemented", Open Questions) describe an earlier pre-deploy
+> state and are now stale — the app **is** deployed and live at
+> **https://naijadeals.com**, with a real Seller Portal (Migration 0009),
+> i18n scaffolding (10 languages), and an ecosystem waitlist system built
+> since this file was last fully rewritten. Full README rewrite is tracked
+> as documentation debt; until then, treat the sections below marked
+> "Phase 1" as historical, and see the **Changelog** section near the
+> bottom for what has actually shipped since.
+
 > **Ecosystem architecture**: NaijaDeals is being built as a Super Ecosystem — one platform,
 > a set of shared engines (identity, marketplace, payments, bookings, logistics, trust,
 > search, etc.), and many vertical product layers (NaijaShop, NaijaEats, NaijaPay, and 19
@@ -122,3 +132,58 @@ npx wrangler d1 execute naijadeals-production --local --file=./seed.sql
 4. Build a minimal vendor onboarding flow (Phase 2 — Seller Center)
 5. Build an admin view for order/escrow management + brand/hero-campaign merchandising controls (Phase 2 — Admin Panel)
 6. Decide on product photography approach for the general catalog
+
+---
+
+## Changelog (post-Phase-1, most recent first)
+
+**This section is the authoritative source of truth for what's actually
+live in production.** The sections above are historical/Phase-1 and are
+increasingly stale — do not trust "Not Yet Implemented" or "Open Questions"
+above without cross-checking here first.
+
+### Phase B — Customer vs Seller signup fork (2026-09-02)
+- **What shipped**: `/register` now forks into a "Customer Account" /
+  "Seller Account" tabbed UI via `?intent=seller`. Seller-intent signups
+  default their post-registration redirect to `/seller`, landing on the
+  existing Seller Portal gateway's onboarding-invite state. `/seller`'s
+  guest CTA now reads "Create a Seller Account" and links with
+  `intent=seller`. `/login` carries the same intent through its cross-link.
+  **Zero schema changes** — reuses Migration 0009's `vendors.user_id`
+  linkage and `src/lib/seller.ts`'s `resolveSellerStatus()` state machine
+  exactly as-is. A user can still hold both buyer and seller capability
+  under one identity (one `users` row, one optional `vendors` row).
+- **Verified**: `scripts/verify_signup_fork.cjs` (13 real-browser checks ×
+  2 viewports) + a full real end-to-end signup-through-onboarding-invite
+  run — both passing against `https://naijadeals.com` and the Genspark
+  worker hostname, desktop and mobile.
+- **Not in scope for this phase**: the seller onboarding wizard itself
+  (`/seller/onboarding`) is still the pre-existing static placeholder —
+  filling it in is later Seller Center work, tracked separately.
+
+### Mobile hamburger menu fix (2026-09-01/02)
+- Fixed two bugs: a missing JS handler, and a spatial header/drawer
+  overlap where the header and drawer both anchored at `top:0` and fought
+  over the same screen region regardless of z-index. Fixed by having
+  `app.js` measure the header's real rendered height at runtime and
+  shifting the drawer/backdrop to start below it (see `syncHeaderOffset()`
+  in `public/static/app.js`). Verified via real Playwright clicks at
+  375/390/430px against live production.
+- **Deploy-pipeline lesson learned**: `gsk hosted deploy`'s internal D1
+  migration step can fail while the Worker still publishes (observed once
+  this cycle on a redundant `ALTER TABLE` collision). Since then, migrations
+  are applied exclusively through the deploy pipeline's own migration
+  runner — never pre-applied manually before triggering a deploy — to avoid
+  the same class of `d1_migrations` bookkeeping drift.
+
+### Seller Portal foundation, i18n scaffolding, ecosystem waitlist (earlier)
+- Migration 0009: `vendors.user_id` linkage, verification/onboarding state
+  columns, Nigerian bank reference table, encrypted seller payout accounts,
+  seller finance accounts (escrow-separate from buyer wallet).
+- `src/lib/seller.ts`: `resolveSellerStatus()` 6-state machine, ownership
+  always resolved server-side from session (`user_id`), never a
+  client-supplied `vendor_id`.
+- 10-language i18n scaffolding (`src/i18n/`) — dictionaries exist;
+  full production wiring (locale reaching every page/component,
+  geo/IP-based auto-detection) is tracked as a later phase, not yet done.
+- Ecosystem waitlist signup flow for NaijaEats/NaijaGigs/NaijaStay preview.
