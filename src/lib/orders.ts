@@ -2,6 +2,7 @@ import type { CartItemRow } from '../types'
 import { debitWallet, InsufficientFundsError } from './wallet'
 import { validateCoupon, incrementCouponUsage } from './coupons'
 import { confirmCommissionsForOrderIfAttributed } from './affiliate'
+import { createShipmentsForPaidOrder } from './logistics-naijashop-bridge'
 
 export interface ShippingDetails {
   name: string
@@ -174,6 +175,19 @@ export async function confirmOrderPayment(
     await confirmCommissionsForOrderIfAttributed(db, orderId, order.user_id)
   } catch (err) {
     console.error('Affiliate commission attribution failed for order', orderId, err)
+  }
+
+  // Logistics Engine 2.0 (spec section 40): "delivery = operational
+  // fulfillment workflow", not just a checkout fee line item. Creates the
+  // REAL per-vendor shipment(s) for physical tracking. Deliberately AFTER
+  // the batch above and wrapped exactly like the affiliate call above it —
+  // a logistics failure must never fail an otherwise-successful payment,
+  // and existing checkout behavior (the flat delivery fee already charged)
+  // is completely unaffected either way.
+  try {
+    await createShipmentsForPaidOrder(db, orderId)
+  } catch (err) {
+    console.error('Fulfillment shipment creation failed for order', orderId, err)
   }
 }
 

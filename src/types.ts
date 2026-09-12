@@ -1210,3 +1210,300 @@ export type OrderItemStatus =
   | 'partially_refunded'
   | 'returned'
   | 'disputed'
+
+// ============================================================
+// LOGISTICS ENGINE 2.0 (migration 0042) — universal delivery/dispatch/
+// driver/route/tracking/fulfillment foundation. Extends the 13 tables
+// already reconstructed from production (migrations 0015/0016/0019/
+// 0020/0026/0035) rather than duplicating them — see migration 0042's
+// header comment for the full inspection trail.
+// ============================================================
+
+export type ShipmentType = 'marketplace_order' | 'standalone' | 'return'
+export type FulfillmentCategory =
+  | 'product' | 'food' | 'grocery' | 'medical' | 'document' | 'parcel'
+  | 'bulk' | 'business' | 'service_item' | 'auto_part' | 'other'
+export type DeliveryServiceType =
+  | 'standard' | 'express' | 'same_day' | 'scheduled' | 'priority' | 'instant'
+  | 'economy' | 'intercity' | 'bulk' | 'freight' | 'cold_chain' | 'document' | 'special_handling'
+export type ShipmentStatus =
+  | 'created' | 'awaiting_pickup' | 'booked' | 'assigned' | 'pickup_assigned'
+  | 'driver_en_route_to_pickup' | 'arrived_pickup' | 'picked_up' | 'in_transit'
+  | 'near_destination' | 'out_for_delivery' | 'arrived_dropoff' | 'delivery_attempted'
+  | 'delivered' | 'failed_delivery' | 'failed' | 'returned' | 'cancelled' | 'lost' | 'damaged'
+export type JobStatus = 'unassigned' | 'assigned' | 'accepted' | 'en_route' | 'arrived' | 'attempted' | 'completed' | 'failed' | 'cancelled'
+export type DriverOperationalStatus = 'offline' | 'available' | 'assigned' | 'en_route' | 'busy' | 'on_break' | 'suspended'
+export type ProofType = 'otp' | 'signature' | 'photo' | 'qr' | 'none'
+export type LogisticsActorRole = 'customer' | 'driver' | 'merchant' | 'fleet' | 'provider' | 'admin' | 'system'
+export type LogisticsSourceVertical = 'naijashop' | 'naijafresh' | 'naijaeats' | 'naijafarm' | 'naijaauto' | 'naijahealth' | 'naijasend'
+
+export interface ShipmentRow {
+  id: number
+  tracking_number: string
+  shipment_type: ShipmentType
+  fulfillment_category: FulfillmentCategory
+  customer_user_id: number
+  order_id: number | null
+  vendor_id: number | null
+  rate_card_id: number | null
+  logistics_quote_id: number | null
+  vehicle_type_id: number
+  speed_tier: DeliveryServiceType
+  origin_country_iso: string
+  destination_country_iso: string
+  origin_zone_key: string | null
+  destination_zone_key: string | null
+  declared_weight_kg: number
+  declared_length_cm: number | null
+  declared_width_cm: number | null
+  declared_height_cm: number | null
+  package_count: number
+  declared_value_kobo: number | null
+  is_fragile: number
+  is_temperature_sensitive: number
+  is_hazardous: number
+  special_handling_notes: string | null
+  parcel_description: string | null
+  related_shipment_id: number | null
+  quoted_price_kobo: number
+  currency: string
+  payment_status: 'unpaid' | 'paid' | 'refunded'
+  status: ShipmentStatus
+  cancelled_reason: string | null
+  pickup_window_start: string | null
+  pickup_window_end: string | null
+  delivery_window_start: string | null
+  delivery_window_end: string | null
+  created_at: string
+  updated_at: string
+  source_type: LogisticsSourceVertical | null
+  selected_vehicle_id: number | null
+}
+
+export interface ShipmentAddressRow {
+  id: number
+  shipment_id: number
+  address_role: 'pickup' | 'dropoff'
+  recipient_name: string
+  phone: string
+  line1: string
+  city: string
+  state: string
+  country_iso: string
+  delivery_instructions: string | null
+  created_at: string
+}
+
+export interface ShipmentItemRow {
+  id: number
+  shipment_id: number
+  order_item_id: number | null
+  quantity: number
+  created_at: string
+}
+
+export interface ShipmentStatusEventRow {
+  id: number
+  shipment_id: number
+  status: string
+  actor_user_id: number | null
+  actor_role: LogisticsActorRole
+  note: string | null
+  metadata_json: string
+  latitude: number | null
+  longitude: number | null
+  created_at: string
+}
+
+export interface DeliveryJobRow {
+  id: number
+  shipment_id: number
+  provider_id: number | null
+  driver_id: number | null
+  vehicle_id: number | null
+  status: JobStatus
+  scheduled_window_start: string | null
+  scheduled_window_end: string | null
+  assigned_at: string | null
+  accepted_at: string | null
+  en_route_at: string | null
+  arrived_at: string | null
+  completed_at: string | null
+  failure_reason: string | null
+  attempt_count: number
+  proof_type: ProofType | null
+  otp_code_hash: string | null
+  otp_expires_at: string | null
+  otp_verified_at: string | null
+  completion_latitude: number | null
+  completion_longitude: number | null
+  created_at: string
+  updated_at: string
+}
+
+/** pickup_jobs shares the exact same shape as delivery_jobs (migration 0042 rebuilt both identically). */
+export type PickupJobRow = DeliveryJobRow
+
+export interface DeliveryAttemptRow {
+  id: number
+  job_type: 'pickup' | 'delivery'
+  job_id: number
+  attempt_number: number
+  outcome: 'succeeded' | 'failed'
+  reason: string | null
+  actor_user_id: number | null
+  actor_role: 'driver' | 'system' | 'admin'
+  notes: string | null
+  latitude: number | null
+  longitude: number | null
+  created_at: string
+}
+
+export interface DeliveryZoneRow {
+  id: number
+  country_iso: string
+  key: string
+  name: string
+  city: string | null
+  region: string | null
+  is_active: number
+  created_at: string
+}
+
+export interface LogisticsQuoteRow {
+  id: number
+  quote_number: string
+  customer_user_id: number | null
+  origin_zone_key: string | null
+  destination_zone_key: string | null
+  origin_country_iso: string
+  destination_country_iso: string
+  vehicle_type_id: number | null
+  speed_tier: string
+  declared_weight_kg: number
+  package_count: number
+  base_fee_kobo: number
+  distance_fee_kobo: number
+  weight_fee_kobo: number
+  service_fee_kobo: number
+  surcharge_kobo: number
+  discount_kobo: number
+  tax_kobo: number
+  total_kobo: number
+  currency: string
+  status: 'quoted' | 'accepted' | 'expired' | 'converted'
+  rate_card_id: number | null
+  converted_shipment_id: number | null
+  expires_at: string
+  created_at: string
+}
+
+export interface DeliveryRouteRow {
+  id: number
+  job_type: 'pickup' | 'delivery'
+  job_id: number
+  origin_latitude: number | null
+  origin_longitude: number | null
+  destination_latitude: number | null
+  destination_longitude: number | null
+  waypoints_json: string
+  distance_km: number | null
+  estimated_duration_min: number | null
+  actual_duration_min: number | null
+  status: 'planned' | 'active' | 'completed' | 'cancelled'
+  started_at: string | null
+  completed_at: string | null
+  created_at: string
+}
+
+export interface DriverProfileRow {
+  id: number
+  user_id: number
+  provider_id: number | null
+  identity_organization_id: number | null
+  license_number: string
+  country_iso: string
+  status: 'pending_verification' | 'active' | 'suspended' | 'deactivated'
+  is_online: number
+  operational_status: DriverOperationalStatus
+  rating_avg: number
+  rating_count: number
+  current_latitude: number | null
+  current_longitude: number | null
+  location_updated_at: string | null
+  last_online_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface VehicleRow {
+  id: number
+  provider_id: number
+  vehicle_type_id: number
+  registration_number: string
+  country_iso: string
+  operational_status: 'active' | 'inactive' | 'maintenance'
+  capacity_description: string | null
+  documentation_status: 'not_submitted' | 'pending_review' | 'approved' | 'rejected'
+  metadata_json: string
+  make: string | null
+  model: string | null
+  year: number | null
+  weight_capacity_kg: number | null
+  base_city: string | null
+  cover_image_url: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface VehicleTypeRow {
+  id: number
+  key: string
+  label_key: string
+  icon: string
+  is_active: number
+  display_order: number
+  transport_mode: 'road' | 'air' | 'water'
+  created_at: string
+}
+
+export interface LogisticsProviderRow {
+  id: number
+  user_id: number
+  organization_id: number | null
+  provider_name: string
+  country_iso: string
+  contact_phone: string | null
+  contact_email: string | null
+  status: 'active' | 'inactive'
+  rating_avg: number
+  rating_count: number
+  created_at: string
+  updated_at: string
+}
+
+export interface ShipmentRateCardRow {
+  id: number
+  origin_zone: string
+  vehicle_type_id: number
+  speed_tier: 'standard' | 'express'
+  base_price_kobo: number
+  per_kg_price_kobo: number
+  is_active: number
+  created_at: string
+  updated_at: string
+}
+
+export interface GpsEventRow {
+  id: number
+  driver_id: number
+  shipment_id: number | null
+  client_event_id: string
+  latitude: number
+  longitude: number
+  accuracy_m: number | null
+  recorded_at: string
+  received_at: string
+  source: 'driver_app' | 'system_test'
+  metadata_json: string
+}

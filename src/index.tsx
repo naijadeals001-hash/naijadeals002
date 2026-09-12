@@ -28,6 +28,7 @@ import { serviceRequestsApi } from './routes/api-service-requests'
 import { providerApi } from './routes/api-provider'
 import { adminApi } from './routes/api-admin'
 import { bookingsApi } from './routes/api-bookings'
+import { logisticsApi } from './routes/api-logistics'
 
 // SSR pages
 import { homePage } from './pages/home'
@@ -89,6 +90,7 @@ app.route('/api', versionRoute)
 // bookingsApi first ensures its own explicitly-scoped middleware (never a
 // bare '*') is what actually governs its routes.
 app.route('/api', bookingsApi)
+app.route('/api', logisticsApi)
 app.route('/api/catalog', catalogApi)
 app.route('/api/cart', cartApi)
 app.route('/api/auth', authApi)
