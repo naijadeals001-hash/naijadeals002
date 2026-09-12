@@ -211,3 +211,26 @@ adminApi.get('/countries', async (c) => {
   const results = await getAllCountries(c.env.DB)
   return c.json({ results })
 })
+
+// ---------- Engine 9: Communication & Notification observability (Phase 17) ----------
+//
+// Control Center integration. Deliberately READ-ONLY status/aggregate
+// data — never exposes a recipient's actual notification content across
+// users (only counts/aggregates), never exposes provider credentials
+// (cc_integrations.config_json is intentionally NOT selected below).
+// Gated by the SAME requirePlatformRole('admin') every other route in
+// this file already uses.
+
+adminApi.get('/notifications/overview', async (c) => {
+  const { getNotificationEngineOverview } = await import('../lib/notification-observability')
+  const overview = await getNotificationEngineOverview(c.env.DB)
+  return c.json(overview)
+})
+
+/** Bounded catch-up trigger for the durable outbox (see notifications.ts's module doc comment on why this project uses a request-triggered catch-up pass instead of a cron/Queue binding). Admin-only, never automatic/hidden. */
+adminApi.post('/notifications/process-outbox', async (c) => {
+  const { processOutboxBatch } = await import('../lib/notifications')
+  const limit = Math.min(Number(c.req.query('limit') ?? 25) || 25, 100)
+  const result = await processOutboxBatch(c.env.DB, limit)
+  return c.json(result)
+})

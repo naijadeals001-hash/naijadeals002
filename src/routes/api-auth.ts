@@ -45,6 +45,23 @@ authApi.post('/register', async (c) => {
   const token = await createSession(c.env.DB, userId, c.req.header('user-agent') ?? null)
   setSessionCookie(c, token)
 
+  // Engine 9 event writer — welcome notification. Fires strictly after
+  // the account row + session already committed; never able to block or
+  // fail registration itself (see src/lib/notifications.ts's financial/
+  // business-safety rationale, applied identically here to auth).
+  try {
+    const { enqueueAndProcessNow } = await import('../lib/notifications')
+    await enqueueAndProcessNow(c.env.DB, {
+      idempotencyKey: `account_registered:${userId}`,
+      eventType: 'account_registered',
+      recipientUserId: userId,
+      category: 'transactional',
+      payload: { name: body.name },
+    })
+  } catch (err) {
+    console.error('Notification enqueue failed for registration', userId, err)
+  }
+
   return c.json({ success: true, user: { id: userId, name: body.name, email: body.email ?? null, phone: body.phone ?? null } })
 })
 

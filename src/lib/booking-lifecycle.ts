@@ -304,6 +304,27 @@ export async function transitionBooking(db: D1Database, bookingId: number, targe
 
   await logBookingTransition(db, booking, fromStatus, targetStatus, actor.userId, actor.role, opts.reason ?? null, opts.metadata ?? {})
 
+  // Engine 9 event writer — see order-lifecycle.ts's identical pattern for
+  // the full rationale (durable outbox, never blocks/fails this
+  // transition). Customer-facing statuses only.
+  const CUSTOMER_NOTIFIABLE_BOOKING = new Set(['confirmed', 'checked_in', 'completed', 'cancelled', 'declined', 'expired', 'no_show', 'disputed'])
+  if (CUSTOMER_NOTIFIABLE_BOOKING.has(targetStatus)) {
+    try {
+      const { enqueueAndProcessNow } = await import('./notifications')
+      await enqueueAndProcessNow(db, {
+        idempotencyKey: `booking_${targetStatus}:${bookingId}`,
+        eventType: `booking_${targetStatus}`,
+        recipientUserId: booking.customer_user_id,
+        category: 'booking',
+        payload: { booking_id: bookingId, booking_number: booking.booking_number, status: targetStatus },
+        referenceType: 'booking',
+        referenceId: String(bookingId),
+      })
+    } catch (err) {
+      console.error('booking-lifecycle: notification enqueue failed (non-fatal, booking transition already committed)', err)
+    }
+  }
+
   const updated = await db.prepare('SELECT * FROM bookings WHERE id = ?').bind(bookingId).first<BookingRow>()
   return updated!
 }

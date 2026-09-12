@@ -280,6 +280,24 @@ export async function createAndExecuteRefund(db: D1Database, input: CreateRefund
       .bind(ledgerRow?.id ?? null, refundId)
       .run()
 
+    // Engine 9 event writer — fires strictly AFTER the wallet credit and
+    // refund-row completion have already committed (financial atomicity
+    // preserved first, per Engine 9's mandate; see notifications.ts).
+    try {
+      const { enqueueAndProcessNow } = await import('./notifications')
+      await enqueueAndProcessNow(db, {
+        idempotencyKey: `refund_completed:${refundId}`,
+        eventType: 'refund_completed',
+        recipientUserId: order.user_id,
+        category: 'payment',
+        payload: { refund_id: refundId, order_id: input.orderId, amount_kobo: input.amountKobo, reason: input.reason },
+        referenceType: 'order',
+        referenceId: String(input.orderId),
+      })
+    } catch (err) {
+      console.error('Notification enqueue failed for refund', refundId, err)
+    }
+
     return { refundId, walletLedgerId: ledgerRow?.id ?? 0, newBalanceKobo }
   } catch (err) {
     // The credit failed AFTER the claim succeeded — roll the claim back to

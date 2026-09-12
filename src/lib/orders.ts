@@ -206,6 +206,30 @@ async function runOrderPaymentSideEffects(db: D1Database, orderId: number): Prom
   } catch (err) {
     console.error('Fulfillment shipment creation failed for order', orderId, err)
   }
+
+  // Engine 9 event writer — see notifications.ts's module doc comment for
+  // the financial-safety rationale (fires strictly AFTER the payment CAS
+  // claim already won and this function's own side effects already ran;
+  // never able to roll back the payment itself). idempotencyKey is keyed
+  // on orderId alone (not a provider reference) because "payment
+  // confirmed" is a one-time-per-order business event regardless of which
+  // payment path (Paystack webhook vs wallet) or how many concurrent
+  // callers raced to get here — only the CAS winner ever reaches this
+  // function body per order.
+  try {
+    const { enqueueAndProcessNow } = await import('./notifications')
+    await enqueueAndProcessNow(db, {
+      idempotencyKey: `payment_confirmed:${orderId}`,
+      eventType: 'payment_confirmed',
+      recipientUserId: order!.user_id,
+      category: 'payment',
+      payload: { order_id: orderId },
+      referenceType: 'order',
+      referenceId: String(orderId),
+    })
+  } catch (err) {
+    console.error('Notification enqueue failed for order payment', orderId, err)
+  }
 }
 
 /**

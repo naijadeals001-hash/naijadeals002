@@ -290,6 +290,33 @@ export async function transitionOrderItemStatus(
 
   await recomputeOrderAggregateStatus(db, item.order_id)
 
+  // Engine 9 event writer (durable outbox, never blocks/fails this
+  // transition — see notifications.ts's module doc comment on why
+  // enqueueAndProcessNow is safe to call as a strictly-after-commit step).
+  // Customer-facing statuses only: a seller/admin doesn't need a
+  // notification about their own action, and 'processing'/
+  // 'ready_for_fulfillment' are not yet meaningfully customer-actionable.
+  const CUSTOMER_NOTIFIABLE = new Set(['shipped', 'delivered', 'completed', 'cancelled', 'refunded', 'partially_refunded'])
+  if (CUSTOMER_NOTIFIABLE.has(targetStatus)) {
+    try {
+      const order = await db.prepare('SELECT user_id FROM orders WHERE id = ?').bind(item.order_id).first<{ user_id: number }>()
+      if (order) {
+        const { enqueueAndProcessNow } = await import('./notifications')
+        await enqueueAndProcessNow(db, {
+          idempotencyKey: `order_item_${targetStatus}:${orderItemId}`,
+          eventType: `order_item_${targetStatus}`,
+          recipientUserId: order.user_id,
+          category: 'order',
+          payload: { order_item_id: orderItemId, order_id: item.order_id, status: targetStatus },
+          referenceType: 'order',
+          referenceId: String(item.order_id),
+        })
+      }
+    } catch (err) {
+      console.error('order-lifecycle: notification enqueue failed (non-fatal, order transition already committed)', err)
+    }
+  }
+
   const updated = await db.prepare('SELECT * FROM order_items WHERE id = ?').bind(orderItemId).first<OrderItemRowForTransition>()
   return updated!
 }
