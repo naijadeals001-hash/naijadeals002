@@ -1,6 +1,7 @@
 import type { CartItemRow } from '../types'
 import { debitWallet, InsufficientFundsError } from './wallet'
 import { validateCoupon, incrementCouponUsage } from './coupons'
+import { confirmCommissionsForOrderIfAttributed } from './affiliate'
 
 export interface ShippingDetails {
   name: string
@@ -162,6 +163,18 @@ export async function confirmOrderPayment(
       .bind(provider, providerReference, orderId),
     ...stockUpdates
   ])
+
+  // Affiliate commission attribution — see src/lib/affiliate.ts's
+  // confirmCommissionsForOrderIfAttributed doc comment for why this is a
+  // safe no-op for the vast majority of orders (no attribution = zero writes).
+  // Deliberately AFTER the batch above so a payment is never blocked/delayed
+  // by affiliate bookkeeping, and wrapped so an affiliate-side error can
+  // never fail an otherwise-successful payment confirmation.
+  try {
+    await confirmCommissionsForOrderIfAttributed(db, orderId, order.user_id)
+  } catch (err) {
+    console.error('Affiliate commission attribution failed for order', orderId, err)
+  }
 }
 
 /** Pays for an order directly from the user's NaijaDeals wallet. Throws InsufficientFundsError if short. */

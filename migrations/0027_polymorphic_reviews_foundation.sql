@@ -42,10 +42,19 @@
 -- migration file is only ever applied once per database (via the
 -- migrations tracking table), not on statement-level idempotency.
 
+-- NOTE (fixed during Affiliate-slice build, 2026-09-12): SQLite's ALTER TABLE
+-- ADD COLUMN forbids a non-constant default expression like datetime('now')
+-- (SQLITE_ERROR: "Cannot add a column with non-constant default"). The
+-- updated_at column below is added with a constant '' default and
+-- immediately backfilled from created_at in the UPDATE that follows, which
+-- is schema-equivalent to what a datetime('now')-at-ALTER-time default would
+-- have produced for pre-existing rows (a "just happened" timestamp), and
+-- exactly matches created_at semantics for rows that predate this column.
 ALTER TABLE reviews ADD COLUMN reviewable_type TEXT NOT NULL DEFAULT 'product' CHECK (reviewable_type IN ('product', 'provider_profile', 'restaurant', 'stay'));
 ALTER TABLE reviews ADD COLUMN reviewable_id INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE reviews ADD COLUMN status TEXT NOT NULL DEFAULT 'published' CHECK (status IN ('published', 'hidden'));
-ALTER TABLE reviews ADD COLUMN updated_at TEXT NOT NULL DEFAULT (datetime('now'));
+ALTER TABLE reviews ADD COLUMN updated_at TEXT NOT NULL DEFAULT '';
+UPDATE reviews SET updated_at = created_at WHERE updated_at = '';
 ALTER TABLE reviews ADD COLUMN moderated_by_user_id INTEGER REFERENCES users(id);
 ALTER TABLE reviews ADD COLUMN moderated_at TEXT;
 

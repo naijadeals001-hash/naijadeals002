@@ -157,6 +157,9 @@ export const Layout: FC<LayoutProps> = ({ title, description, user, cartCount = 
                 <a href="/orders" class="hidden lg:flex flex-col justify-center leading-tight px-2.5 py-1.5 rounded-lg hover:bg-white/10 transition-colors">
                   <span class="text-sm font-semibold">{t('nav_orders_returns')}</span>
                 </a>
+                <a href="/affiliate" class="hidden xl:flex flex-col justify-center leading-tight px-2.5 py-1.5 rounded-lg hover:bg-white/10 transition-colors">
+                  <span class="text-sm font-semibold">Affiliate Center</span>
+                </a>
                 <a href="/cart" class="relative flex items-end gap-1 px-2.5 py-1.5 rounded-lg hover:bg-white/10 transition-colors">
                   <span class="material-symbols-outlined text-2xl">shopping_cart</span>
                   <span
@@ -313,6 +316,9 @@ export const Layout: FC<LayoutProps> = ({ title, description, user, cartCount = 
             <a href="/seller" class="flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-gray-800 hover:bg-gray-50">
               <span class="material-symbols-outlined text-xl text-gray-500">storefront</span>{t('nav_sell_on_naijadeals')}
             </a>
+            <a href="/affiliate" class="flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-gray-800 hover:bg-gray-50">
+              <span class="material-symbols-outlined text-xl text-gray-500">link</span>Affiliate Center
+            </a>
             <a href="/help" class="flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-gray-800 hover:bg-gray-50">
               <span class="material-symbols-outlined text-xl text-gray-500">help</span>{t('nav_help_center')}
             </a>
@@ -342,6 +348,7 @@ export const Layout: FC<LayoutProps> = ({ title, description, user, cartCount = 
                 <h4 class="font-semibold mb-3">{t('footer_get_to_know_us')}</h4>
                 <a href="/about" class="block text-white/70 hover:text-white py-1">About NaijaDeals</a>
                 <a href="/seller" class="block text-white/70 hover:text-white py-1">{t('nav_sell_on_naijadeals')}</a>
+                <a href="/affiliate" class="block text-white/70 hover:text-white py-1">Affiliate Center</a>
                 <a href="/admin" class="block text-white/70 hover:text-white py-1">Careers</a>
                 <a href="/help" class="block text-white/70 hover:text-white py-1">Press</a>
               </div>

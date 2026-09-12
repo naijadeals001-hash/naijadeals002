@@ -382,3 +382,133 @@ export interface WishlistRow {
   product_id: number
   created_at: string
 }
+
+// ============================================================
+// Affiliate program (migrations 0017/0018 — reconstructed from
+// production's recovered schema, see docs/NAIJADEALS-PRODUCTION-SCHEMA-MAP.md)
+// ============================================================
+
+export type AffiliateStatus = 'active' | 'pending' | 'suspended' | 'rejected'
+
+/** One user's affiliate enrollment. user_id is UNIQUE — one affiliate profile per account. */
+export interface AffiliateProfileRow {
+  id: number
+  user_id: number
+  status: AffiliateStatus
+  display_name: string | null
+  /** Default commission rate in basis points (500 = 5%). Schema default observed on production; see calculateCommissionBps() — the exact real-world formula/overrides are UNKNOWN — SOURCE CODE REQUIRED, this is the only recoverable fallback value. */
+  default_commission_bps: number
+  payout_threshold_kobo: number
+  payout_method: string | null
+  payout_destination_json: string | null
+  suspended_reason: string | null
+  reviewed_by_user_id: number | null
+  reviewed_at: string | null
+  rejection_reason: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface AffiliateReferralCodeRow {
+  id: number
+  affiliate_id: number
+  code: string
+  is_primary: number
+  is_active: number
+  created_at: string
+}
+
+export interface AffiliateClickRow {
+  id: number
+  referral_code_id: number
+  affiliate_id: number
+  campaign_id: number | null
+  click_token: string
+  landing_path: string
+  referrer: string | null
+  ip_hash: string | null
+  user_agent: string | null
+  created_at: string
+}
+
+export type AffiliateAttributionStatus = 'pending' | 'converted' | 'expired'
+
+export interface AffiliateAttributionRow {
+  id: number
+  click_id: number | null
+  affiliate_id: number
+  referral_code_id: number
+  campaign_id: number | null
+  attribution_token: string
+  customer_user_id: number | null
+  status: AffiliateAttributionStatus
+  first_touch_at: string
+  last_touch_at: string
+  expires_at: string
+  created_at: string
+}
+
+export type AffiliateCommissionStatus = 'pending' | 'approved' | 'reversed' | 'paid'
+
+export interface AffiliateCommissionRow {
+  id: number
+  affiliate_id: number
+  attribution_id: number
+  campaign_id: number | null
+  order_id: number
+  order_item_id: number
+  listing_id: number
+  product_id: number
+  vendor_id: number
+  customer_user_id: number
+  commission_basis: string
+  commission_rate_bps: number | null
+  gross_kobo: number
+  commission_kobo: number
+  status: AffiliateCommissionStatus
+  approved_by_user_id: number | null
+  approved_at: string | null
+  reversed_at: string | null
+  reversed_reason: string | null
+  payout_id: number | null
+  created_at: string
+  updated_at: string
+}
+
+export interface AffiliateAccountRow {
+  affiliate_id: number
+  cached_available_kobo: number
+  updated_at: string
+}
+
+export interface AffiliateLedgerEntryRow {
+  id: number
+  affiliate_id: number
+  entry_type: 'credit' | 'debit'
+  amount_kobo: number
+  balance_after_kobo: number
+  reference_type: string
+  reference_id: string | null
+  commission_id: number | null
+  order_id: number | null
+  description: string
+  created_at: string
+}
+
+export type AffiliatePayoutStatus = 'requested' | 'approved' | 'rejected' | 'paid'
+
+export interface AffiliatePayoutRow {
+  id: number
+  affiliate_id: number
+  amount_kobo: number
+  status: AffiliatePayoutStatus
+  payout_method: string | null
+  external_reference: string | null
+  requested_at: string
+  decided_by_user_id: number | null
+  decided_at: string | null
+  paid_at: string | null
+  rejection_reason: string | null
+  created_at: string
+  updated_at: string
+}
