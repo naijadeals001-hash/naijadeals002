@@ -249,15 +249,43 @@ logisticsApi.post('/dispatch', async (c) => {
     return c.json(result, 201)
   } catch (err) {
     if (err instanceof LogisticsDispatchError) return c.json({ error: err.message }, 400)
+    if (err instanceof LogisticsTrackingError) return c.json({ error: err.message }, 409)
     throw err
   }
 })
+
+/**
+ * SECURITY FIX (Logistics Proof Gate, live cross-tenant test): this route
+ * previously had NO authorization check at all — any authenticated user
+ * could assign/reassign ANY job on ANY shipment just by guessing its id.
+ * Scoped to: the shipment's owning customer, the fulfilling vendor, or a
+ * platform admin (no dedicated fleet/Control Center dispatch UI/role exists
+ * yet — documented gap, this is the minimum honest bar, not the final
+ * authorization model).
+ */
+async function requireDispatchAuthority(c: any, shipmentId: number): Promise<boolean> {
+  const user = c.get('user')!
+  if (user.role === 'admin') return true
+  const owned = await getShipmentForCustomer(c.env.DB, user.id, shipmentId)
+  if (owned) return true
+  const vendorOwned = await c.env.DB.prepare('SELECT id FROM shipments WHERE id = ? AND vendor_id IN (SELECT id FROM vendors WHERE user_id = ?)').bind(shipmentId, user.id).first()
+  return !!vendorOwned
+}
+
+logisticsApi.use('/dispatch/:jobType/:id/assign', requireAuth)
+logisticsApi.use('/dispatch/:jobType/:id/reassign', requireAuth)
 
 logisticsApi.post('/dispatch/:jobType/:id/assign', async (c) => {
   const jobType = c.req.param('jobType') as JobType
   if (jobType !== 'pickup' && jobType !== 'delivery') return c.json({ error: 'jobType must be pickup or delivery' }, 400)
   const body = await c.req.json<{ driver_id?: number }>()
   const jobId = Number(c.req.param('id'))
+
+  const jobForAuth = await getJob(c.env.DB, jobType, jobId)
+  if (!jobForAuth) return c.json({ error: 'Job not found' }, 404)
+  if (!(await requireDispatchAuthority(c, jobForAuth.shipment_id))) {
+    return c.json({ error: 'You are not permitted to dispatch this shipment' }, 403)
+  }
 
   let driverId = body.driver_id
   if (!driverId) {
@@ -282,12 +310,19 @@ logisticsApi.post('/dispatch/:jobType/:id/reassign', async (c) => {
   const jobType = c.req.param('jobType') as JobType
   if (jobType !== 'pickup' && jobType !== 'delivery') return c.json({ error: 'jobType must be pickup or delivery' }, 400)
   const user = c.get('user')!
+  const jobId = Number(c.req.param('id'))
+  const jobForAuth = await getJob(c.env.DB, jobType, jobId)
+  if (!jobForAuth) return c.json({ error: 'Job not found' }, 404)
+  if (!(await requireDispatchAuthority(c, jobForAuth.shipment_id))) {
+    return c.json({ error: 'You are not permitted to dispatch this shipment' }, 403)
+  }
   const body = await c.req.json<{ reason?: string }>()
   try {
-    await reassignJob(c.env.DB, jobType, Number(c.req.param('id')), user.id, body.reason ?? 'Reassigned by admin')
+    await reassignJob(c.env.DB, jobType, jobId, user.id, body.reason ?? 'Reassigned by admin')
     return c.json({ ok: true })
   } catch (err) {
     if (err instanceof LogisticsDispatchError) return c.json({ error: err.message }, 400)
+    if (err instanceof LogisticsTrackingError) return c.json({ error: err.message }, 409)
     throw err
   }
 })
@@ -377,6 +412,7 @@ function jobRoutes(jobType: JobType) {
       return c.json({ ok: true })
     } catch (err) {
       if (err instanceof NotOwnedJobError) return c.json({ error: err.message }, 404)
+      if (err instanceof LogisticsTrackingError) return c.json({ error: err.message }, 409)
       throw err
     }
   })
@@ -389,6 +425,7 @@ function jobRoutes(jobType: JobType) {
       return c.json({ ok: true })
     } catch (err) {
       if (err instanceof NotOwnedJobError) return c.json({ error: err.message }, 404)
+      if (err instanceof LogisticsTrackingError) return c.json({ error: err.message }, 409)
       throw err
     }
   })
@@ -423,6 +460,7 @@ function jobRoutes(jobType: JobType) {
       if (err instanceof InvalidOtpError) return c.json({ error: err.message }, 400)
       if (err instanceof NotOwnedJobError) return c.json({ error: err.message }, 404)
       if (err instanceof LogisticsDeliveryError) return c.json({ error: err.message }, 400)
+      if (err instanceof LogisticsTrackingError) return c.json({ error: err.message }, 409)
       throw err
     }
   })
@@ -435,12 +473,21 @@ function jobRoutes(jobType: JobType) {
       return c.json({ ok: true })
     } catch (err) {
       if (err instanceof NotOwnedJobError) return c.json({ error: err.message }, 404)
+      if (err instanceof LogisticsTrackingError) return c.json({ error: err.message }, 409)
       throw err
     }
   })
 
+  // SECURITY FIX (Logistics Proof Gate, live cross-tenant test): this route
+  // was reading attempts by a bare job id with NO ownership check, letting
+  // any authenticated driver read another driver's job attempt history
+  // (including GPS coordinates) by guessing/incrementing the id. Now
+  // scoped through getJobForDriver exactly like every other job route.
   logisticsApi.get(`${prefix}/:id/attempts`, requireActiveDriver, async (c) => {
-    const attempts = await getAttemptsForJob(c.env.DB, jobType, Number(c.req.param('id')))
+    const driver = c.get('driverProfile' as any) as any
+    const job = await getJobForDriver(c.env.DB, jobType, Number(c.req.param('id')), driver.id)
+    if (!job) return c.json({ error: 'Job not found or not accessible to this actor' }, 404)
+    const attempts = await getAttemptsForJob(c.env.DB, jobType, job.id)
     return c.json(attempts)
   })
 }

@@ -50,7 +50,14 @@ const SHIPMENT_TRANSITIONS: Record<ShipmentStatus, ShipmentStatus[]> = {
   pickup_assigned: ['driver_en_route_to_pickup', 'cancelled'],
   driver_en_route_to_pickup: ['arrived_pickup', 'cancelled'],
   arrived_pickup: ['picked_up', 'failed'],
-  picked_up: ['in_transit'],
+  // Local/same-city delivery (single driver, no line-haul leg) goes straight
+  // to out_for_delivery; intercity shipments route through in_transit first.
+  // BUGFIX (Logistics Proof Gate, live E2E test): the intracity path was
+  // missing here, which silently stranded shipment.status at 'picked_up'
+  // forever for any single-driver local delivery (the .catch(() => {}) in
+  // markJobEnRoute was masking this as a harmless "already advanced" case
+  // instead of the illegal-transition rejection it actually was).
+  picked_up: ['in_transit', 'out_for_delivery'],
   in_transit: ['near_destination', 'out_for_delivery', 'lost', 'damaged'],
   near_destination: ['out_for_delivery'],
   out_for_delivery: ['arrived_dropoff', 'delivery_attempted'],
