@@ -127,21 +127,47 @@ export async function createPendingOrder(
   return { orderId, orderNumber, totalKobo: total, discountKobo, deliveryFeeKobo: deliveryFee }
 }
 
+export class OrderPaymentError extends Error {}
+
 /**
- * Marks an order paid, decrements listing stock, and puts payment into escrow_held state.
- * Called after Paystack webhook verification OR successful wallet debit.
- * Stock decrement happens here (not at order creation) so browsing/pending carts
- * never reserve inventory — only a confirmed payment does.
+ * ATOMIC CLAIM (compare-and-swap) for order payment — the exact enum-CAS
+ * pattern proven in payForBooking()/transitionBooking() (Booking
+ * Invariant 9) and reused in Unit 3 for payment_transactions.status,
+ * applied here to orders.payment_status. `WHERE id = ? AND payment_status
+ * = 'unpaid'` re-checks the guard AT WRITE TIME, not at an earlier read
+ * time, so only ONE concurrent/duplicate caller for the same orderId can
+ * ever win — every other caller gets rows_written = 0 and must treat this
+ * as "already processed", never re-running the financial side effect.
+ * Returns true iff THIS call won the claim.
  */
-export async function confirmOrderPayment(
+async function claimOrderForPayment(
   db: D1Database,
   orderId: number,
   provider: 'paystack' | 'wallet',
   providerReference: string
-) {
-  const order = await db.prepare('SELECT * FROM orders WHERE id = ?').bind(orderId).first<any>()
-  if (!order) throw new Error('Order not found')
-  if (order.payment_status !== 'unpaid') return // idempotent — already processed
+): Promise<boolean> {
+  const claim = await db
+    .prepare(
+      `UPDATE orders SET status = 'processing', payment_status = 'escrow_held',
+                          payment_provider = ?, payment_reference = ?, updated_at = datetime('now')
+       WHERE id = ? AND payment_status = 'unpaid'`
+    )
+    .bind(provider, providerReference, orderId)
+    .run()
+  return (claim.meta.rows_written ?? 0) > 0
+}
+
+/**
+ * Runs the payment side effects that must happen exactly once, AFTER the
+ * CAS claim above has already been won by the caller — decrements listing
+ * stock (so browsing/pending carts never reserve inventory, only a
+ * confirmed payment does), then the best-effort affiliate/logistics
+ * bookkeeping. Never called by a losing/duplicate claim attempt, so these
+ * side effects are structurally guaranteed to run at most once per order,
+ * regardless of how many concurrent or retried confirmation attempts occur.
+ */
+async function runOrderPaymentSideEffects(db: D1Database, orderId: number): Promise<void> {
+  const order = await db.prepare('SELECT user_id FROM orders WHERE id = ?').bind(orderId).first<{ user_id: number }>()
 
   const items = await db
     .prepare('SELECT listing_id, quantity FROM order_items WHERE order_id = ?')
@@ -153,26 +179,17 @@ export async function confirmOrderPayment(
       .prepare('UPDATE product_listings SET stock = MAX(0, stock - ?) WHERE id = ?')
       .bind(item.quantity, item.listing_id)
   )
-
-  await db.batch([
-    db
-      .prepare(
-        `UPDATE orders SET status = 'processing', payment_status = 'escrow_held',
-                            payment_provider = ?, payment_reference = ?, updated_at = datetime('now')
-         WHERE id = ?`
-      )
-      .bind(provider, providerReference, orderId),
-    ...stockUpdates
-  ])
+  if (stockUpdates.length > 0) await db.batch(stockUpdates)
 
   // Affiliate commission attribution — see src/lib/affiliate.ts's
   // confirmCommissionsForOrderIfAttributed doc comment for why this is a
   // safe no-op for the vast majority of orders (no attribution = zero writes).
-  // Deliberately AFTER the batch above so a payment is never blocked/delayed
-  // by affiliate bookkeeping, and wrapped so an affiliate-side error can
-  // never fail an otherwise-successful payment confirmation.
+  // Deliberately AFTER the stock batch above so a payment is never
+  // blocked/delayed by affiliate bookkeeping, and wrapped so an
+  // affiliate-side error can never fail an otherwise-successful payment
+  // confirmation.
   try {
-    await confirmCommissionsForOrderIfAttributed(db, orderId, order.user_id)
+    await confirmCommissionsForOrderIfAttributed(db, orderId, order!.user_id)
   } catch (err) {
     console.error('Affiliate commission attribution failed for order', orderId, err)
   }
@@ -180,10 +197,10 @@ export async function confirmOrderPayment(
   // Logistics Engine 2.0 (spec section 40): "delivery = operational
   // fulfillment workflow", not just a checkout fee line item. Creates the
   // REAL per-vendor shipment(s) for physical tracking. Deliberately AFTER
-  // the batch above and wrapped exactly like the affiliate call above it —
-  // a logistics failure must never fail an otherwise-successful payment,
-  // and existing checkout behavior (the flat delivery fee already charged)
-  // is completely unaffected either way.
+  // the stock batch above and wrapped exactly like the affiliate call
+  // above it — a logistics failure must never fail an otherwise-successful
+  // payment, and existing checkout behavior (the flat delivery fee already
+  // charged) is completely unaffected either way.
   try {
     await createShipmentsForPaidOrder(db, orderId)
   } catch (err) {
@@ -191,10 +208,119 @@ export async function confirmOrderPayment(
   }
 }
 
-/** Pays for an order directly from the user's NaijaDeals wallet. Throws InsufficientFundsError if short. */
+/**
+ * Marks an order paid, decrements listing stock, and puts payment into
+ * escrow_held state. Called after Paystack webhook verification OR
+ * Paystack client-side verify-payment (payOrderFromWallet has its OWN
+ * claim — see below — and calls runOrderPaymentSideEffects directly rather
+ * than going through this function).
+ *
+ * CONCURRENCY HARDENING (Engine 7 Phase 2, Unit 4 — G-3, see
+ * docs/ENGINE-7-PAYMENT-FINANCE-AUDIT.md §5 and
+ * docs/ENGINE-7-PHASE-2-FORENSIC-REVIEW.md §E for the original findings):
+ * the prior implementation read `order.payment_status`, branched on it
+ * (`if (order.payment_status !== 'unpaid') return`), then performed an
+ * UNCONDITIONAL UPDATE — the same TOCTOU class fixed for
+ * payment_transactions.status in Unit 3. This function is called from
+ * BOTH api-webhooks.ts's Paystack webhook AND api-orders.ts's
+ * /verify-payment — both of which already have their OWN CAS claim on
+ * payment_transactions.status (Unit 3), which makes a genuinely concurrent
+ * double-call into THIS function for the same orderId very unlikely in
+ * practice (both callers' own claim already ensures only one of them
+ * proceeds this far per underlying charge) — but relying on an UPSTREAM
+ * caller's CAS to protect a DOWNSTREAM function's own state mutation is
+ * exactly the kind of implicit, easily-broken-by-a-future-caller assumption
+ * this hardening pass exists to eliminate. This function now claims
+ * orders.payment_status ATOMICALLY itself via claimOrderForPayment(),
+ * making it safe to call from any current or future caller without
+ * depending on that caller's own idempotency guard.
+ */
+export async function confirmOrderPayment(
+  db: D1Database,
+  orderId: number,
+  provider: 'paystack' | 'wallet',
+  providerReference: string
+) {
+  const order = await db.prepare('SELECT id FROM orders WHERE id = ?').bind(orderId).first<{ id: number }>()
+  if (!order) throw new Error('Order not found')
+
+  const won = await claimOrderForPayment(db, orderId, provider, providerReference)
+  if (!won) return // idempotent — already processed (or lost a concurrent race) — never re-run stock/affiliate/logistics side effects
+
+  await runOrderPaymentSideEffects(db, orderId)
+}
+
+/**
+ * Pays for an order directly from the user's NaijaDeals wallet.
+ * Throws InsufficientFundsError if short, OrderPaymentError if the order
+ * is not found/not owned/already paid.
+ *
+ * CONCURRENCY HARDENING (Engine 7 Phase 2, Unit 4 — G-3, ordering fix):
+ * the prior implementation called debitWallet() FIRST, then
+ * confirmOrderPayment() second — the REVERSE of Booking's proven
+ * claim-before-debit ordering (payForBooking() in booking-payments.ts).
+ * This was flagged explicitly in Unit 1's forensic review as a real risk
+ * rather than blindly copied/inverted: if this function were EVER called
+ * twice concurrently for the SAME orderId (not reachable today — the only
+ * call site in api-orders.ts's /checkout route calls it exactly once,
+ * immediately after createPendingOrder() creates a brand-new order in the
+ * SAME request, so there is currently no legitimate path that re-invokes
+ * it for an existing orderId — but a future retry/idempotency-key feature,
+ * a bug, or a new caller could change that), debitWallet() has NO
+ * awareness of "orders" at all — it would happily succeed on BOTH
+ * concurrent calls (as long as the balance covered both), and only
+ * AFTERWARDS would confirmOrderPayment()'s (now-atomic, but still only
+ * ONE-winner) claim reject the second call. Result: the customer would be
+ * charged TWICE for an order that only ever gets marked paid ONCE — money
+ * taken with no matching order state, and no automatic path to return it.
+ *
+ * THE FIX inverts the ordering to genuinely mirror payForBooking()'s
+ * pattern (adapted, not copy-pasted: orders don't have a separate
+ * "escrow-held-but-not-yet-finalized" state distinct from their final
+ * paid state the way this function needs it, so the SAME
+ * claimOrderForPayment() used by confirmOrderPayment() is reused here
+ * directly rather than re-deriving a parallel claim shape): claim the
+ * order FIRST via the identical CAS UPDATE, and only debit the wallet if
+ * that claim actually won. If the wallet debit then fails (insufficient
+ * funds), the claim is explicitly rolled back to 'unpaid'/'pending_payment'
+ * so the order is never stuck in a claimed-but-unpaid limbo and the
+ * customer can legitimately retry after topping up — exactly
+ * payForBooking()'s own rollback guarantee, applied to orders' actual
+ * status/payment_status pair instead of booking's single payment_status
+ * field.
+ */
 export async function payOrderFromWallet(db: D1Database, orderId: number, userId: number, totalKobo: number) {
-  await debitWallet(db, userId, totalKobo, 'order_payment', String(orderId), `Payment for order`)
-  await confirmOrderPayment(db, orderId, 'wallet', `wallet-${orderId}-${Date.now()}`)
+  const order = await db.prepare('SELECT id FROM orders WHERE id = ? AND user_id = ?').bind(orderId, userId).first<{ id: number }>()
+  if (!order) throw new OrderPaymentError('Order not found or not owned by this customer')
+
+  const paymentReference = `WALLET-${orderId}-${Date.now()}-${Math.floor(Math.random() * 1e6)}`
+
+  // ATOMIC CLAIM FIRST (claim-before-debit, mirroring payForBooking()) —
+  // only ONE concurrent/duplicate caller for this orderId can ever win.
+  const won = await claimOrderForPayment(db, orderId, 'wallet', paymentReference)
+  if (!won) throw new OrderPaymentError('This order has already been paid')
+
+  try {
+    await debitWallet(db, userId, totalKobo, 'order_payment', String(orderId), `Payment for order`)
+  } catch (err) {
+    // Roll back the claim so the order isn't left stuck in
+    // 'escrow_held'/'processing' with no actual money ever having moved —
+    // mirrors payForBooking()'s exact rollback guarantee. Guarded by both
+    // orderId AND this attempt's own unique payment_reference so a rollback
+    // can never clobber a DIFFERENT successful claim (impossible here since
+    // paymentReference is unique per call, but guarded anyway per the
+    // established convention).
+    await db
+      .prepare(
+        `UPDATE orders SET status = 'pending_payment', payment_status = 'unpaid', payment_provider = NULL, payment_reference = NULL
+         WHERE id = ? AND payment_status = 'escrow_held' AND payment_reference = ?`
+      )
+      .bind(orderId, paymentReference)
+      .run()
+    throw err
+  }
+
+  await runOrderPaymentSideEffects(db, orderId)
 }
 
 export class OrderCancellationError extends Error {}

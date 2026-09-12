@@ -3,7 +3,7 @@ import type { AppEnv, OrderRow, CartItemRow } from '../types'
 import { requireAuth } from '../lib/auth'
 import { getOrCreateCartId, getCartItems, removeCartItemsByListingIds, getBuyNowItem } from '../lib/cart'
 import { getAddress } from '../lib/addresses'
-import { createPendingOrder, payOrderFromWallet, InsufficientFundsError, type DeliveryMethod } from '../lib/orders'
+import { createPendingOrder, payOrderFromWallet, InsufficientFundsError, OrderPaymentError, type DeliveryMethod } from '../lib/orders'
 import { initializePaystackTransaction, verifyPaystackTransaction } from '../lib/paystack'
 import { confirmOrderPayment, cancelOrder, OrderCancellationError } from '../lib/orders'
 import { transitionOrderItemStatus, OrderLifecycleError, IllegalTransitionError, NotOwnedOrderItemError, type OrderItemStatus } from '../lib/order-lifecycle'
@@ -233,6 +233,15 @@ ordersApi.post('/checkout', async (c) => {
     } catch (err) {
       if (err instanceof InsufficientFundsError) {
         return c.json({ success: true, orderNumber, paid: false, error: 'insufficient_wallet_balance' }, 200)
+      }
+      if (err instanceof OrderPaymentError) {
+        // Structurally unreachable on THIS call site today (createPendingOrder()
+        // just created a brand-new, always-unpaid order in this same request,
+        // immediately above) — but payOrderFromWallet()'s own CAS claim
+        // (Unit 4 hardening) can now genuinely throw this if it is ever called
+        // a second time for the same order by a future caller/retry. Never let
+        // that surface as an opaque 500 — report the true state.
+        return c.json({ success: true, orderNumber, paid: false, error: 'order_already_paid' }, 200)
       }
       throw err
     }
