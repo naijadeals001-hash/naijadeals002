@@ -13,8 +13,8 @@
  * SAFETY INVARIANTS enforced here:
  *   - a refund can never exceed the item's/order's captured amount
  *     (line_total_kobo, or final_price_kobo once fulfilled) minus whatever
- *     has already been refunded against it — prevents both "refund more
- *     than was paid" and "duplicate refund" in one check.
+ *     has already been refunded/claimed against it — prevents both
+ *     "refund more than was paid" and "duplicate refund" in one check.
  *   - every refund references order_id (+ order_item_id when item-scoped)
  *     — never a bare amount with no commerce context.
  *   - seller/admin-initiated refunds are both supported, but always
@@ -22,6 +22,32 @@
  *     this module itself does not re-derive "is this actor allowed",
  *     it only enforces the financial invariants once ownership /role is
  *     already established.
+ *
+ * CONCURRENCY HARDENING (Engine 7 Phase 2, Unit 5 — G-4, see
+ * docs/ENGINE-7-PHASE-2-FORENSIC-REVIEW.md §F for the original finding):
+ * the prior implementation computed `alreadyRefunded` by summing existing
+ * `status='completed'` rows, checked `amountKobo <= remaining` in
+ * application code, and ONLY THEN inserted the new refund row — a classic
+ * read-used-to-authorize-a-write race. Two concurrent
+ * createAndExecuteRefund() calls against the SAME order/item could both
+ * read the same `alreadyRefunded` sum, both independently pass the
+ * `remaining` check, and both proceed to insert+credit — together
+ * exceeding the captured amount. Unlike G-1/G-2/G-3 (Booking/Wallet/Order),
+ * this is NOT a single-row enum-state claim (there is no one
+ * "refund_status" column on the order to CAS on — an order can legally
+ * have MANY completed partial refunds against it over time, so
+ * `resolveDispute()`'s exact `UPDATE ... WHERE status IN (...)` shape does
+ * NOT transfer here; it was considered and explicitly rejected — see
+ * claimRefundSlot()'s own header comment below for why). This is instead
+ * an AGGREGATE-CONSTRAINT race: many rows may exist, but their SUM must
+ * never exceed a cap. The fix re-derives Unit 2's own generalization
+ * (numeric-CAS via a guarded write, not an enum-CAS) one level further: a
+ * guarded INSERT whose WHERE clause re-evaluates the SAME aggregate SUM
+ * AT INSERT TIME, inside the single atomic statement SQLite/D1 actually
+ * executes it as — so no two concurrent callers can ever both see
+ * "room available" for amounts that together exceed the cap, no matter
+ * how many already-completed/pending rows exist or how they're
+ * interleaved.
  */
 import { creditWallet } from './wallet'
 
@@ -43,17 +69,110 @@ interface OrderForRefund {
   total_kobo: number
 }
 
+/**
+ * Read-only diagnostic/display helper ONLY (e.g. showing "already refunded:
+ * X" in an admin UI before submission) — NEVER used to authorize a write.
+ * The actual safety check lives entirely inside claimRefundSlot()'s single
+ * atomic statement below, which re-derives this exact same SUM itself, at
+ * write time, inside the guarded INSERT — this function's result is
+ * necessarily stale the instant a concurrent caller writes, which is
+ * exactly why it must never gate a mutation.
+ */
 async function getAlreadyRefundedKobo(db: D1Database, orderId: number, orderItemId: number | null): Promise<number> {
   const row = orderItemId
     ? await db
-        .prepare(`SELECT COALESCE(SUM(amount_kobo), 0) AS total FROM refunds WHERE order_item_id = ? AND status = 'completed'`)
+        .prepare(`SELECT COALESCE(SUM(amount_kobo), 0) AS total FROM refunds WHERE order_item_id = ? AND status IN ('completed', 'pending')`)
         .bind(orderItemId)
         .first<{ total: number }>()
     : await db
-        .prepare(`SELECT COALESCE(SUM(amount_kobo), 0) AS total FROM refunds WHERE order_id = ? AND order_item_id IS NULL AND status = 'completed'`)
+        .prepare(`SELECT COALESCE(SUM(amount_kobo), 0) AS total FROM refunds WHERE order_id = ? AND order_item_id IS NULL AND status IN ('completed', 'pending')`)
         .bind(orderId)
         .first<{ total: number }>()
   return row?.total ?? 0
+}
+
+/**
+ * ATOMIC CLAIM for a refund amount against an aggregate refundable cap.
+ *
+ * WHY NOT resolveDispute()'s enum-CAS shape: that pattern claims a SINGLE
+ * row's SINGLE status transition (`UPDATE ... SET status=? WHERE id=? AND
+ * status IN (allowed-old-values)`) — it works because a dispute has
+ * exactly one mutable state to guard. A refund has no such single state:
+ * an order/item can legitimately accumulate many independent completed
+ * partial refunds over its lifetime, so there is no "the one row" to CAS
+ * on — the invariant to protect is an AGGREGATE (SUM of many rows <=
+ * captured amount), not a single row's transition. Blindly copying the
+ * enum-CAS shape here would only protect against re-claiming the SAME
+ * refund row twice — it does nothing to stop two DIFFERENT concurrent
+ * refund attempts from each seeing "there's room" and both inserting.
+ *
+ * THE FIX: an atomic guarded INSERT ... SELECT ... WHERE, where the WHERE
+ * clause's guard condition is a correlated subquery that re-computes the
+ * SAME "amount already claimed" SUM the read-then-check code used to
+ * compute — but INSIDE the single INSERT statement SQLite/D1 actually
+ * executes atomically (D1/SQLite guarantees a single statement's read and
+ * write happen as one indivisible unit — no other statement can interleave
+ * between this statement's internal SELECT and its INSERT). This is the
+ * exact generalization of Unit 2's numeric-CAS
+ * (`UPDATE wallet_accounts SET balance = balance - ? WHERE balance >= ?`)
+ * to an INSERT-based aggregate constraint instead of a single mutable
+ * column: the guard is re-evaluated at write time by the SAME atomic
+ * statement, not by an earlier, now-stale read.
+ *
+ * The SUM deliberately includes BOTH 'completed' AND 'pending' rows (not
+ * just 'completed') — this closes a SECOND, subtler race the original
+ * code had even ignoring concurrency: the original SUM only counted
+ * 'completed' rows, meaning the brief window between "insert the pending
+ * row" and "mark it completed" was invisible to the guard. Counting
+ * 'pending' too means the CLAIM itself (this INSERT) is what reserves the
+ * capacity, not the eventual completion — mirroring claim-before-debit's
+ * own principle (Unit 4) at the aggregate-constraint level: reserve first,
+ * then execute the money movement, never the other way round.
+ *
+ * Returns the new refund row's id if the claim won, or null if it lost
+ * (this amount would have pushed the total claimed beyond capturedKobo).
+ */
+async function claimRefundSlot(
+  db: D1Database,
+  orderId: number,
+  orderItemId: number | null,
+  vendorId: number | null,
+  amountKobo: number,
+  capturedKobo: number,
+  reason: string,
+  refundType: string,
+  initiatedByUserId: number,
+  initiatedByRole: string
+): Promise<number | null> {
+  const scopeGuard = orderItemId !== null ? 'order_item_id = ?' : 'order_id = ? AND order_item_id IS NULL'
+  const scopeBind = orderItemId !== null ? orderItemId : orderId
+
+  const claim = await db
+    .prepare(
+      `INSERT INTO refunds (order_id, order_item_id, vendor_id, amount_kobo, reason, refund_type, status, initiated_by_user_id, initiated_by_role)
+       SELECT ?, ?, ?, ?, ?, ?, 'pending', ?, ?
+       WHERE ? <= (? - COALESCE(
+         (SELECT SUM(amount_kobo) FROM refunds WHERE ${scopeGuard} AND status IN ('completed', 'pending')),
+         0
+       ))`
+    )
+    .bind(
+      orderId,
+      orderItemId,
+      vendorId,
+      amountKobo,
+      reason,
+      refundType,
+      initiatedByUserId,
+      initiatedByRole,
+      amountKobo,
+      capturedKobo,
+      scopeBind
+    )
+    .run()
+
+  if ((claim.meta.rows_written ?? 0) === 0) return null
+  return Number(claim.meta.last_row_id)
 }
 
 export interface CreateRefundInput {
@@ -70,12 +189,17 @@ export interface CreateRefundInput {
  * Creates AND immediately executes a refund (no separate approval queue in
  * this build — every caller must already have verified authorization at
  * the route layer, e.g. requirePlatformRole('admin') or seller ownership
- * of the item). Executes the financial credit via creditWallet, then
- * records the resulting wallet_ledger row id back onto the refunds row so
- * the two are mutually traceable.
+ * of the item). Claims an aggregate-refundable-amount slot ATOMICALLY via
+ * claimRefundSlot() FIRST (mirroring Unit 4's claim-before-debit
+ * principle), then executes the financial credit via creditWallet SECOND,
+ * rolling the claim back to `status='rejected'` if the credit ever fails
+ * — the refund row is never left silently 'pending' forever with no
+ * credit and no explanation.
  *
  * Throws RefundError if amountKobo would push total refunds for this
- * order/item beyond the captured amount, or if amountKobo <= 0.
+ * order/item beyond the captured amount (now verified ATOMICALLY, safe
+ * under concurrency — see claimRefundSlot()'s header comment), or if
+ * amountKobo <= 0.
  */
 export async function createAndExecuteRefund(db: D1Database, input: CreateRefundInput): Promise<{ refundId: number; walletLedgerId: number; newBalanceKobo: number }> {
   if (input.amountKobo <= 0) throw new RefundError('Refund amount must be positive')
@@ -97,49 +221,81 @@ export async function createAndExecuteRefund(db: D1Database, input: CreateRefund
     capturedKobo = order.total_kobo
   }
 
-  const alreadyRefunded = await getAlreadyRefundedKobo(db, input.orderId, input.orderItemId ?? null)
-  const remaining = capturedKobo - alreadyRefunded
-  if (input.amountKobo > remaining) {
+  // ATOMIC CLAIM FIRST — see claimRefundSlot()'s header comment for the
+  // full rationale. This single statement re-verifies "is there still
+  // room under the cap" AND reserves this amount's share of it, as one
+  // indivisible operation — no concurrent caller can ever observe a
+  // window where two refunds both believe they have room for the same
+  // capacity.
+  const refundId = await claimRefundSlot(
+    db,
+    input.orderId,
+    input.orderItemId ?? null,
+    vendorId,
+    input.amountKobo,
+    capturedKobo,
+    input.reason,
+    input.refundType,
+    input.initiatedByUserId,
+    input.initiatedByRole
+  )
+  if (refundId === null) {
+    // Re-read the current aggregate purely for a helpful, accurate error
+    // message — this read is NOT what authorized the rejection (the claim
+    // statement above already made that decision atomically); by the time
+    // this message is composed, the true remaining amount may have
+    // changed again, and that's fine — it's diagnostic text, not a gate.
+    const alreadyClaimed = await getAlreadyRefundedKobo(db, input.orderId, input.orderItemId ?? null)
     throw new RefundError(
-      `Refund amount (${input.amountKobo}) exceeds the remaining refundable amount (${remaining}) for this ${input.orderItemId ? 'item' : 'order'} — captured: ${capturedKobo}, already refunded: ${alreadyRefunded}`
+      `Refund amount (${input.amountKobo}) exceeds the remaining refundable amount (${Math.max(0, capturedKobo - alreadyClaimed)}) for this ${input.orderItemId ? 'item' : 'order'} — captured: ${capturedKobo}, already refunded/claimed: ${alreadyClaimed}`
     )
   }
 
-  // Insert the pending commerce-context row FIRST so we have a refund_id to
-  // reference from the wallet_ledger description/reference_id, then
-  // execute the actual credit, then mark completed + store the ledger id.
-  const inserted = await db
-    .prepare(
-      `INSERT INTO refunds (order_id, order_item_id, vendor_id, amount_kobo, reason, refund_type, status, initiated_by_user_id, initiated_by_role)
-       VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?)`
+  try {
+    // reference_id is the refund's OWN id (not the bare orderId) so that
+    // TWO concurrent/sequential refunds against the SAME order (e.g. two
+    // different items, or two partial refunds) can never collide on the
+    // same reference_id — each credit is uniquely traceable back to
+    // exactly the refund row that caused it, never "whichever wallet_ledger
+    // row happens to be most recent for this order" (the prior
+    // implementation's lookup-by-orderId, ORDER BY id DESC LIMIT 1, could
+    // have silently attached the WRONG ledger id to a refund row if two
+    // refunds for the same order completed close together).
+    const newBalanceKobo = await creditWallet(
+      db,
+      order.user_id,
+      input.amountKobo,
+      'order_refund',
+      String(refundId),
+      `Refund for order #${input.orderId}${input.orderItemId ? ` (item #${input.orderItemId})` : ''}: ${input.reason}`
     )
-    .bind(input.orderId, input.orderItemId ?? null, vendorId, input.amountKobo, input.reason, input.refundType, input.initiatedByUserId, input.initiatedByRole)
-    .run()
-  const refundId = Number(inserted.meta.last_row_id)
 
-  const newBalanceKobo = await creditWallet(
-    db,
-    order.user_id,
-    input.amountKobo,
-    'order_refund',
-    String(input.orderId),
-    `Refund for order #${input.orderId}${input.orderItemId ? ` (item #${input.orderItemId})` : ''}: ${input.reason}`
-  )
+    const ledgerRow = await db
+      .prepare(`SELECT id FROM wallet_ledger WHERE user_id = ? AND reference_type = 'order_refund' AND reference_id = ? ORDER BY id DESC LIMIT 1`)
+      .bind(order.user_id, String(refundId))
+      .first<{ id: number }>()
 
-  // Look up the ledger row creditWallet just wrote (most recent credit row
-  // for this user with this reference) so refunds.wallet_ledger_id is
-  // traceable — never guessed/derived from newBalanceKobo alone.
-  const ledgerRow = await db
-    .prepare(`SELECT id FROM wallet_ledger WHERE user_id = ? AND reference_type = 'order_refund' AND reference_id = ? ORDER BY id DESC LIMIT 1`)
-    .bind(order.user_id, String(input.orderId))
-    .first<{ id: number }>()
+    await db
+      .prepare(`UPDATE refunds SET status = 'completed', wallet_ledger_id = ?, completed_at = datetime('now') WHERE id = ?`)
+      .bind(ledgerRow?.id ?? null, refundId)
+      .run()
 
-  await db
-    .prepare(`UPDATE refunds SET status = 'completed', wallet_ledger_id = ?, completed_at = datetime('now') WHERE id = ?`)
-    .bind(ledgerRow?.id ?? null, refundId)
-    .run()
-
-  return { refundId, walletLedgerId: ledgerRow?.id ?? 0, newBalanceKobo }
+    return { refundId, walletLedgerId: ledgerRow?.id ?? 0, newBalanceKobo }
+  } catch (err) {
+    // The credit failed AFTER the claim succeeded — roll the claim back to
+    // 'rejected' (a real, permanent status this table's own CHECK
+    // constraint already allows) so the claimed amount is released back
+    // into the aggregate cap and this refund attempt is visibly failed,
+    // never silently stuck 'pending' forever holding capacity hostage.
+    // Never rolled back to 'pending' (which would just re-race) or
+    // deleted (an audit trail of the failed attempt is exactly what an
+    // admin investigating a payment-provider outage needs).
+    await db
+      .prepare(`UPDATE refunds SET status = 'rejected', completed_at = datetime('now') WHERE id = ? AND status = 'pending'`)
+      .bind(refundId)
+      .run()
+    throw err
+  }
 }
 
 export async function getRefundsForOrder(db: D1Database, orderId: number) {
