@@ -87,6 +87,9 @@ export class ApiClient {
   put(path, body, opts) {
     return this.request('PUT', path, { ...opts, body })
   }
+  patch(path, body, opts) {
+    return this.request('PATCH', path, { ...opts, body })
+  }
   delete(path, opts) {
     return this.request('DELETE', path, opts)
   }
@@ -111,10 +114,42 @@ export async function promoteToAdmin(userId) {
   await execD1(`UPDATE users SET role = 'admin' WHERE id = ${Number(userId)}`)
 }
 
+/**
+ * Registers a brand-new user via the REAL HTTP endpoint, then directly seeds
+ * a fresh vendors row owned by that user with onboarding already marked
+ * complete (verification_status='verified', store_status='active',
+ * onboarding_completed_at=now) — i.e. exactly the end-state a real seller
+ * onboarding wizard would leave behind, never a state the app itself
+ * couldn't produce. This is a direct-D1 SEED action only (mirrors
+ * promoteToAdmin's and payment-engine/order-fixtures.mjs's established
+ * rationale: there is no public self-service "become an active seller
+ * instantly" endpoint, and there shouldn't be one).
+ *
+ * SECURITY INVARIANT PRESERVED: this does NOT change how the runtime
+ * resolves seller identity. src/routes/api-seller.ts's resolveSellerVendor()
+ * still derives "which vendor am I" EXCLUSIVELY from
+ * `vendors.user_id = c.get('user').id` (the authenticated session) — this
+ * helper only pre-populates that vendors row for a test's own fresh user,
+ * it never grants a client the ability to name/select an arbitrary
+ * vendor_id. A test using this helper acts as a genuinely distinct seller
+ * for every call (fresh user + fresh vendor row), so cross-vendor isolation
+ * assertions remain meaningful.
+ */
+export async function registerSeller(label) {
+  const { client, userId, email } = await registerUser(`seller_${label}`)
+  const nonce = `${Date.now()}_${Math.floor(Math.random() * 1e9)}`
+  await execD1(
+    `INSERT INTO vendors (slug, name, user_id, verification_status, store_status, onboarding_completed_at)
+     VALUES ('nftest-vendor-${nonce}', 'Notif Test Seller ${nonce}', ${userId}, 'verified', 'active', datetime('now'))`
+  )
+  const vendorRow = await queryOneD1(`SELECT id FROM vendors WHERE user_id = ${userId}`)
+  return { client, userId, email, vendorId: vendorRow.id }
+}
+
 /** Creates a minimal paid order for a fresh customer + vendor, returning orderId/orderItemId — reuses real seed category/vendor rows exactly like tests/payment-engine/helpers/order-fixtures.mjs, but through the real HTTP checkout flow (payment_method: 'wallet', pre-funded wallet) rather than a fabricated endpoint, so the ACTUAL order-lifecycle/notification event writer path is exercised. */
-export async function createAndPayOrder(client, userId, { priceKobo = 500000 } = {}) {
+export async function createAndPayOrder(client, userId, { priceKobo = 500000, vendorId = null } = {}) {
   const catalogRow = await queryOneD1(`SELECT id FROM categories LIMIT 1`)
-  const vendorRow = await queryOneD1(`SELECT id FROM vendors LIMIT 1`)
+  const vendorRow = vendorId ? { id: vendorId } : await queryOneD1(`SELECT id FROM vendors LIMIT 1`)
   const nonce = `${Date.now()}_${Math.floor(Math.random() * 1e9)}`
   await execD1(
     `INSERT INTO products (slug, category_id, title, image_url) VALUES ('nftest-prod-${nonce}', ${catalogRow.id}, 'Notif Test Product ${nonce}', '/static/ph.svg')`
@@ -149,4 +184,18 @@ export async function createAndPayOrder(client, userId, { priceKobo = 500000 } =
   const orderId = orderRow.id
   const itemRow = await queryOneD1(`SELECT id, vendor_id FROM order_items WHERE order_id = ${orderId} LIMIT 1`)
   return { orderId, orderNumber, orderItemId: itemRow.id, vendorId: itemRow.vendor_id }
+}
+
+/**
+ * Drives the REAL seller-facing HTTP endpoint (PATCH
+ * /api/seller/orders/items/:orderItemId) as the AUTHENTICATED seller client
+ * that owns the item's vendor_id — exercises the actual
+ * transitionOrderItemStatus() event-writer path exactly as a real seller
+ * action would, rather than calling the library function directly. The
+ * seller identity comes entirely from `sellerClient`'s own session cookie
+ * (via resolveSellerVendor() server-side) — never from a client-supplied
+ * vendor_id — preserving the ownership invariant end-to-end.
+ */
+export async function sellerTransitionItem(sellerClient, orderItemId, status, extra = {}) {
+  return sellerClient.patch(`/api/seller/orders/items/${orderItemId}`, { status, ...extra })
 }

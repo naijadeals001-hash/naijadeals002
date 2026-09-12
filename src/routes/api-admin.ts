@@ -234,3 +234,11 @@ adminApi.post('/notifications/process-outbox', async (c) => {
   const result = await processOutboxBatch(c.env.DB, limit)
   return c.json(result)
 })
+
+/** Bounded retry pass for transiently-failed deliveries whose next_retry_at has arrived (Phase 8's explicit retry-scheduler decision — see notifications.ts's retryFailedDeliveries doc comment). Admin-only, never automatic/hidden, never re-delivers a permanently-failed or already-delivered row. */
+adminApi.post('/notifications/retry-failed', async (c) => {
+  const { retryFailedDeliveries } = await import('../lib/notifications')
+  const limit = Math.min(Number(c.req.query('limit') ?? 25) || 25, 100)
+  const result = await retryFailedDeliveries(c.env.DB, limit)
+  return c.json(result)
+})

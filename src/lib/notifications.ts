@@ -98,10 +98,23 @@ export interface EnqueueResult {
  * business occurrence — only the first call creates a row, every
  * subsequent call is a confirmed no-op (created: false). This is the CAS
  * guard: `INSERT ... ON CONFLICT(idempotency_key) DO NOTHING`, then a
- * SELECT to report which outcome actually happened (D1's
- * `meta.rows_written` after an ON CONFLICT DO NOTHING is 0 for a
- * no-op INSERT and 1 when it truly inserted — checked directly rather than
- * inferred).
+ * SELECT to report which outcome actually happened.
+ *
+ * BUG FOUND AND FIXED (Engine 9 continuation session, evidence-based
+ * diagnosis — see docs/ENGINE-9-COMMUNICATION-NOTIFICATION-AUDIT.md's
+ * "Bugs Found And Fixed" section for the full repro): this function
+ * originally checked `result.meta.rows_written`, copying the CAS idiom
+ * Engine 7 uses for conditional UPDATE statements (wallet.ts/orders.ts/
+ * refunds.ts/order-settlement.ts, where `rows_written` genuinely is 0 for
+ * a no-op UPDATE — verified by direct repro). That idiom does NOT hold
+ * for `INSERT ... ON CONFLICT DO NOTHING` on this project's D1/Miniflare
+ * version: a no-op conflicting insert still reports `rows_written: 1`
+ * (secondary index bookkeeping, confirmed via a minimal getPlatformProxy()
+ * repro), while `meta.changes` correctly reports 0 for the no-op and 1 for
+ * a genuine insert in every case tested. Fixed by checking `meta.changes`
+ * instead — verified by the idempotency test suite
+ * (02.idempotency-concurrency.test.mjs) that originally caught this bug
+ * failing before the fix and passing after.
  *
  * Never throws for a duplicate. Only throws for a genuine input error
  * (unknown recipient — FK violation) or a real DB failure, and even then
@@ -127,7 +140,7 @@ export async function enqueueNotificationEvent(db: D1Database, input: EnqueueEve
     )
     .run()
 
-  const created = (result.meta.rows_written ?? 0) > 0
+  const created = (result.meta.changes ?? 0) > 0
   if (!created) {
     // Duplicate key — return the EXISTING row's id so callers that need it
     // (e.g. immediately processing it inline) still get a valid outboxId.
@@ -242,24 +255,37 @@ export async function processOutboxEvent(db: D1Database, outboxId: number): Prom
   }
 }
 
-/** Dispatches ONE channel for ONE outbox event. Creates/updates its notification_deliveries row. Never throws — every failure mode is recorded as delivery-row state. */
-async function dispatchChannel(db: D1Database, event: OutboxRow, channel: NotificationChannel, payload: Record<string, unknown>): Promise<void> {
-  // CAS-safe delivery row creation: UNIQUE(outbox_id, channel) means a
-  // concurrent re-processing attempt can never create a second row for the
-  // same (event, channel) pair.
-  const insert = await db
-    .prepare(`INSERT INTO notification_deliveries (outbox_id, channel, status) VALUES (?, ?, 'queued') ON CONFLICT(outbox_id, channel) DO NOTHING`)
-    .bind(event.id, channel)
-    .run()
-  if ((insert.meta.rows_written ?? 0) === 0) return // already dispatched (or in flight) — no-op, not an error
+/**
+ * Retry scheduler decision (Phase 8, explicitly resolved — see
+ * docs/ENGINE-9-COMMUNICATION-NOTIFICATION-AUDIT.md): this repo has no
+ * cron/Queue binding available (hosted-deploy rejects `triggers`), so a
+ * background retry worker is not implementable here. Instead, retry is a
+ * BOUNDED, request-triggered catch-up exactly like the outbox's own
+ * catch-up pattern (processOutboxBatch) — `retryFailedDeliveries()` below
+ * is called from the same admin-triggered endpoint. Bounded by
+ * MAX_DELIVERY_ATTEMPTS (never infinite), backs off exponentially per
+ * attempt, and re-uses the SAME notification_deliveries row (never inserts
+ * a duplicate — UNIQUE(outbox_id, channel) plus a CAS claim on retry).
+ * Only 'transient' failures are ever retried; 'permanent' failures and
+ * anything that has exhausted MAX_DELIVERY_ATTEMPTS get no next_retry_at
+ * and are left as a genuinely terminal 'failed' delivery.
+ */
+const MAX_DELIVERY_ATTEMPTS = 5
+const RETRY_BACKOFF_MINUTES = [1, 5, 15, 60, 240]
 
-  const deliveryRow = await db
-    .prepare('SELECT id FROM notification_deliveries WHERE outbox_id = ? AND channel = ?')
-    .bind(event.id, channel)
-    .first<{ id: number }>()
-  if (!deliveryRow) return
-  const deliveryId = deliveryRow.id
+function nextRetryDelayMinutes(attemptCountAfterThisFailure: number): number | null {
+  if (attemptCountAfterThisFailure >= MAX_DELIVERY_ATTEMPTS) return null
+  return RETRY_BACKOFF_MINUTES[Math.min(attemptCountAfterThisFailure - 1, RETRY_BACKOFF_MINUTES.length - 1)]
+}
 
+/**
+ * Performs the actual render+dispatch for one already-claimed delivery
+ * row and writes the outcome back to that SAME row (deliveryId is fixed
+ * up front — this function never inserts, so it is safe to call from
+ * both the initial fan-out path and the later retry path without risking
+ * a duplicate delivery row for the same (outbox_id, channel) pair).
+ */
+async function performDispatchAndRecord(db: D1Database, event: OutboxRow, channel: NotificationChannel, payload: Record<string, unknown>, deliveryId: number, attemptCountBefore: number): Promise<void> {
   const { renderTemplate } = await import('./notification-templates')
   const rendered = await renderTemplate(db, event.event_type, channel, payload)
 
@@ -304,16 +330,105 @@ async function dispatchChannel(db: D1Database, event: OutboxRow, channel: Notifi
     actionUrl: rendered?.actionUrl ?? null,
   })
 
+  const attemptCountAfter = attemptCountBefore + 1
+  const retryDelayMinutes = outcome.status === 'failed' && outcome.failureClass === 'transient' ? nextRetryDelayMinutes(attemptCountAfter) : null
+
   await db
     .prepare(
       `UPDATE notification_deliveries
-       SET status = ?, provider_key = ?, attempt_count = attempt_count + 1, last_attempted_at = datetime('now'),
+       SET status = ?, provider_key = ?, attempt_count = ?, last_attempted_at = datetime('now'),
            delivered_at = CASE WHEN ? = 'delivered' THEN datetime('now') ELSE delivered_at END,
-           last_error = ?, failure_class = ?, provider_response_json = ?, updated_at = datetime('now')
+           last_error = ?, failure_class = ?, provider_response_json = ?,
+           next_retry_at = ${retryDelayMinutes !== null ? `datetime('now', '+${retryDelayMinutes} minutes')` : 'NULL'},
+           updated_at = datetime('now')
        WHERE id = ?`
     )
-    .bind(outcome.status, outcome.providerKey, outcome.status, outcome.error ?? null, outcome.failureClass ?? null, JSON.stringify(outcome.raw ?? {}), deliveryId)
+    .bind(outcome.status, outcome.providerKey, attemptCountAfter, outcome.status, outcome.error ?? null, outcome.failureClass ?? null, JSON.stringify(outcome.raw ?? {}), deliveryId)
     .run()
+}
+
+/** Dispatches ONE channel for ONE outbox event. Creates its notification_deliveries row (CAS-safe). Never throws — every failure mode is recorded as delivery-row state. */
+async function dispatchChannel(db: D1Database, event: OutboxRow, channel: NotificationChannel, payload: Record<string, unknown>): Promise<void> {
+  // CAS-safe delivery row creation: UNIQUE(outbox_id, channel) means a
+  // concurrent re-processing attempt can never create a second row for the
+  // same (event, channel) pair. Uses meta.changes, not meta.rows_written —
+  // see enqueueNotificationEvent's doc comment for the evidence-based
+  // reason (INSERT...ON CONFLICT DO NOTHING no-ops report rows_written>0
+  // on this D1/Miniflare version; changes is the one that's actually 0).
+  const insert = await db
+    .prepare(`INSERT INTO notification_deliveries (outbox_id, channel, status) VALUES (?, ?, 'queued') ON CONFLICT(outbox_id, channel) DO NOTHING`)
+    .bind(event.id, channel)
+    .run()
+  if ((insert.meta.changes ?? 0) === 0) return // already dispatched (or in flight) — no-op, not an error
+
+  const deliveryRow = await db
+    .prepare('SELECT id FROM notification_deliveries WHERE outbox_id = ? AND channel = ?')
+    .bind(event.id, channel)
+    .first<{ id: number }>()
+  if (!deliveryRow) return
+
+  await performDispatchAndRecord(db, event, channel, payload, deliveryRow.id, 0)
+}
+
+export interface RetryOutcome {
+  attempted: number
+  retried: number
+}
+
+/**
+ * Bounded catch-up pass for TRANSIENTLY-failed deliveries whose
+ * next_retry_at has arrived. CAS-claims each row (UPDATE ... WHERE
+ * status='failed' — a racing concurrent retry pass that already claimed
+ * it sees 0 rows_written and safely skips), so two concurrent retry
+ * passes can never double-dispatch the same delivery row. Reuses the
+ * SAME row via performDispatchAndRecord — never creates a duplicate
+ * delivery for the same (outbox_id, channel) pair. Called from the same
+ * admin-triggered "process on request" endpoint as processOutboxBatch —
+ * no cron, no fake background worker.
+ */
+export async function retryFailedDeliveries(db: D1Database, limit = 25): Promise<RetryOutcome> {
+  const { results } = await db
+    .prepare(
+      `SELECT id, outbox_id, channel, attempt_count FROM notification_deliveries
+       WHERE status = 'failed' AND failure_class = 'transient' AND next_retry_at IS NOT NULL
+             AND next_retry_at <= datetime('now') AND attempt_count < ?
+       ORDER BY next_retry_at ASC LIMIT ?`
+    )
+    .bind(MAX_DELIVERY_ATTEMPTS, limit)
+    .all<{ id: number; outbox_id: number; channel: NotificationChannel; attempt_count: number }>()
+
+  let retried = 0
+  for (const row of results) {
+    // CAS claim: only proceed if this row is STILL 'failed' at the moment
+    // we flip it — a concurrent retry pass that got here first already
+    // moved it off 'failed', so this UPDATE affects 0 rows and we skip.
+    const claim = await db
+      .prepare(`UPDATE notification_deliveries SET status = 'queued', updated_at = datetime('now') WHERE id = ? AND status = 'failed'`)
+      .bind(row.id)
+      .run()
+    if ((claim.meta.rows_written ?? 0) === 0) continue
+
+    const event = await db.prepare('SELECT * FROM notification_outbox WHERE id = ?').bind(row.outbox_id).first<OutboxRow>()
+    if (!event) continue
+    const payload = JSON.parse(event.payload_json || '{}') as Record<string, unknown>
+
+    try {
+      await performDispatchAndRecord(db, event, row.channel, payload, row.id, row.attempt_count)
+      retried++
+    } catch (err) {
+      // Never let a retry-pass failure propagate — record it and move on
+      // to the next row; this delivery keeps its now-'queued' state only
+      // transiently (a future retry pass will see it as neither 'failed'
+      // nor eligible until manually reconciled — acceptable because this
+      // is a rare in-process-exception case, not the normal path).
+      console.error(`notifications: retryFailedDeliveries dispatch failed for delivery ${row.id} (isolated)`, err)
+      await db
+        .prepare(`UPDATE notification_deliveries SET status = 'failed', failure_class = 'transient', next_retry_at = NULL, last_error = ?, updated_at = datetime('now') WHERE id = ?`)
+        .bind(String((err as any)?.message ?? err), row.id)
+        .run()
+    }
+  }
+  return { attempted: results.length, retried }
 }
 
 /**
