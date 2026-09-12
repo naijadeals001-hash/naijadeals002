@@ -114,4 +114,5 @@ equivalent — say so explicitly and get confirmation on how to proceed.
 
 | Date | Checkpoint | Commit | Pushed | Remote Verified | Tag |
 |---|---|---|---|---|---|
-| 2026-09-12 | NaijaDeals — SOP adoption, current verified `main` state | `b1fb48f` (pre-existing tip) | YES (pre-existing) | YES | `naijadeals-sop-checkpoint-2026-09-12` |
+| 2026-09-12 | NaijaDeals — SOP adoption (this doc + .gitignore fix) | `bd43c0f` | YES | YES (git ls-remote + gh api, both matched local HEAD) | `naijadeals-sop-checkpoint-2026-09-12` |
+| 2026-09-02 | Prior verified tip before the sandbox-loss incident (no tag exists for this — lesson learned) | `b1fb48f` | YES | — | none |
