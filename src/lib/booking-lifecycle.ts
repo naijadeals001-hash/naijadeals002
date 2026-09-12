@@ -33,6 +33,7 @@
  * without this engine building its own event bus.
  */
 import type { BookingRow, BookingStatus, ActorRoleBooking } from '../types'
+import { resolveMembership } from './organizations'
 
 export class BookingLifecycleError extends Error {}
 export class NotOwnedBookingError extends BookingLifecycleError {
@@ -124,6 +125,53 @@ async function getBookingForProvider(db: D1Database, providerUserId: number | nu
 
 async function getBookingForAdmin(db: D1Database, bookingId: number): Promise<BookingRow | null> {
   return db.prepare('SELECT * FROM bookings WHERE id = ?').bind(bookingId).first<BookingRow>()
+}
+
+/**
+ * THE single shared authority check for "does userId currently have
+ * provider-side authority over this booking" — the fix for Invariant 7's
+ * confirmed regression (see this file's module comment and the
+ * 07.provider-ownership-isolation.test.mjs header for the full incident
+ * writeup). Every provider-scoped booking route (GET /bookings/:id,
+ * /cancellation-quote, /cancel, /transition) and transitionBooking() itself
+ * MUST call this rather than comparing `booking.provider_user_id ===
+ * userId` directly, which is what let a REMOVED organization member retain
+ * indefinite provider authority.
+ *
+ * RULE (historical record != current authorization, non-negotiable):
+ *   - booking.organization_id IS NULL  -> INDIVIDUAL-owned booking. There is
+ *     no membership layer above an individual provider's own identity, so
+ *     `booking.provider_user_id === userId` IS the authority check, exactly
+ *     as before. Nothing changes for individual providers.
+ *   - booking.organization_id IS NOT NULL -> ORGANIZATION-owned booking.
+ *     Authority is ALWAYS re-resolved LIVE via resolveMembership(userId,
+ *     organizationId) + the requested permission key. booking.
+ *     provider_user_id is NEVER consulted for authorization here — it
+ *     remains in the row, permanently, purely as historical attribution
+ *     (audit trail / dispute resolution / "who originally handled this"
+ *     reporting). A user who is later removed, suspended, or demoted below
+ *     the required permission immediately loses authority the next time
+ *     this function is called, with zero lag and no separate revocation
+ *     step needed — membership state IS the authority, checked fresh every
+ *     time, never cached on the booking row.
+ *
+ * Returns false (not an error) for "not authorized" in every case — the
+ * caller decides whether that becomes a 404 (anti-enumeration, matching
+ * this codebase's existing convention for ownership-based denials) or a
+ * 403 (matching the existing convention for an authenticated actor known
+ * to lack permission, e.g. the /transition endpoint).
+ */
+export async function hasProviderAuthorityOverBooking(
+  db: D1Database,
+  booking: Pick<BookingRow, 'provider_user_id' | 'organization_id'>,
+  userId: number,
+  permission: 'bookings.read' | 'bookings.manage'
+): Promise<boolean> {
+  if (booking.organization_id == null) {
+    return booking.provider_user_id === userId
+  }
+  const membership = await resolveMembership(db, userId, booking.organization_id)
+  return !!membership && membership.permissionKeys.has(permission)
 }
 
 /** Writes the audit-trail row + the shared cc_domain_events row. Never throws — a logging failure must not fail the transition itself. */
@@ -279,6 +327,7 @@ export async function getBookingsForCustomer(db: D1Database, customerUserId: num
   return results
 }
 
+/** Individual-identity booking list (mirrors bookings.ts's getListingsForProvider — `organization_id IS NULL` required, Invariant #7 fix, so an organization-owned booking never surfaces in a member's personal/individual-identity view regardless of current or historical membership). */
 export async function getBookingsForProvider(db: D1Database, providerUserId: number, opts: { limit?: number; offset?: number } = {}) {
   const limit = opts.limit ?? 50
   const offset = opts.offset ?? 0
@@ -286,7 +335,7 @@ export async function getBookingsForProvider(db: D1Database, providerUserId: num
     .prepare(
       `SELECT b.*, bl.title AS listing_title, u.name AS customer_name
        FROM bookings b JOIN bookable_listings bl ON bl.id = b.listing_id JOIN users u ON u.id = b.customer_user_id
-       WHERE b.provider_user_id = ? ORDER BY b.created_at DESC LIMIT ? OFFSET ?`
+       WHERE b.provider_user_id = ? AND b.organization_id IS NULL ORDER BY b.created_at DESC LIMIT ? OFFSET ?`
     )
     .bind(providerUserId, limit, offset)
     .all()

@@ -97,9 +97,25 @@ export async function createBookableListing(db: D1Database, providerUserId: numb
   return listingId
 }
 
-/** Fetches a listing ONLY if owned by providerUserId — prevents cross-provider enumeration/mutation. */
+/**
+ * Fetches a listing ONLY if owned by providerUserId AS AN INDIVIDUAL —
+ * prevents cross-provider enumeration/mutation.
+ *
+ * SECURITY (Invariant #7 fix): `organization_id IS NULL` is required here,
+ * not optional. createBookableListing always stamps provider_user_id with
+ * the ACTING user's id, even for an organization-owned listing (see that
+ * function's header — it's the creator's historical attribution, same
+ * pattern as bookings.provider_user_id). Without this guard, this
+ * "individual-only" lookup was matching organization-owned listings too,
+ * so a member's individual-identity view leaked org-owned resources they
+ * had no CURRENT membership-based right to see via this path — and kept
+ * leaking them even after the member was removed from the organization,
+ * since provider_user_id is permanent history, never revoked. Org-owned
+ * listing access belongs exclusively to getOwnedListingForOrganization
+ * below (which the route layer gates with a live membership check).
+ */
 export async function getOwnedListingForProvider(db: D1Database, providerUserId: number, listingId: number): Promise<BookableListingRow | null> {
-  return db.prepare('SELECT * FROM bookable_listings WHERE id = ? AND provider_user_id = ?').bind(listingId, providerUserId).first<BookableListingRow>()
+  return db.prepare('SELECT * FROM bookable_listings WHERE id = ? AND provider_user_id = ? AND organization_id IS NULL').bind(listingId, providerUserId).first<BookableListingRow>()
 }
 
 /** Fetches a listing ONLY if owned by organizationId — the org-owned-booking path (spec: "org-owned bookings supported"). */
@@ -172,7 +188,17 @@ export interface UpdateBookableListingInput {
   depositPercentage?: number
 }
 
-/** Updates fields on a listing owned by providerUserId. Ownership enforced by the WHERE clause; a mismatched pair updates 0 rows (D1's result.success-is-not-enough gotcha, checked via rows_written exclusively — see module doc comment). */
+/**
+ * Updates fields on a listing owned by providerUserId AS AN INDIVIDUAL.
+ * Ownership enforced by the WHERE clause; a mismatched pair updates 0 rows
+ * (D1's result.success-is-not-enough gotcha, checked via rows_written
+ * exclusively — see module doc comment). `organization_id IS NULL` guard
+ * mirrors getOwnedListingForProvider (Invariant #7 fix) — this is the
+ * individual-identity mutation path, called only from
+ * PATCH /booking-providers/me/bookable-listings/:id; an org-owned listing
+ * must be mutated exclusively through the org-scoped route, which
+ * resolves LIVE membership rather than historical provider_user_id.
+ */
 export async function updateBookableListing(db: D1Database, providerUserId: number, listingId: number, input: UpdateBookableListingInput): Promise<boolean> {
   const fields: string[] = []
   const binds: unknown[] = []
@@ -195,14 +221,15 @@ export async function updateBookableListing(db: D1Database, providerUserId: numb
   fields.push(`updated_at = datetime('now')`)
 
   const result = await db
-    .prepare(`UPDATE bookable_listings SET ${fields.join(', ')} WHERE id = ? AND provider_user_id = ?`)
+    .prepare(`UPDATE bookable_listings SET ${fields.join(', ')} WHERE id = ? AND provider_user_id = ? AND organization_id IS NULL`)
     .bind(...binds, listingId, providerUserId)
     .run()
   return (result.meta.rows_written ?? 0) > 0
 }
 
+/** Individual-identity listing list (see getOwnedListingForProvider's doc comment for the `organization_id IS NULL` rationale — Invariant #7 fix). */
 export async function getListingsForProvider(db: D1Database, providerUserId: number): Promise<BookableListingRow[]> {
-  const { results } = await db.prepare('SELECT * FROM bookable_listings WHERE provider_user_id = ? ORDER BY updated_at DESC').bind(providerUserId).all<BookableListingRow>()
+  const { results } = await db.prepare('SELECT * FROM bookable_listings WHERE provider_user_id = ? AND organization_id IS NULL ORDER BY updated_at DESC').bind(providerUserId).all<BookableListingRow>()
   return results
 }
 

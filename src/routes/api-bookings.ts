@@ -54,6 +54,7 @@ import {
   getBookingsForCustomer,
   getBookingsForProvider,
   getBookingsForOrganization,
+  hasProviderAuthorityOverBooking,
   BookingLifecycleError,
   NotOwnedBookingError,
   IllegalBookingTransitionError,
@@ -416,20 +417,27 @@ bookingsApi.get('/bookings', async (c) => {
   return c.json(bookings)
 })
 
+/**
+ * SECURITY (Invariant #7 fix — see booking-lifecycle.ts's
+ * hasProviderAuthorityOverBooking for the full incident writeup and
+ * tests/booking-engine/07.provider-ownership-isolation.test.mjs for the
+ * regression this closes): the customer check is always historical
+ * identity (correct — a customer's relationship to their own booking never
+ * expires). The provider check MUST route through
+ * hasProviderAuthorityOverBooking rather than comparing
+ * `booking.provider_user_id === user.id` directly — that direct comparison
+ * is exactly what let a REMOVED organization member retain indefinite read
+ * access to an organization-owned booking, because it never distinguished
+ * "this IS an individual-owned booking" from "this booking happens to have
+ * been created, historically, by a user who is no longer authorized".
+ */
 async function loadBookingForRequest(c: any, id: number) {
   const user = c.get('user')!
   const booking = await c.env.DB.prepare('SELECT * FROM bookings WHERE id = ?').bind(id).first()
   if (!booking) return null
-  const isCustomer = booking.customer_user_id === user.id
-  const isProvider = booking.provider_user_id === user.id
-  if (!isCustomer && !isProvider) {
-    if (booking.organization_id) {
-      const membership = await resolveMembership(c.env.DB, user.id, booking.organization_id)
-      if (membership && membership.permissionKeys.has('bookings.read')) return booking
-    }
-    return null
-  }
-  return booking
+  if (booking.customer_user_id === user.id) return booking
+  if (await hasProviderAuthorityOverBooking(c.env.DB, booking, user.id, 'bookings.read')) return booking
+  return null
 }
 
 bookingsApi.get('/bookings/:id', async (c) => {
@@ -469,16 +477,17 @@ bookingsApi.post('/bookings/:id/cancel', async (c) => {
   const booking = await c.env.DB.prepare('SELECT * FROM bookings WHERE id = ?').bind(id).first<{ customer_user_id: number; provider_user_id: number; organization_id: number | null }>()
   if (!booking) return c.json({ error: 'Booking not found' }, 404)
 
+  // SECURITY (Invariant #7 fix): see loadBookingForRequest's doc comment
+  // above and hasProviderAuthorityOverBooking in booking-lifecycle.ts —
+  // provider authority for an organization-owned booking must be
+  // re-resolved LIVE via bookings.manage, never assumed from historical
+  // provider_user_id equality.
   let role: 'customer' | 'provider' | null = null
   let organizationId: number | null = null
   if (booking.customer_user_id === user.id) role = 'customer'
-  else if (booking.provider_user_id === user.id) role = 'provider'
-  else if (booking.organization_id) {
-    const membership = await resolveMembership(c.env.DB, user.id, booking.organization_id)
-    if (membership && membership.permissionKeys.has('bookings.manage')) {
-      role = 'provider'
-      organizationId = booking.organization_id
-    }
+  else if (await hasProviderAuthorityOverBooking(c.env.DB, booking, user.id, 'bookings.manage')) {
+    role = 'provider'
+    organizationId = booking.organization_id ?? null
   }
   if (!role) return c.json({ error: 'Booking not found' }, 404)
 
@@ -506,15 +515,16 @@ bookingsApi.post('/bookings/:id/transition', async (c) => {
   const booking = await c.env.DB.prepare('SELECT * FROM bookings WHERE id = ?').bind(id).first<{ customer_user_id: number; provider_user_id: number; organization_id: number | null }>()
   if (!booking) return c.json({ error: 'Booking not found' }, 404)
 
+  // SECURITY (Invariant #7 fix): see loadBookingForRequest's doc comment
+  // above — provider authority must be re-resolved LIVE (individual
+  // identity for an individual-owned booking, current bookings.manage
+  // membership for an organization-owned one), never assumed from
+  // historical provider_user_id equality alone.
   let role: 'customer' | 'provider' | null = null
   let organizationId: number | null = null
-  if (booking.provider_user_id === user.id && validProviderTargets.includes(targetStatus)) role = 'provider'
-  else if (booking.organization_id && validProviderTargets.includes(targetStatus)) {
-    const membership = await resolveMembership(c.env.DB, user.id, booking.organization_id)
-    if (membership && membership.permissionKeys.has('bookings.manage')) {
-      role = 'provider'
-      organizationId = booking.organization_id
-    }
+  if (validProviderTargets.includes(targetStatus) && (await hasProviderAuthorityOverBooking(c.env.DB, booking, user.id, 'bookings.manage'))) {
+    role = 'provider'
+    organizationId = booking.organization_id ?? null
   } else if (booking.customer_user_id === user.id && validCustomerTargets.includes(targetStatus)) role = 'customer'
 
   if (!role) return c.json({ error: 'You are not permitted to make this transition' }, 403)
