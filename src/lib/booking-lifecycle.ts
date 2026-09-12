@@ -213,7 +213,34 @@ export async function transitionBooking(db: D1Database, bookingId: number, targe
     }
   }
 
-  await db.prepare(`UPDATE bookings SET ${setClauses.join(', ')} WHERE id = ?`).bind(...binds, bookingId).run()
+  // ATOMIC compare-and-swap: the WHERE clause re-checks status = fromStatus
+  // at write time, not just at the earlier read time. Without this guard,
+  // two genuinely concurrent transitionBooking() calls that both read the
+  // SAME fromStatus before either writes will BOTH pass the allowedTargets
+  // check above and BOTH successfully UPDATE — e.g. two concurrent
+  // cancellations both reaching creditWallet() in
+  // cancelBookingWithPolicy(), producing a real double refund. Reproduced
+  // live via a 3-way Promise.all() race during Invariant 6 harness work:
+  // 3 concurrent cancel calls on one booking each returned 200 and each
+  // wrote a refund ledger row (3 total) before this fix. Mirrors the exact
+  // atomic claim pattern already used by booking-holds.ts's `UPDATE
+  // booking_holds SET status = 'converted' WHERE id = ? AND status =
+  // 'active'` — that pattern was applied there but missing here, the
+  // single authority every other transition (confirm/decline/check-in/
+  // check-out/complete/no-show/dispute/refund) also depends on.
+  const updateResult = await db
+    .prepare(`UPDATE bookings SET ${setClauses.join(', ')} WHERE id = ? AND status = ?`)
+    .bind(...binds, bookingId, fromStatus)
+    .run()
+  if ((updateResult.meta.rows_written ?? 0) === 0) {
+    // Either a concurrent transition won the race, or the status changed
+    // between our read and our write for any other reason (TOCTOU). Both
+    // cases mean "this transition is not currently possible" — exactly
+    // what IllegalBookingTransitionError already communicates; the caller
+    // needs no new error type to distinguish "genuinely illegal" from
+    // "lost the race", and should not receive a fabricated success.
+    throw new IllegalBookingTransitionError(fromStatus, targetStatus)
+  }
 
   // Releasing capacity on terminal negative outcomes: the allocation record
   // is marked 'released' (never deleted, preserving history) so the

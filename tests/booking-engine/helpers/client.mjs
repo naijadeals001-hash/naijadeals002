@@ -130,8 +130,8 @@ export async function creditWalletDirect(userId, amountKobo) {
   )
 }
 
-/** Creates a fresh single-capacity gig_service listing owned by `client`, returning {listingId, resourceId}. Used as the common fixture root for most test files. */
-export async function createTestListing(client, { title, bookingMode = 'instant', capacityUnits = 1, basePriceKobo = 500000 } = {}) {
+/** Creates a fresh single-capacity gig_service listing owned by `client`, returning {listingId, resourceId}. Used as the common fixture root for most test files. `cancellationPolicyId`, when provided, is forwarded as-is (used by invariant 6's cancellation/refund tests to attach a custom policy). */
+export async function createTestListing(client, { title, bookingMode = 'instant', capacityUnits = 1, basePriceKobo = 500000, cancellationPolicyId } = {}) {
   const res = await client.post('/api/booking-providers/me/bookable-listings', {
     listingType: 'gig_service',
     title: title ?? `Harness Listing ${RUN_NONCE}-${Math.floor(Math.random() * 1e6)}`,
@@ -140,6 +140,7 @@ export async function createTestListing(client, { title, bookingMode = 'instant'
     bookingMode,
     capacityModel: capacityUnits > 1 ? 'multiple' : 'single',
     resources: [{ name: 'Resource 1', capacityUnits }],
+    ...(cancellationPolicyId !== undefined ? { cancellationPolicyId } : {}),
   })
   assert.equal(res.status, 201, `createTestListing failed: ${JSON.stringify(res.body)}`)
   const detail = await client.get(`/api/bookable-listings/${res.body.id}`)
