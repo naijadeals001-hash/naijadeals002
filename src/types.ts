@@ -12,6 +12,15 @@ export type AppEnv = {
     sellerVendor?: VendorRow
     /** Set by attachLocale (src/lib/auth.ts) on every request — resolved language/dir/source, never a raw IP. See src/i18n/. */
     locale: import('./i18n/types').LocaleContext
+    /**
+     * Set by requireOrganizationMember (src/lib/rbac.ts) once membership is
+     * resolved server-side from the AUTHENTICATED session user's id — NEVER
+     * from a client-supplied organization_id alone. See src/lib/organizations.ts's
+     * resolveMembership for why this makes cross-organization access
+     * structurally impossible. Import type kept inline to avoid a circular
+     * import between types.ts and lib/organizations.ts.
+     */
+    orgMembership?: import('./lib/organizations').MembershipResolution
   }
 }
 
@@ -509,6 +518,130 @@ export interface AffiliatePayoutRow {
   decided_at: string | null
   paid_at: string | null
   rejection_reason: string | null
+  created_at: string
+  updated_at: string
+}
+
+// ============================================================
+// Identity & Account Engine 2.0 (migration 0037) — universal
+// organization/RBAC/preferences foundation. See that migration's header
+// comment for the full compatibility rationale. Column shapes below match
+// migration 0037's CREATE TABLE statements exactly.
+// ============================================================
+
+export type AccountStatus = 'active' | 'pending_verification' | 'suspended' | 'disabled' | 'deleted'
+
+/** account_preferences — one row per user, created lazily on first write (src/lib/account.ts). */
+export interface AccountPreferencesRow {
+  user_id: number
+  language: string
+  currency_code: string
+  timezone: string
+  notification_prefs_json: string
+  marketing_opt_in: number
+  privacy_prefs_json: string
+  accessibility_prefs_json: string
+  updated_at: string
+}
+
+export type OrganizationStatus = 'active' | 'suspended' | 'disabled'
+export type OrganizationVerificationStatus = 'unverified' | 'pending' | 'verified' | 'rejected' | 'suspended'
+
+/** organizations — the core new business/organization identity entity. organization_type is intentionally free-form TEXT, not a CHECK enum (Section 3). */
+export interface OrganizationRow {
+  id: number
+  name: string
+  display_name: string | null
+  organization_type: string
+  logo_url: string | null
+  description: string
+  contact_email: string | null
+  contact_phone: string | null
+  website: string | null
+  country_iso: string
+  status: OrganizationStatus
+  verification_status: OrganizationVerificationStatus
+  verification_note: string | null
+  settings_json: string
+  created_by_user_id: number
+  created_at: string
+  updated_at: string
+}
+
+/** organization_permissions — global permission catalog shared by every organization/vertical. */
+export interface OrganizationPermissionRow {
+  id: number
+  key: string
+  category: string
+  name: string
+  description: string
+}
+
+/** organization_roles — organization_id IS NULL = seeded system role (owner/admin/manager/staff); organization_id set = a custom role scoped to that one organization. */
+export interface OrganizationRoleRow {
+  id: number
+  organization_id: number | null
+  key: string
+  name: string
+  description: string
+  is_system: number
+  created_at: string
+}
+
+export type OrganizationMemberStatus = 'invited' | 'active' | 'suspended' | 'removed'
+
+/** organization_members — THE person <-> organization bridge every organization-scoped authorization check reads (via src/lib/rbac.ts). */
+export interface OrganizationMemberRow {
+  id: number
+  organization_id: number
+  user_id: number
+  role_id: number
+  status: OrganizationMemberStatus
+  is_owner: number
+  invited_by_user_id: number | null
+  joined_at: string | null
+  removed_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type OrganizationInvitationStatus = 'pending' | 'accepted' | 'rejected' | 'revoked' | 'expired'
+
+/** organization_invitations — Section 16's invite lifecycle. token_hash is the SHA-256 of the raw invite token, same never-store-raw pattern as sessions.token_hash. */
+export interface OrganizationInvitationRow {
+  id: number
+  organization_id: number
+  role_id: number
+  invited_email: string | null
+  invited_phone: string | null
+  invited_by_user_id: number
+  token_hash: string
+  status: OrganizationInvitationStatus
+  expires_at: string
+  accepted_by_user_id: number | null
+  accepted_at: string | null
+  created_at: string
+}
+
+export type OrganizationAddressType = 'business' | 'billing' | 'shipping' | 'pickup' | 'service'
+
+/** organization_addresses — reusable across every vertical (Section 11), distinct from the personal `addresses` table. Country-neutral (Section 12): country_iso + lat/lng from day one. */
+export interface OrganizationAddressRow {
+  id: number
+  organization_id: number
+  address_type: OrganizationAddressType
+  label: string
+  recipient_name: string
+  phone: string
+  line1: string
+  line2: string | null
+  city: string
+  state_region: string | null
+  postal_code: string | null
+  country_iso: string
+  latitude: number | null
+  longitude: number | null
+  is_default: number
   created_at: string
   updated_at: string
 }

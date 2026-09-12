@@ -14,6 +14,8 @@ import { ordersApi } from './routes/api-orders'
 import { addressesApi } from './routes/api-addresses'
 import { walletApi } from './routes/api-wallet'
 import { affiliateApi } from './routes/api-affiliate'
+import { accountApi } from './routes/api-account'
+import { organizationsApi } from './routes/api-organizations'
 import { webhooksApi } from './routes/api-webhooks'
 import { wishlistApi } from './routes/api-wishlist'
 import { ecosystemApi } from './routes/api-ecosystem'
@@ -38,6 +40,8 @@ import { helpPage } from './pages/help'
 import { sellerGatewayPage, sellerOnboardingPage } from './pages/seller'
 import { sellerDashboardPage, sellerProductsPage, sellerOrdersPage, sellerFinancePage } from './pages/seller-stubs'
 import { affiliatePage } from './pages/affiliate'
+import { accountPage } from './pages/account'
+import { organizationPage } from './pages/organization'
 
 type Bindings = AppEnv['Bindings'] & { PAYSTACK_SECRET_KEY?: string }
 type Env = { Bindings: Bindings; Variables: AppEnv['Variables'] }
@@ -72,6 +76,8 @@ app.route('/api/orders', ordersApi)
 app.route('/api/addresses', addressesApi)
 app.route('/api/wallet', walletApi)
 app.route('/api/affiliate', affiliateApi)
+app.route('/api/account', accountApi)
+app.route('/api/organizations', organizationsApi)
 app.route('/api/webhooks', webhooksApi)
 app.route('/api/wishlist', wishlistApi)
 app.route('/api/ecosystem', ecosystemApi)
@@ -89,8 +95,14 @@ app.get('/register', registerPage)
 app.get('/orders', requireAuthPage, ordersListPage)
 app.get('/orders/:orderNumber', requireAuthPage, orderDetailPage)
 app.get('/wallet', requireAuthPage, walletPage)
+app.get('/account', requireAuthPage, accountPage)
 app.get('/account/wishlist', requireAuthPage, wishlistPage)
 app.get('/account/addresses', requireAuthPage, addressesPage)
+// Organization dashboard — ownership resolved server-side inside organizationPage
+// itself (via resolveMembership), so this only needs requireAuthPage (must be
+// signed in); a non-member gets the same "not found" response a nonexistent
+// organization would (Section 27: no organization enumeration).
+app.get('/organizations/:organizationId', requireAuthPage, organizationPage)
 app.get('/ecosystem', ecosystemPage)
 app.get('/help', helpPage)
 
