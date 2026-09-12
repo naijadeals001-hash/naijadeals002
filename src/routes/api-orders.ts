@@ -261,7 +261,27 @@ ordersApi.post('/checkout', async (c) => {
   return c.json({ success: true, orderNumber, paid: false, authorization_url: init.authorization_url })
 })
 
-/** Called when the customer returns from Paystack's checkout page. Verifies server-side before trusting it. */
+/**
+ * Called when the customer returns from Paystack's checkout page. Verifies
+ * server-side before trusting it. Like /api/wallet/topup/verify, this route
+ * legitimately races the AUTHORITATIVE webhook path (api-webhooks.ts) — the
+ * customer's browser and Paystack's webhook delivery can both hit their
+ * respective confirmation route for the same reference concurrently.
+ *
+ * CONCURRENCY HARDENING (Engine 7 Phase 2, Unit 3 — same G-2 class as
+ * api-webhooks.ts and api-wallet.ts's /topup/verify): the prior
+ * implementation performed an unconditional UPDATE after only reading (not
+ * atomically claiming) the transaction row, so this route racing the
+ * webhook could call confirmOrderPayment() twice for the same order/charge.
+ * confirmOrderPayment() itself already has its own idempotency guard
+ * (`if (order.payment_status !== 'unpaid') return`) — deferred as a
+ * read-then-branch TOCTOU to Unit 4 (G-3) rather than fixed here, per this
+ * unit's explicit "order payment CAS is Unit 4's job" scope boundary — but
+ * this route's OWN claim on payment_transactions.status is fixed now,
+ * using the identical CAS pattern as the other two Paystack confirmation
+ * call sites, so at minimum this route can no longer be the SOURCE of a
+ * duplicate confirmOrderPayment() call racing the webhook.
+ */
 ordersApi.post('/verify-payment', async (c) => {
   const body = await c.req.json<{ reference: string }>().catch(() => null)
   if (!body?.reference) return c.json({ error: 'reference required' }, 400)
@@ -273,15 +293,25 @@ ordersApi.post('/verify-payment', async (c) => {
     .bind(body.reference)
     .first<any>()
   if (!tx) return c.json({ error: 'Transaction not found' }, 404)
+  if (tx.status === 'success') return c.json({ success: true, already_processed: true })
 
   const verified = await verifyPaystackTransaction(secretKey, body.reference)
   if (verified.status !== 'success') {
     return c.json({ success: false, status: verified.status })
   }
 
-  await c.env.DB.prepare("UPDATE payment_transactions SET status = 'success', raw_payload = ? WHERE id = ?")
+  // CAS claim (G-2 fix) — only the ONE caller that finds status still
+  // 'initiated' proceeds to confirmOrderPayment(). A concurrent webhook
+  // delivery for the same reference loses the claim here.
+  const claim = await c.env.DB.prepare("UPDATE payment_transactions SET status = 'success', raw_payload = ? WHERE id = ? AND status = 'initiated'")
     .bind(JSON.stringify(verified), tx.id)
     .run()
+  if ((claim.meta.rows_written ?? 0) === 0) {
+    // Lost the race — the webhook (or a duplicate call to this route)
+    // already claimed and confirmed this reference. Never call
+    // confirmOrderPayment() a second time for the same charge.
+    return c.json({ success: true, already_processed: true })
+  }
 
   await confirmOrderPayment(c.env.DB, tx.order_id, 'paystack', body.reference)
 

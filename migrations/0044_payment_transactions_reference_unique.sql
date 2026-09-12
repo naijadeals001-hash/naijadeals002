@@ -1,0 +1,41 @@
+-- Migration 0044: payment_transactions.provider_reference must be UNIQUE
+--
+-- GAP (found by Engine 7 Phase 2, Unit 1's forensic review — see
+-- docs/ENGINE-7-PHASE-2-FORENSIC-REVIEW.md §H): migration 0001 created
+-- payment_transactions.provider_reference with only a non-unique INDEX
+-- (idx_payment_tx_reference), never a UNIQUE constraint. Every reference
+-- value in this codebase is actually generated as a globally-unique string
+-- BEFORE the row is inserted (`ND-PAY-${orderId}-${Date.now()}` in
+-- api-orders.ts, `ND-TOPUP-${user.id}-${Date.now()}` in api-wallet.ts), and
+-- every read of this column (api-webhooks.ts's Paystack webhook,
+-- api-orders.ts's verify-payment, api-wallet.ts's topup/verify) assumes
+-- `SELECT * FROM payment_transactions WHERE provider_reference = ?` can
+-- return AT MOST ONE row and uses `.first()` accordingly — if a duplicate
+-- reference were ever inserted (e.g. a client retry racing the initiate
+-- endpoint, or a future code path reusing a reference string), `.first()`
+-- would silently pick an arbitrary one of the duplicates, which is exactly
+-- the kind of financial-integrity gap Unit 3 (webhook hardening) is meant
+-- to close before touching the webhook handler itself.
+--
+-- SAFETY CHECK PERFORMED BEFORE WRITING THIS MIGRATION:
+--   SELECT provider_reference, COUNT(*) FROM payment_transactions
+--     GROUP BY provider_reference HAVING COUNT(*) > 1;
+-- returned ZERO rows against the local dev database (and Unit 1's forensic
+-- review found no evidence of any production duplicate either) — so this
+-- migration is a pure hardening move, not a data-cleanup migration. If this
+-- were ever run against a database that DOES contain duplicates, SQLite
+-- will refuse to create the unique index and this migration will fail
+-- loudly (never silently drop/merge rows) — the correct behavior for
+-- financial data.
+--
+-- Uses CREATE UNIQUE INDEX rather than a full table rebuild (unlike
+-- migrations 0027/0042/0043's rebuild pattern) because a UNIQUE constraint
+-- backed by an index is exactly equivalent in SQLite to a column-level
+-- UNIQUE constraint for all read/write/query purposes, and does not require
+-- touching every existing row via CREATE-INSERT-DROP-RENAME. The pre-existing
+-- non-unique idx_payment_tx_reference index is superseded by this one and
+-- dropped to avoid maintaining two redundant indexes on the same column.
+
+DROP INDEX IF EXISTS idx_payment_tx_reference;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_payment_tx_reference_unique ON payment_transactions(provider_reference);
