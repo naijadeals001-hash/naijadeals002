@@ -163,11 +163,30 @@ async function resolveBookingProvider(c: any, permission: 'bookings.manage' | 'b
 
 // ---------- Provider: bookable listing management ----------
 
+/**
+ * SECURITY (Booking Engine 2.0 — 57-check gate, Area F finding #1): this is
+ * the INDIVIDUAL-provider listing-creation path — organizationId/organization
+ * ownership must NEVER be accepted from the client here. Org-owned listings
+ * have their own dedicated, membership-checked endpoint below
+ * (POST /organizations/:organizationId/bookable-listings). Before this fix,
+ * `body.organizationId` was passed straight into createBookableListing with
+ * zero membership verification, letting any authenticated user plant a
+ * listing tagged with an arbitrary organization_id they don't belong to —
+ * reproduced live: a non-member successfully created a listing carrying
+ * organization_id=1. Also verifies a client-supplied cancellationPolicyId
+ * actually belongs to the caller (previously accepted any policy id,
+ * including another provider's, unverified).
+ */
 bookingsApi.post('/booking-providers/me/bookable-listings', async (c) => {
   const user = c.get('user')!
   const body = await c.req.json().catch(() => ({}))
+  const { organizationId: _ignoredOrganizationId, ...safeBody } = body ?? {}
+  if (safeBody.cancellationPolicyId !== undefined && safeBody.cancellationPolicyId !== null) {
+    const owned = await c.env.DB.prepare('SELECT id FROM booking_cancellation_policies WHERE id = ? AND owner_user_id = ?').bind(safeBody.cancellationPolicyId, user.id).first()
+    if (!owned) return c.json({ error: 'cancellationPolicyId not found or not owned by you' }, 404)
+  }
   try {
-    const id = await createBookableListing(c.env.DB, user.id, body)
+    const id = await createBookableListing(c.env.DB, user.id, safeBody)
     return c.json({ id }, 201)
   } catch (err) {
     return c.json({ error: (err as Error).message }, 400)
@@ -193,6 +212,12 @@ bookingsApi.patch('/booking-providers/me/bookable-listings/:id', async (c) => {
   const user = c.get('user')!
   const id = Number(c.req.param('id'))
   const body = await c.req.json().catch(() => ({}))
+  // SECURITY (57-check gate, Area F): verify a client-supplied cancellationPolicyId
+  // is actually owned by this provider before it can be attached to their listing.
+  if (body.cancellationPolicyId !== undefined && body.cancellationPolicyId !== null) {
+    const owned = await c.env.DB.prepare('SELECT id FROM booking_cancellation_policies WHERE id = ? AND owner_user_id = ?').bind(body.cancellationPolicyId, user.id).first()
+    if (!owned) return c.json({ error: 'cancellationPolicyId not found or not owned by you' }, 404)
+  }
   const ok = await updateBookableListing(c.env.DB, user.id, id, body)
   if (!ok) return c.json({ error: 'Listing not found or not owned by you' }, 404)
   return c.json({ success: true })
@@ -489,6 +514,10 @@ bookingsApi.post('/organizations/:organizationId/bookable-listings', async (c) =
   if (!resolved || !resolved.organizationId) return c.json({ error: 'Organization not found' }, 404)
   const user = c.get('user')!
   const body = await c.req.json().catch(() => ({}))
+  if (body.cancellationPolicyId !== undefined && body.cancellationPolicyId !== null) {
+    const owned = await c.env.DB.prepare('SELECT id FROM booking_cancellation_policies WHERE id = ? AND organization_id = ?').bind(body.cancellationPolicyId, resolved.organizationId).first()
+    if (!owned) return c.json({ error: 'cancellationPolicyId not found or not owned by this organization' }, 404)
+  }
   try {
     const id = await createBookableListing(c.env.DB, user.id, { ...body, organizationId: resolved.organizationId })
     return c.json({ id }, 201)
