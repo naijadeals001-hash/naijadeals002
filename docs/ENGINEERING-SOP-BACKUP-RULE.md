@@ -114,5 +114,9 @@ equivalent — say so explicitly and get confirmation on how to proceed.
 
 | Date | Checkpoint | Commit | Pushed | Remote Verified | Tag |
 |---|---|---|---|---|---|
+| 2026-09-12 | Bootstrap repair Step 2 — seed-dev-account.sql created, placement bug fixed (moved out of migrations/), full bootstrap (migrate→seed.sql→seed-dev-account.sql) tested end-to-end against a wiped local D1, idempotency proven | `93b6e61` | YES | YES (git ls-remote + gh api, both matched local HEAD) | pending |
+| 2026-09-12 | Bootstrap repair Step 1 — migrations/0005_account_experience.sql made schema-only | `89c2558` | YES | YES (git ls-remote + gh api, both matched local HEAD) | pending |
+| 2026-09-12 | NaijaSend Lifecycle-A Items 1-5 schema + route design (draft, pre-implementation) | `73ea663` | YES | YES | pending |
+| 2026-09-12 | NaijaSend Foundation Readiness Report | `a9ba93e` | YES | YES | pending |
 | 2026-09-12 | NaijaDeals — SOP adoption (this doc + .gitignore fix) | `bd43c0f` | YES | YES (git ls-remote + gh api, both matched local HEAD) | `naijadeals-sop-checkpoint-2026-09-12` |
 | 2026-09-02 | Prior verified tip before the sandbox-loss incident (no tag exists for this — lesson learned) | `b1fb48f` | YES | — | none |

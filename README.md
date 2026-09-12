@@ -83,7 +83,7 @@
 - **Wallet integrity**: `wallet_ledger` is append-only source of truth; `wallet_accounts.cached_balance_kobo` is a read cache mutated only inside the same `db.batch()` as a ledger insert (`src/lib/wallet.ts` — `creditWallet`/`debitWallet`). No other code path may write to it.
 - **Homepage feed cache** (`src/lib/homepage-feed.ts`): each homepage section (categories, flash deals, top brands, hero campaigns, etc.) is independently cached in the `homepage_feed_cache` D1 table with a 120s TTL — recomputed at most once per window regardless of visitor traffic, keeping per-request DB load bounded on Workers' CPU budget. New homepage sections should be added as loaders in `SECTION_LOADERS`, not as separate ad-hoc queries.
 - **Merchandising column pattern** (brands: migration 0006; hero campaigns: migration 0008): `display_order`/`status` (plus `is_featured` on brands, `theme`/`starts_at`/`ends_at` on hero campaigns) — always admin-editable in principle, never hardcoded ordering in TSX.
-- **Seed data**: `seed.sql` — 10 categories, 12 vendors, 31 products, 8 reviews (all using `/ph.svg` placeholder images). Hero campaign seed rows live in `migrations/0008_hero_campaigns.sql` itself (real content, not throwaway seed data).
+- **Seed data**: `seed.sql` — 28 categories, 20 vendors, 44 products, 174 reviews (verified by direct count against a fresh bootstrap on 2026-09-12; this replaces a stale "31 products, 8 reviews" figure previously written here). Hero campaign seed rows live in `migrations/0008_hero_campaigns.sql` itself (real content, not throwaway seed data). Dev-only persona fixture (1 user + wishlist/payment-method/notification rows) lives separately in `seed-dev-account.sql` at the project root — see Local Development below.
 
 ## User Guide
 1. Browse `/shop`, filter by category or search, open a product
@@ -92,14 +92,42 @@
 4. Track your order on `/orders`; top up or review wallet history on `/wallet`
 
 ## Local Development
+
+**Bootstrap sequence (verified end-to-end 2026-09-12 against a fully wiped local D1):**
 ```bash
 npm run build
+
+# 1. Schema only — every numbered migration under migrations/ must apply
+#    cleanly against a completely empty database. This is a permanent
+#    invariant (see docs/ENGINEERING-SOP-BACKUP-RULE.md): no numbered
+#    migration may embed rows that depend on application data (users,
+#    orders, etc.) existing yet.
+npx wrangler d1 migrations apply naijadeals-production --local
+
+# 2. Catalog/business seed data (categories, vendors, products, reviews, Q&A).
+#    Contains zero INSERT INTO users / INSERT INTO orders.
+npx wrangler d1 execute naijadeals-production --local --file=./seed.sql
+
+# 3. OPTIONAL — local-dev-only persona fixture (1 demo user + wishlist/
+#    saved-payment-method/notification rows). Intentionally NOT inside
+#    migrations/: wrangler's migration runner auto-applies every *.sql
+#    file physically present in that folder, so a fixture that depends on
+#    seed.sql having already run cannot safely live there. Run explicitly,
+#    always after seed.sql, never before.
+npx wrangler d1 execute naijadeals-production --local --file=./seed-dev-account.sql
+# Login: chidinma.okafor@naijadeals.dev / NaijaDevAccount2026!  (local dev only)
+
 pm2 start ecosystem.config.cjs
 curl http://localhost:3000
-# DB commands:
-npx wrangler d1 migrations apply naijadeals-production --local
-npx wrangler d1 execute naijadeals-production --local --file=./seed.sql
 ```
+
+**Why this three-step split exists**: migration `0005_account_experience.sql`
+originally embedded 14 dev-fixture rows directly in the migration file,
+keyed to a `users.id = 1` that no migration or seed script actually
+created. A fresh install of migrations alone (no app data) failed with
+`FOREIGN KEY constraint failed`. Fixed in commit `89c2558` (schema-only
+0005) + `93b6e61` (relocated fixture to `seed-dev-account.sql`). Full
+before/after audit trail: `docs/ENGINEERING-SOP-BACKUP-RULE.md`.
 
 ## Deployment
 - **Platform**: Cloudflare Pages/Workers (target)
