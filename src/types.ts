@@ -921,7 +921,7 @@ export interface ServiceMediaRow {
   created_at: string
 }
 
-/** bookable_listings (migration 0024), reused as-is by the Service Engine — service_listing_id is additive (migration 0039). */
+/** bookable_listings (migration 0024), extended by Booking Engine 2.0 (migration 0041) with generic resource/capacity/timezone/org fields. Reused as-is by the Service Engine via service_listing_id (migration 0039). */
 export interface BookableListingRow {
   id: number
   listing_type: 'gig_service' | 'stay_unit'
@@ -938,29 +938,168 @@ export interface BookableListingRow {
   category: string | null
   cover_image_url: string | null
   service_listing_id: number | null
+  timezone: string
+  capacity_model: 'single' | 'multiple' | 'pooled' | 'per_resource'
+  is_date_only: number
+  organization_id: number | null
+  cancellation_policy_id: number | null
+  vertical: string | null
+  deposit_percentage: number
   created_at: string
   updated_at: string
 }
 
-/** bookings (migration 0024), reused as-is. */
+/** Actor roles recognized by the booking state machine (src/lib/booking-lifecycle.ts) — distinct from Marketplace's ActorRole (order-lifecycle.ts) since Booking Engine uses 'provider' (individual OR organization-resolved) rather than 'seller'/'vendor'. */
+export type ActorRoleBooking = 'customer' | 'provider' | 'admin' | 'system'
+
+/** Universal booking lifecycle status (Booking Engine 2.0 spec's explicit list — not every vertical uses every value). */
+export type BookingStatus =
+  | 'draft'
+  | 'held'
+  | 'pending_payment'
+  | 'confirmed'
+  | 'checked_in'
+  | 'in_progress'
+  | 'completed'
+  | 'cancelled'
+  | 'expired'
+  | 'no_show'
+  | 'refunded'
+  | 'disputed'
+  | 'declined'
+
+/** bookings (migration 0024), rebuilt by migration 0041 to widen the status CHECK to the full universal lifecycle and add resource/capacity/hold/policy/audit columns. */
 export interface BookingRow {
   id: number
   booking_number: string
   listing_id: number
+  resource_id: number | null
   listing_type_snapshot: string
   customer_user_id: number
   provider_user_id: number
+  organization_id: number | null
+  hold_id: number | null
   starts_at: string
   ends_at: string
+  timezone: string
+  capacity_booked: number
   guests_count: number | null
   total_price_kobo: number
   currency: string
-  payment_status: 'unpaid' | 'escrow_held' | 'released' | 'refunded'
+  payment_status: 'unpaid' | 'escrow_held' | 'released' | 'refunded' | 'partially_refunded'
   payment_reference: string | null
-  status: 'pending_request' | 'confirmed' | 'declined' | 'cancelled' | 'completed' | 'no_show'
+  status: BookingStatus
+  cancellation_policy_id: number | null
+  cancellation_fee_kobo: number
+  refund_amount_kobo: number
   cancelled_reason: string | null
+  rescheduled_from_booking_id: number | null
+  booking_group_id: string | null
+  checked_in_at: string | null
+  checked_out_at: string | null
+  confirmed_by_user_id: number | null
+  cancelled_by_user_id: number | null
+  completed_by_user_id: number | null
+  metadata_json: string
   created_at: string
   updated_at: string
+}
+
+/** booking_status_events (migration 0024, extended 0041 with actor_role + metadata_json) — the audit trail, never rely on the mutable bookings.status column alone. */
+export interface BookingStatusEventRow {
+  id: number
+  booking_id: number
+  status: string
+  actor_user_id: number | null
+  actor_role: string | null
+  note: string | null
+  metadata_json: string
+  created_at: string
+}
+
+// ============================================================
+// Booking Engine 2.0 (migration 0041)
+// ============================================================
+
+/** booking_resources — explicit resource/capacity model. Every bookable_listing has >=1 resource; a "single room" listing has one resource with capacity_units=1, a "20-seat event" has one resource with capacity_units=20, a "3-stylist salon" has 3 named staff resources. */
+export interface BookingResourceRow {
+  id: number
+  listing_id: number
+  name: string
+  resource_type: 'physical' | 'staff' | 'equipment' | 'virtual' | 'pooled'
+  capacity_units: number
+  is_active: number
+  sort_order: number
+  metadata_json: string
+  created_at: string
+  updated_at: string
+}
+
+/** booking_availability_rules — recurring weekly schedule, distinct from the one-off booking_availability_blocks override table. */
+export interface BookingAvailabilityRuleRow {
+  id: number
+  resource_id: number
+  day_of_week: number
+  start_time: string
+  end_time: string
+  capacity_override: number | null
+  effective_from: string | null
+  effective_until: string | null
+  is_active: number
+  created_at: string
+}
+
+/** booking_availability_blocks (migration 0024, extended 0039 with resource_id) — one-off overrides/blackouts. */
+export interface BookingAvailabilityBlockRow {
+  id: number
+  listing_id: number
+  resource_id: number | null
+  blocked_from: string
+  blocked_until: string
+  reason: string | null
+  created_at: string
+}
+
+/** booking_holds — temporary reservation holds in the Search->Hold->Confirm flow. Must be checked for expiry lazily on every read (no cron trigger on hosted deploy). */
+export interface BookingHoldRow {
+  id: number
+  listing_id: number
+  resource_id: number
+  customer_user_id: number
+  starts_at: string
+  ends_at: string
+  capacity_requested: number
+  status: 'active' | 'expired' | 'converted' | 'released'
+  expires_at: string
+  converted_to_booking_id: number | null
+  created_at: string
+}
+
+/** booking_resource_allocations — the explicit "what exactly is unavailable" record, one row per booking<->resource<->time-window<->capacity-consumed. */
+export interface BookingResourceAllocationRow {
+  id: number
+  booking_id: number
+  resource_id: number
+  capacity_consumed: number
+  starts_at: string
+  ends_at: string
+  status: 'active' | 'released'
+  created_at: string
+}
+
+/** booking_cancellation_policies — reusable named policy structures (flexible/moderate/strict/custom), not hardcoded per vertical. */
+export interface BookingCancellationPolicyRow {
+  id: number
+  owner_user_id: number | null
+  organization_id: number | null
+  name: string
+  policy_type: 'flexible' | 'moderate' | 'strict' | 'custom'
+  cutoff_hours_before_start: number
+  refund_percentage_before_cutoff: number
+  refund_percentage_after_cutoff: number
+  flat_fee_kobo: number
+  is_active: number
+  created_at: string
 }
 
 // ============================================================

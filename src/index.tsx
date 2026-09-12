@@ -27,6 +27,7 @@ import { servicesApi } from './routes/api-services'
 import { serviceRequestsApi } from './routes/api-service-requests'
 import { providerApi } from './routes/api-provider'
 import { adminApi } from './routes/api-admin'
+import { bookingsApi } from './routes/api-bookings'
 
 // SSR pages
 import { homePage } from './pages/home'
@@ -78,6 +79,16 @@ app.route('/', placeholderRoute)
 // /api/version: deployment identity + live migration-parity check. Read this FIRST
 // whenever verifying "what's actually running" — see src/routes/version.ts for why.
 app.route('/api', versionRoute)
+// NOTE: bookingsApi is mounted here, BEFORE any sub-app that registers
+// `.use('*', requireAuth)` on the shared bare '/api' prefix (e.g.
+// servicesApi/serviceRequestsApi below). Hono's router applies wildcard
+// middleware from EVERY sub-app sharing a mount path in REGISTRATION
+// ORDER, not scoped per sub-app — discovered via live smoke-testing when
+// serviceRequestsApi's '*' requireAuth was silently intercepting this
+// engine's public GET /api/bookable-listings routes. Registering
+// bookingsApi first ensures its own explicitly-scoped middleware (never a
+// bare '*') is what actually governs its routes.
+app.route('/api', bookingsApi)
 app.route('/api/catalog', catalogApi)
 app.route('/api/cart', cartApi)
 app.route('/api/auth', authApi)
