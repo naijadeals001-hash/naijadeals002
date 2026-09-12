@@ -311,18 +311,39 @@ bookingsApi.get('/booking-providers/me/bookings', async (c) => {
 
 // ---------- Customer: booking holds (Search -> Hold step) ----------
 
+/**
+ * VALIDATION FIX (57-check gate follow-up, Area I): reject malformed/missing
+ * fields with a clean 400 BEFORE they ever reach the D1-bound INSERT in
+ * createHold — previously a malformed body (or one missing listing_id/
+ * resource_id/starts_at/ends_at) fell through to the raw driver error
+ * "D1_TYPE_ERROR: Type 'undefined' not supported for value 'undefined'",
+ * an uncaught-exception leak flagged in the Booking Engine 2.0 Final Report.
+ */
+function validateHoldBody(body: any): string | null {
+  if (typeof body !== 'object' || body === null) return 'Request body must be a JSON object'
+  if (!Number.isFinite(Number(body.listing_id))) return 'listing_id is required and must be a number'
+  if (!Number.isFinite(Number(body.resource_id))) return 'resource_id is required and must be a number'
+  if (typeof body.starts_at !== 'string' || Number.isNaN(new Date(body.starts_at).getTime())) return 'starts_at is required and must be a valid ISO timestamp'
+  if (typeof body.ends_at !== 'string' || Number.isNaN(new Date(body.ends_at).getTime())) return 'ends_at is required and must be a valid ISO timestamp'
+  if (body.capacity_requested !== undefined && !Number.isFinite(Number(body.capacity_requested))) return 'capacity_requested must be a number'
+  if (body.ttl_minutes !== undefined && !Number.isFinite(Number(body.ttl_minutes))) return 'ttl_minutes must be a number'
+  return null
+}
+
 bookingsApi.post('/booking-holds', async (c) => {
   const user = c.get('user')!
-  const body = await c.req.json().catch(() => ({}))
+  const body = await c.req.json().catch(() => null)
+  const validationError = validateHoldBody(body)
+  if (validationError) return c.json({ error: validationError }, 400)
   try {
     const hold = await createHold(c.env.DB, {
-      listingId: body.listing_id,
-      resourceId: body.resource_id,
+      listingId: Number(body.listing_id),
+      resourceId: Number(body.resource_id),
       customerUserId: user.id,
       startsAt: body.starts_at,
       endsAt: body.ends_at,
-      capacityRequested: body.capacity_requested,
-      ttlMinutes: body.ttl_minutes,
+      capacityRequested: body.capacity_requested !== undefined ? Number(body.capacity_requested) : undefined,
+      ttlMinutes: body.ttl_minutes !== undefined ? Number(body.ttl_minutes) : undefined,
     })
     return c.json(hold, 201)
   } catch (err) {
