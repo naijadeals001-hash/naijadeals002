@@ -24,6 +24,7 @@ interface SellerLayoutProps {
 const NAV_ITEMS: { key: string; label: string; icon: string; href?: string; implemented: boolean }[] = [
   { key: 'overview', label: 'Overview', icon: 'dashboard', href: '/seller/dashboard', implemented: true },
   { key: 'products', label: 'Products', icon: 'inventory_2', href: '/seller/products', implemented: true },
+  { key: 'inventory', label: 'Inventory', icon: 'warehouse', href: '/seller/inventory', implemented: true },
   { key: 'orders', label: 'Orders', icon: 'receipt_long', href: '/seller/orders', implemented: true },
   { key: 'customers', label: 'Customers', icon: 'group', implemented: false },
   { key: 'finance', label: 'Finance', icon: 'payments', href: '/seller/finance', implemented: true },

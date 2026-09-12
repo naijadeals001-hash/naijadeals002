@@ -183,4 +183,59 @@ export async function payOrderFromWallet(db: D1Database, orderId: number, userId
   await confirmOrderPayment(db, orderId, 'wallet', `wallet-${orderId}-${Date.now()}`)
 }
 
+export class OrderCancellationError extends Error {}
+
+/**
+ * Marketplace Engine 2.0 (spec sections 18, 42): customer-initiated order
+ * cancellation. Ownership-scoped by `userId` (the WHERE clause below —
+ * never trust an order_id alone without also matching user_id, which is
+ * what prevents a customer from cancelling someone else's order). Only
+ * permitted while the order hasn't progressed past 'processing' (i.e. not
+ * yet shipped) — once a seller has shipped, cancellation must go through a
+ * return/dispute flow instead (a documented remaining gap, not built here).
+ *
+ * If the order was already paid, restores the reserved stock via the
+ * append-only inventory_adjustments ledger (reason='order_cancelled') so
+ * a cancelled order doesn't permanently lock up a seller's inventory.
+ */
+export async function cancelOrder(db: D1Database, userId: number, orderId: number, reason: string): Promise<void> {
+  const order = await db.prepare('SELECT * FROM orders WHERE id = ? AND user_id = ?').bind(orderId, userId).first<any>()
+  if (!order) throw new OrderCancellationError('Order not found')
+  if (!['pending_payment', 'processing'].includes(order.status)) {
+    throw new OrderCancellationError(`Order in status "${order.status}" can no longer be cancelled`)
+  }
+
+  const wasPaid = order.payment_status !== 'unpaid'
+
+  const items = await db
+    .prepare('SELECT listing_id, quantity FROM order_items WHERE order_id = ?')
+    .bind(orderId)
+    .all<{ listing_id: number; quantity: number }>()
+
+  const statements = [
+    db
+      .prepare(
+        `UPDATE orders SET status = 'cancelled', cancelled_at = datetime('now'), cancellation_reason = ?, cancelled_by_user_id = ?, updated_at = datetime('now') WHERE id = ?`
+      )
+      .bind(reason, userId, orderId),
+    db.prepare(`UPDATE order_items SET item_status = 'cancelled' WHERE order_id = ?`).bind(orderId),
+  ]
+
+  if (wasPaid) {
+    for (const item of items.results) {
+      statements.push(
+        db.prepare('UPDATE product_listings SET stock = stock + ? WHERE id = ?').bind(item.quantity, item.listing_id),
+        db
+          .prepare(
+            `INSERT INTO inventory_adjustments (listing_id, delta, reason, order_id, actor_user_id, stock_after)
+             SELECT ?, ?, 'order_cancelled', ?, ?, stock FROM product_listings WHERE id = ?`
+          )
+          .bind(item.listing_id, item.quantity, orderId, userId, item.listing_id)
+      )
+    }
+  }
+
+  await db.batch(statements)
+}
+
 export { InsufficientFundsError }

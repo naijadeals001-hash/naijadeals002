@@ -85,6 +85,11 @@ export interface VendorRow {
   terms_version: string | null
   /** Seller-controlled "pause my store" — distinct from admin-controlled verification_status. */
   store_status: 'active' | 'paused' | 'suspended'
+  // --- Marketplace Engine 2.0 (migration 0038): vendor <-> organization bridge ---
+  /** NULL for user-owned/individual stores. Set when an Identity Engine organization owns this store. */
+  organization_id: number | null
+  /** Soft classification, not a CHECK constraint: individual | business | organization | manufacturer | distributor | wholesaler | farmer | retailer | brand */
+  store_type: string
 }
 
 export interface NigerianBankRow {
@@ -165,6 +170,8 @@ export interface ProductRow {
   category_slug?: string
   brand_name?: string
   brand_slug?: string
+  /** Marketplace Engine 2.0 (migration 0038): draft | pending_review | active | paused | rejected | archived */
+  moderation_status?: string
 }
 
 /** One seller's offer on a product — the "buy box". This is what cart/order/comparison reference. */
@@ -182,6 +189,17 @@ export interface ListingRow {
   is_plus: number
   is_primary: number
   is_active: number
+  // --- Marketplace Engine 2.0 (migration 0038) ---
+  moderation_status?: string
+  unit_of_measure?: string
+  unit_quantity?: number
+  is_variable_weight?: number
+  variable_weight_tolerance_pct?: number
+  reserved_quantity?: number
+  low_stock_threshold?: number
+  allow_backorder?: number
+  sku?: string | null
+  warehouse_location?: string | null
 }
 
 /** A product row joined with its primary (buy-box) listing — the shape used on cards/grids. */
@@ -355,6 +373,12 @@ export interface OrderRow {
   coupon_code: string | null
   discount_kobo: number
   created_at: string
+  // --- Marketplace Engine 2.0 (migration 0038): fuller order lifecycle ---
+  cancelled_at?: string | null
+  cancellation_reason?: string | null
+  cancelled_by_user_id?: number | null
+  fulfilled_at?: string | null
+  delivered_at?: string | null
 }
 
 export interface OrderItemRow {
@@ -370,6 +394,10 @@ export interface OrderItemRow {
   quantity: number
   line_total_kobo: number
   item_status: string
+  // --- Marketplace Engine 2.0 (migration 0038) ---
+  fulfilled_quantity?: number | null
+  final_price_kobo?: number | null
+  unit_of_measure?: string
 }
 
 export interface AddressRow {
@@ -645,3 +673,112 @@ export interface OrganizationAddressRow {
   created_at: string
   updated_at: string
 }
+
+// ============================================================
+// Marketplace Engine 2.0 (migration 0038)
+// ============================================================
+
+/** product_pricing_tiers — optional, additive bulk/wholesale pricing per listing (spec section 11). Zero rows = the listing behaves exactly as flat-price_kobo retail. */
+export interface PricingTierRow {
+  id: number
+  listing_id: number
+  min_quantity: number
+  max_quantity: number | null
+  unit_price_kobo: number
+  tier_label: string | null
+  sort_order: number
+  is_active: number
+  created_at: string
+}
+
+/** inventory_adjustments — append-only stock movement ledger (spec section 9/37). */
+export type InventoryAdjustmentReason =
+  | 'order_placed'
+  | 'order_cancelled'
+  | 'payment_failed'
+  | 'fulfilled'
+  | 'returned'
+  | 'manual_adjustment'
+  | 'restock'
+
+export interface InventoryAdjustmentRow {
+  id: number
+  listing_id: number
+  variant_id: number | null
+  delta: number
+  reason: InventoryAdjustmentReason
+  order_id: number | null
+  actor_user_id: number | null
+  note: string | null
+  stock_after: number
+  created_at: string
+}
+
+/** category_attributes — dynamic, category-associated product attribute schema (spec section 7). */
+export type AttributeDataType = 'text' | 'number' | 'boolean' | 'select' | 'multiselect'
+export type AttributeRequirement = 'required' | 'optional' | 'recommended' | 'conditional'
+
+export interface CategoryAttributeRow {
+  id: number
+  category_id: number
+  key: string
+  label: string
+  data_type: AttributeDataType
+  options_json: string | null
+  requirement: AttributeRequirement
+  condition_json: string | null
+  sort_order: number
+  created_at: string
+}
+
+/** product_attribute_values — one product's value for one category attribute. */
+export interface ProductAttributeValueRow {
+  id: number
+  product_id: number
+  attribute_id: number
+  value: string
+  // joined convenience fields (when queried with a JOIN on category_attributes)
+  key?: string
+  label?: string
+  data_type?: AttributeDataType
+}
+
+/** collections — merchandising/Africa-first taxonomy groupings, SEPARATE from category/brand taxonomy (spec section 26). */
+export type CollectionType = 'merchandising' | 'africa_first' | 'seasonal' | 'editorial'
+
+export interface CollectionRow {
+  id: number
+  slug: string
+  name: string
+  description: string
+  collection_type: CollectionType
+  is_active: number
+  sort_order: number
+  created_at: string
+}
+
+/** product_collections — many-to-many join between products and collections. */
+export interface ProductCollectionRow {
+  id: number
+  collection_id: number
+  product_id: number
+  sort_order: number
+  added_at: string
+}
+
+/** Product moderation states, shared by products.moderation_status and product_listings.moderation_status. Not a DB CHECK constraint (kept extensible per vertical), but this is the canonical application-level enum. */
+export type ModerationStatus = 'draft' | 'pending_review' | 'active' | 'paused' | 'rejected' | 'archived'
+
+/** Fuller order-item fulfillment lifecycle (spec section 18), stored in the existing order_items.item_status column. */
+export type OrderItemStatus =
+  | 'processing'
+  | 'fulfilled'
+  | 'shipped'
+  | 'delivered'
+  | 'completed'
+  | 'cancelled'
+  | 'failed'
+  | 'refunded'
+  | 'partially_refunded'
+  | 'returned'
+  | 'disputed'

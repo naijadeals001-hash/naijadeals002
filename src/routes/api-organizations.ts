@@ -14,6 +14,7 @@ import { Hono } from 'hono'
 import type { AppEnv } from '../types'
 import { requireAuth } from '../lib/auth'
 import { requireOrganizationMember, requireOrganizationRole, requirePermission } from '../lib/rbac'
+import { getVendorForOrganization, createOrganizationStore, type CreateOrganizationStoreInput } from '../lib/stores'
 import {
   createOrganization,
   getOrganizationById,
@@ -264,4 +265,31 @@ organizationsApi.post('/:organizationId/addresses', requireOrganizationMember, r
   const addressId = await createOrganizationAddress(c.env.DB, organizationId, body as OrganizationAddressInput)
   const addresses = await getAddressesForOrganization(c.env.DB, organizationId)
   return c.json({ success: true, addressId, addresses })
+})
+
+// ---------- Marketplace store (Marketplace Engine 2.0, spec section 4) ----------
+// The vendor<->organization bridge: an organization can own ONE marketplace
+// store. Creation requires 'store.manage' (granted to owner/admin/manager
+// by migration 0038's seed) — resolved via the SAME requireOrganizationMember
+// + requirePermission primitives every other organization route uses, never
+// a bespoke check.
+
+organizationsApi.get('/:organizationId/store', requireOrganizationMember, async (c) => {
+  const organizationId = Number(c.req.param('organizationId'))
+  const vendor = await getVendorForOrganization(c.env.DB, organizationId)
+  if (!vendor) return c.json({ store: null })
+  return c.json({ store: vendor })
+})
+
+organizationsApi.post('/:organizationId/store', requireOrganizationMember, requirePermission('store.manage'), async (c) => {
+  const organizationId = Number(c.req.param('organizationId'))
+  const body = await c.req.json<Partial<CreateOrganizationStoreInput>>().catch(() => null)
+  if (!body?.name) return c.json({ error: 'name is required' }, 400)
+  try {
+    const vendorId = await createOrganizationStore(c.env.DB, organizationId, body as CreateOrganizationStoreInput)
+    const vendor = await getVendorForOrganization(c.env.DB, organizationId)
+    return c.json({ success: true, vendorId, store: vendor }, 201)
+  } catch (err: any) {
+    return c.json({ error: err.message ?? 'Failed to create store' }, 400)
+  }
 })

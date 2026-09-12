@@ -22,6 +22,7 @@ import { ecosystemApi } from './routes/api-ecosystem'
 import { placeholderRoute } from './routes/placeholder'
 import { versionRoute } from './routes/version'
 import { i18nApi } from './routes/api-i18n'
+import { sellerApi } from './routes/api-seller'
 
 // SSR pages
 import { homePage } from './pages/home'
@@ -38,7 +39,11 @@ import { ecosystemPage } from './pages/ecosystem'
 import { ecosystemPreviewPage } from './pages/ecosystem-preview'
 import { helpPage } from './pages/help'
 import { sellerGatewayPage, sellerOnboardingPage } from './pages/seller'
-import { sellerDashboardPage, sellerProductsPage, sellerOrdersPage, sellerFinancePage } from './pages/seller-stubs'
+import { sellerFinancePage } from './pages/seller-stubs'
+import { sellerDashboardPage } from './pages/seller-dashboard'
+import { sellerProductsPage } from './pages/seller-products'
+import { sellerOrdersPage } from './pages/seller-orders'
+import { sellerInventoryPage } from './pages/seller-inventory'
 import { affiliatePage } from './pages/affiliate'
 import { accountPage } from './pages/account'
 import { organizationPage } from './pages/organization'
@@ -82,6 +87,7 @@ app.route('/api/webhooks', webhooksApi)
 app.route('/api/wishlist', wishlistApi)
 app.route('/api/ecosystem', ecosystemApi)
 app.route('/api/i18n', i18nApi)
+app.route('/api/seller', sellerApi)
 
 // ---------- SSR pages ----------
 app.get('/', homePage)
@@ -146,5 +152,6 @@ app.get('/seller/dashboard', requireAuthPage, requireActiveSeller, sellerDashboa
 app.get('/seller/products', requireAuthPage, requireActiveSeller, sellerProductsPage)
 app.get('/seller/orders', requireAuthPage, requireActiveSeller, sellerOrdersPage)
 app.get('/seller/finance', requireAuthPage, requireActiveSeller, sellerFinancePage)
+app.get('/seller/inventory', requireAuthPage, requireActiveSeller, sellerInventoryPage)
 
 export default app

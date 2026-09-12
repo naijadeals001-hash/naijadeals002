@@ -5,7 +5,7 @@ import { getOrCreateCartId, getCartItems, removeCartItemsByListingIds, getBuyNow
 import { getAddress } from '../lib/addresses'
 import { createPendingOrder, payOrderFromWallet, InsufficientFundsError, type DeliveryMethod } from '../lib/orders'
 import { initializePaystackTransaction, verifyPaystackTransaction } from '../lib/paystack'
-import { confirmOrderPayment } from '../lib/orders'
+import { confirmOrderPayment, cancelOrder, OrderCancellationError } from '../lib/orders'
 
 export const ordersApi = new Hono<AppEnv & { Bindings: AppEnv['Bindings'] & { PAYSTACK_SECRET_KEY?: string } }>()
 
@@ -29,6 +29,31 @@ ordersApi.get('/:orderNumber', async (c) => {
 
   const items = await c.env.DB.prepare('SELECT * FROM order_items WHERE order_id = ?').bind(order.id).all()
   return c.json({ order, items: items.results })
+})
+
+/**
+ * Marketplace Engine 2.0 (spec sections 18, 35, 42): customer-initiated
+ * order cancellation. Ownership is enforced inside cancelOrder() itself via
+ * `WHERE id = ? AND user_id = ?` — a customer can never cancel another
+ * user's order by guessing/enumerating order ids.
+ */
+ordersApi.post('/:orderNumber/cancel', async (c) => {
+  const user = c.get('user')!
+  const orderNumber = c.req.param('orderNumber')
+  const body = await c.req.json<{ reason?: string }>().catch(() => ({}) as any)
+
+  const order = await c.env.DB.prepare('SELECT id FROM orders WHERE order_number = ? AND user_id = ?')
+    .bind(orderNumber, user.id)
+    .first<{ id: number }>()
+  if (!order) return c.json({ error: 'Order not found' }, 404)
+
+  try {
+    await cancelOrder(c.env.DB, user.id, order.id, body?.reason ?? 'Cancelled by customer')
+    return c.json({ success: true })
+  } catch (err) {
+    if (err instanceof OrderCancellationError) return c.json({ error: err.message }, 400)
+    throw err
+  }
 })
 
 /**
