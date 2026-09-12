@@ -1,0 +1,43 @@
+-- Migration 0029: Provider Verification Rbac
+--
+-- RECONSTRUCTED MIGRATION (not original production source code).
+--
+-- Provenance: This file was generated from PRODUCTION's live D1 schema,
+-- captured read-only via `gsk hosted d1_schema` against naijadeals.com's
+-- hosted database (project 393ef41c-f7b9-4ded-996a-2f5265e3280d, db uuid
+-- bbbd12bf-e8cd-4e14-8413-76ed8b96ed1e) on 2026-09-12. Production's own
+-- git_sha (99b1664df552ce1cd707330e17207d8869f12a4e) and its ORIGINAL
+-- migrations/0013-0036 source files were never recovered (see
+-- docs/NAIJADEALS-PRODUCTION-RECOVERY-REPORT.md). This file reproduces
+-- the FINAL OBSERVED table structure (columns, types, defaults, foreign
+-- keys, indexes) for the tables production's own /api/version reports as
+-- belonging to migration "0029_provider_verification_rbac.sql", as closely as a final-state
+-- schema dump allows.
+--
+-- Table-to-migration-number attribution beyond what /api/version's own
+-- filenames imply is INFERRED (semantic grouping by subject area and
+-- foreign-key dependency order), not independently confirmed against a
+-- migration-by-migration production history (which does not exist to
+-- inspect -- D1 does not retain per-migration column-level diffs, only
+-- the current CREATE TABLE state). See
+-- docs/NAIJADEALS-PRODUCTION-SCHEMA-MAP.md for the full mapping rationale
+-- and confidence notes per table.
+--
+-- NOTE: UNKNOWN — SOURCE CODE REQUIRED: no new table could be attributed to 
+-- this migration from the final-schema snapshot alone. Production's own 
+-- migration name implies ALTER-only changes (e.g. a verification-status 
+-- column/enum on provider_profiles, or RBAC role-assignment logic) that a 
+-- final-state schema dump cannot distinguish from earlier migrations. 
+-- Recorded as an intentionally-empty placeholder migration rather than 
+-- guessed DDL. 
+--
+
+-- DO NOT apply this migration to production. Local/dev D1 only, per the
+-- explicit read-only production-safety rule for this reconstruction phase.
+
+-- INTENTIONALLY EMPTY: no new CREATE TABLE could be attributed to this
+-- migration number from the final-state schema alone (see NOTE above).
+-- Preserved as a real migration file (applied, no-op) so the local
+-- migrations/ directory's file count and numbering exactly matches
+-- production's own 36-migration sequence reported by /api/version.
+SELECT 1; -- no-op placeholder, intentionally not a real DDL statement

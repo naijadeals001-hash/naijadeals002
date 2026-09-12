@@ -1,0 +1,44 @@
+-- Migration 0031: Naijafresh Categories
+--
+-- RECONSTRUCTED MIGRATION (not original production source code).
+--
+-- Provenance: This file was generated from PRODUCTION's live D1 schema,
+-- captured read-only via `gsk hosted d1_schema` against naijadeals.com's
+-- hosted database (project 393ef41c-f7b9-4ded-996a-2f5265e3280d, db uuid
+-- bbbd12bf-e8cd-4e14-8413-76ed8b96ed1e) on 2026-09-12. Production's own
+-- git_sha (99b1664df552ce1cd707330e17207d8869f12a4e) and its ORIGINAL
+-- migrations/0013-0036 source files were never recovered (see
+-- docs/NAIJADEALS-PRODUCTION-RECOVERY-REPORT.md). This file reproduces
+-- the FINAL OBSERVED table structure (columns, types, defaults, foreign
+-- keys, indexes) for the tables production's own /api/version reports as
+-- belonging to migration "0031_naijafresh_categories.sql", as closely as a final-state
+-- schema dump allows.
+--
+-- Table-to-migration-number attribution beyond what /api/version's own
+-- filenames imply is INFERRED (semantic grouping by subject area and
+-- foreign-key dependency order), not independently confirmed against a
+-- migration-by-migration production history (which does not exist to
+-- inspect -- D1 does not retain per-migration column-level diffs, only
+-- the current CREATE TABLE state). See
+-- docs/NAIJADEALS-PRODUCTION-SCHEMA-MAP.md for the full mapping rationale
+-- and confidence notes per table.
+--
+-- NOTE: UNKNOWN — SOURCE CODE REQUIRED: no NaijaFresh-specific new table 
+-- exists in the final schema (NaijaFresh reuses the shared 
+-- 'categories'/'products' tables already present locally since 0001/0002). 
+-- This migration most plausibly ALTERs 'categories' (e.g. a Fresh-relevant 
+-- flag or a perishable/produce category subtree) — column-level attribution 
+-- not recoverable from a final-state dump. Matches the prior recovery 
+-- report's finding that NaijaFresh is the thinnest vertical (page shell 
+-- only, no dedicated product schema observed). 
+--
+
+-- DO NOT apply this migration to production. Local/dev D1 only, per the
+-- explicit read-only production-safety rule for this reconstruction phase.
+
+-- INTENTIONALLY EMPTY: no new CREATE TABLE could be attributed to this
+-- migration number from the final-state schema alone (see NOTE above).
+-- Preserved as a real migration file (applied, no-op) so the local
+-- migrations/ directory's file count and numbering exactly matches
+-- production's own 36-migration sequence reported by /api/version.
+SELECT 1; -- no-op placeholder, intentionally not a real DDL statement
