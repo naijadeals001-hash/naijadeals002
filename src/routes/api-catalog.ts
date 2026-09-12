@@ -2,8 +2,35 @@ import { Hono } from 'hono'
 import type { AppEnv, CategoryRow } from '../types'
 import { getTopLevelCategories, getListingsForProduct, getVariantsForListing, getProductsByIds } from '../lib/catalog'
 import { getHomepageFeed } from '../lib/homepage-feed'
+import { getAllCollections, getCollectionBySlug, getProductsInCollection } from '../lib/collections'
+import { getProductAttributeValues } from '../lib/attributes'
+import { getLiveCountries } from '../lib/country'
 
 export const catalogApi = new Hono<AppEnv>()
+
+/**
+ * Marketplace Engine 2.1 (spec section 10): public-facing collections
+ * feed — real DB-backed rows (collections/product_collections), never a
+ * hardcoded frontend array. Powers "New Arrivals", "African Essentials",
+ * etc landing sections.
+ */
+catalogApi.get('/collections', async (c) => {
+  const results = await getAllCollections(c.env.DB, c.req.query('type'))
+  return c.json({ results })
+})
+
+catalogApi.get('/collections/:slug', async (c) => {
+  const collection = await getCollectionBySlug(c.env.DB, c.req.param('slug'))
+  if (!collection) return c.json({ error: 'Collection not found' }, 404)
+  const products = await getProductsInCollection(c.env.DB, c.req.param('slug'), Number(c.req.query('limit') ?? 24))
+  return c.json({ collection, products })
+})
+
+/** Marketplace Engine 2.1 (spec section 11): LIVE markets only — the honest "ship to" selector data source. cc_countries is the existing, previously-dormant Control Center table (migration 0013), never a duplicated Country Engine. */
+catalogApi.get('/countries', async (c) => {
+  const results = await getLiveCountries(c.env.DB)
+  return c.json({ results })
+})
 
 catalogApi.get('/categories', async (c) => {
   const { results } = await c.env.DB.prepare('SELECT * FROM categories ORDER BY sort_order ASC').all<CategoryRow>()
@@ -159,13 +186,21 @@ catalogApi.get('/products/:slug', async (c) => {
      WHERE p.category_id = ? AND p.id != ? AND p.is_active = 1 LIMIT 8`
   ).bind(product.category_id, product.id).all()
 
+  // Marketplace Engine 2.1 (spec section 19): structured, category-driven
+  // attribute values for this product — never a hardcoded field list.
+  // Only ever exposes already-validated, seller-saved values (attributes.ts's
+  // validateAndCollectAttributeValues gate happened at write time), so no
+  // internal moderation metadata leaks here.
+  const attributes = await getProductAttributeValues(c.env.DB, product.id)
+
   return c.json({
     product,
     listings: listings.results,
     variants: variants.results,
     reviews: reviews.results,
     questions: questions.results,
-    related: related.results
+    related: related.results,
+    attributes
   })
 })
 

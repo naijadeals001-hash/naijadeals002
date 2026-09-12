@@ -40,6 +40,12 @@ import {
 import { adjustStock, getInventoryHistory, computeAvailableQuantity, isLowStock, InsufficientStockError } from '../lib/inventory'
 import { replacePricingTiers, getPricingTiersForListing } from '../lib/pricing'
 import { recomputeBuyBoxWinner } from '../lib/buybox'
+import { transitionOrderItemStatus, OrderLifecycleError, IllegalTransitionError, NotOwnedOrderItemError, type OrderItemStatus } from '../lib/order-lifecycle'
+import { settleVariableWeightItem, SettlementError } from '../lib/order-settlement'
+import { createDispute, getDisputesForOrder, getRefundsForVendor, RefundError } from '../lib/refunds'
+import { validateAndCollectAttributeValues, saveProductAttributeValues, getProductAttributeValues } from '../lib/attributes'
+import { setListingCountryAvailability, getListingCountryAvailability } from '../lib/country'
+import { getModerationHistoryForVendor } from '../lib/moderation'
 
 export const sellerApi = new Hono<AppEnv>()
 
@@ -222,7 +228,16 @@ sellerApi.patch('/listings/:id', async (c) => {
   for (const key of ['is_variable_weight', 'allow_backorder', 'is_active']) {
     if (body[key] !== undefined) input[key] = !!body[key]
   }
-  if (body.moderation_status !== undefined) input.moderation_status = body.moderation_status
+  // SECURITY FIX (Engine 2.1 hardening — critical gap found during
+  // inspection): moderation_status is DELIBERATELY never accepted from the
+  // seller here. The old code did
+  // `if (body.moderation_status !== undefined) input.moderation_status = body.moderation_status`
+  // with no role check, which let a seller PATCH their own listing to
+  // moderation_status='active' and fully bypass admin review. Moderation
+  // decisions now ONLY happen through applyModerationDecision
+  // (src/lib/moderation.ts) behind requirePlatformRole('admin') — see
+  // src/routes/api-admin.ts. If a client sends this field here it is
+  // silently ignored (not an error), same as any other unsupported field.
 
   try {
     await updateListing(c.env.DB, vendor.id, listingId, input as any)
@@ -344,17 +359,146 @@ sellerApi.get('/orders/:orderId', async (c) => {
   return c.json({ items })
 })
 
+/**
+ * Marketplace Engine 2.1 (spec sections 3/4): replaces the previous ad-hoc
+ * `updateOrderItemStatus` free-form action switch with the centralized
+ * `transitionOrderItemStatus` state machine — legal transitions only,
+ * ownership scoped by vendor_id, every change ledgered + event-logged.
+ * `updateOrderItemStatus` itself is preserved unchanged in
+ * seller-products.ts (not deleted — "preserve existing work"), but this
+ * route no longer calls it, since it had no transition-legality
+ * enforcement at all (any status could follow any status).
+ */
 sellerApi.patch('/orders/items/:orderItemId', async (c) => {
   const vendor = vendorOf(c)
+  const user = c.get('user')!
   const orderItemId = Number(c.req.param('orderItemId'))
   const body = await c.req.json().catch(() => ({}))
-  const action = body.action as string
-  if (!['fulfilled', 'shipped', 'delivered', 'cancelled'].includes(action)) {
-    return c.json({ error: 'Invalid action' }, 400)
+  const targetStatus = body.status as OrderItemStatus
+  const validTargets: OrderItemStatus[] = ['ready_for_fulfillment', 'shipped', 'delivered', 'completed', 'cancelled']
+  if (!validTargets.includes(targetStatus)) {
+    return c.json({ error: `status must be one of: ${validTargets.join(', ')}` }, 400)
   }
-  const ok = await updateOrderItemStatus(c.env.DB, vendor.id, orderItemId, action as any, {
-    fulfilledQuantity: body.fulfilled_quantity !== undefined ? Number(body.fulfilled_quantity) : undefined,
-  })
-  if (!ok) return c.json({ error: 'Order item not found' }, 404)
+  try {
+    const updated = await transitionOrderItemStatus(
+      c.env.DB,
+      orderItemId,
+      targetStatus,
+      { userId: user.id, role: 'seller', vendorId: vendor.id },
+      {
+        reason: body.reason,
+        fulfilledQuantity: body.fulfilled_quantity !== undefined ? Number(body.fulfilled_quantity) : undefined,
+      }
+    )
+    return c.json({ success: true, item: updated })
+  } catch (err) {
+    if (err instanceof NotOwnedOrderItemError) return c.json({ error: err.message }, 404)
+    if (err instanceof IllegalTransitionError) return c.json({ error: err.message }, 400)
+    if (err instanceof OrderLifecycleError) return c.json({ error: err.message }, 400)
+    throw err
+  }
+})
+
+/**
+ * Variable-weight settlement (spec sections 12/13): after a seller has
+ * fulfilled a variable-weight item with an actual quantity (via the PATCH
+ * above), they call this to reconcile the final amount against what was
+ * captured at checkout — issuing a refund (final lower) or creating a
+ * pending additional charge for the customer to confirm (final higher).
+ * Never auto-triggered from the PATCH above — kept as an explicit,
+ * separate step so "record actual quantity" and "settle the financial
+ * difference" are never silently conflated.
+ */
+sellerApi.post('/orders/items/:orderItemId/settle', async (c) => {
+  const vendor = vendorOf(c)
+  const user = c.get('user')!
+  const orderItemId = Number(c.req.param('orderItemId'))
+  const item = await c.env.DB.prepare('SELECT id FROM order_items WHERE id = ? AND vendor_id = ?').bind(orderItemId, vendor.id).first()
+  if (!item) return c.json({ error: 'Order item not found' }, 404)
+  try {
+    const result = await settleVariableWeightItem(c.env.DB, orderItemId, user.id)
+    return c.json({ success: true, ...result })
+  } catch (err: any) {
+    if (err instanceof SettlementError) return c.json({ error: err.message }, 400)
+    throw err
+  }
+})
+
+// ---------- Disputes & refunds (seller-facing, spec section 6) ----------
+
+sellerApi.get('/orders/:orderId/disputes', async (c) => {
+  const vendor = vendorOf(c)
+  const orderId = Number(c.req.param('orderId'))
+  // Ownership check: this vendor must actually have an item on this order.
+  const items = await getVendorItemsForOrder(c.env.DB, vendor.id, orderId)
+  if (items.length === 0) return c.json({ error: 'Order not found' }, 404)
+  const results = await getDisputesForOrder(c.env.DB, orderId)
+  return c.json({ results })
+})
+
+sellerApi.get('/refunds', async (c) => {
+  const vendor = vendorOf(c)
+  const results = await getRefundsForVendor(c.env.DB, vendor.id, Number(c.req.query('limit') ?? 50))
+  return c.json({ results })
+})
+
+sellerApi.get('/moderation/history', async (c) => {
+  const vendor = vendorOf(c)
+  const results = await getModerationHistoryForVendor(c.env.DB, vendor.id, Number(c.req.query('limit') ?? 50))
+  return c.json({ results })
+})
+
+// ---------- Dynamic product attributes (spec sections 8/9) ----------
+
+sellerApi.get('/products/:id/attributes', async (c) => {
+  const vendor = vendorOf(c)
+  const productId = Number(c.req.param('id'))
+  const owned = await sellerOwnsProduct(c.env.DB, vendor.id, productId)
+  if (!owned) return c.json({ error: 'Product not found' }, 404)
+  const results = await getProductAttributeValues(c.env.DB, productId)
+  return c.json({ results })
+})
+
+sellerApi.put('/products/:id/attributes', async (c) => {
+  const vendor = vendorOf(c)
+  const productId = Number(c.req.param('id'))
+  const owned = await sellerOwnsProduct(c.env.DB, vendor.id, productId)
+  if (!owned) return c.json({ error: 'Product not found' }, 404)
+
+  const product = await getProductById(c.env.DB, productId)
+  if (!product) return c.json({ error: 'Product not found' }, 404)
+
+  const body = await c.req.json().catch(() => ({}))
+  if (typeof body !== 'object' || body === null) return c.json({ error: 'A JSON object of { attribute_key: value } is required' }, 400)
+
+  try {
+    const resolved = await validateAndCollectAttributeValues(c.env.DB, product.category_id, body)
+    await saveProductAttributeValues(c.env.DB, productId, resolved)
+    const results = await getProductAttributeValues(c.env.DB, productId)
+    return c.json({ success: true, results })
+  } catch (err: any) {
+    return c.json({ error: err.message ?? 'Failed to save attributes' }, 400)
+  }
+})
+
+// ---------- Country/location availability (spec section 11) ----------
+
+sellerApi.get('/listings/:id/countries', async (c) => {
+  const vendor = vendorOf(c)
+  const listingId = Number(c.req.param('id'))
+  const listing = await getOwnedListing(c.env.DB, vendor.id, listingId)
+  if (!listing) return c.json({ error: 'Listing not found' }, 404)
+  const results = await getListingCountryAvailability(c.env.DB, listingId)
+  return c.json({ results })
+})
+
+sellerApi.put('/listings/:id/countries/:countryIso', async (c) => {
+  const vendor = vendorOf(c)
+  const listingId = Number(c.req.param('id'))
+  const countryIso = c.req.param('countryIso').toUpperCase()
+  const listing = await getOwnedListing(c.env.DB, vendor.id, listingId)
+  if (!listing) return c.json({ error: 'Listing not found' }, 404)
+  const body = await c.req.json<{ is_available: boolean }>().catch(() => ({ is_available: true }))
+  await setListingCountryAvailability(c.env.DB, listingId, countryIso, !!body.is_available)
   return c.json({ success: true })
 })

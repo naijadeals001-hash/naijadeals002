@@ -276,7 +276,13 @@ export async function updateListing(db: D1Database, vendorId: number, listingId:
     .prepare(`UPDATE product_listings SET ${fields.join(', ')} WHERE id = ? AND vendor_id = ?`)
     .bind(...binds, listingId, vendorId)
     .run()
-  return (result.meta.rows_written ?? 0) > 0 || result.success
+  // SECURITY (Engine 2.1 hardening pass): result.success only means "no SQL
+  // error" — it is TRUE even for a 0-row UPDATE (e.g. listingId exists but
+  // belongs to a different vendor). Must check rows_written EXCLUSIVELY, the
+  // same bug class fixed in services.ts's updateServiceListing during the
+  // Service Engine 2.0 pass. The previous `|| result.success` fallback here
+  // defeated that protection entirely and is removed.
+  return (result.meta.rows_written ?? 0) > 0
 }
 
 /** Lists all listings owned by a vendor, joined with product title/image, for the seller products dashboard. */

@@ -26,6 +26,7 @@ import { sellerApi } from './routes/api-seller'
 import { servicesApi } from './routes/api-services'
 import { serviceRequestsApi } from './routes/api-service-requests'
 import { providerApi } from './routes/api-provider'
+import { adminApi } from './routes/api-admin'
 
 // SSR pages
 import { homePage } from './pages/home'
@@ -94,6 +95,7 @@ app.route('/api/seller', sellerApi)
 app.route('/api', servicesApi)
 app.route('/api', serviceRequestsApi)
 app.route('/api', providerApi)
+app.route('/api/admin', adminApi)
 
 // ---------- SSR pages ----------
 app.get('/', homePage)

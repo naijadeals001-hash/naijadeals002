@@ -6,6 +6,9 @@ import { getAddress } from '../lib/addresses'
 import { createPendingOrder, payOrderFromWallet, InsufficientFundsError, type DeliveryMethod } from '../lib/orders'
 import { initializePaystackTransaction, verifyPaystackTransaction } from '../lib/paystack'
 import { confirmOrderPayment, cancelOrder, OrderCancellationError } from '../lib/orders'
+import { transitionOrderItemStatus, OrderLifecycleError, IllegalTransitionError, NotOwnedOrderItemError, type OrderItemStatus } from '../lib/order-lifecycle'
+import { createDispute, getDisputesForOrder, getRefundsForOrder } from '../lib/refunds'
+import { getPendingAdditionalCharges, confirmAdditionalChargePayment, SettlementError } from '../lib/order-settlement'
 
 export const ordersApi = new Hono<AppEnv & { Bindings: AppEnv['Bindings'] & { PAYSTACK_SECRET_KEY?: string } }>()
 
@@ -52,6 +55,93 @@ ordersApi.post('/:orderNumber/cancel', async (c) => {
     return c.json({ success: true })
   } catch (err) {
     if (err instanceof OrderCancellationError) return c.json({ error: err.message }, 400)
+    throw err
+  }
+})
+
+/**
+ * Marketplace Engine 2.1 (spec sections 3/4): customer-side item
+ * transitions (confirm delivery -> 'completed', or raise a dispute).
+ * Ownership resolved via the order's OWN user_id (getItemForCustomer
+ * inside transitionOrderItemStatus) — never a client-claimed order/item
+ * relationship.
+ */
+ordersApi.patch('/items/:orderItemId/status', async (c) => {
+  const user = c.get('user')!
+  const orderItemId = Number(c.req.param('orderItemId'))
+  const body = await c.req.json<{ status: OrderItemStatus; reason?: string }>().catch(() => null)
+  const validTargets: OrderItemStatus[] = ['completed', 'delivered', 'disputed', 'cancelled']
+  if (!body?.status || !validTargets.includes(body.status)) {
+    return c.json({ error: `status must be one of: ${validTargets.join(', ')}` }, 400)
+  }
+  try {
+    const updated = await transitionOrderItemStatus(c.env.DB, orderItemId, body.status, { userId: user.id, role: 'customer' }, { reason: body.reason })
+    return c.json({ success: true, item: updated })
+  } catch (err) {
+    if (err instanceof NotOwnedOrderItemError) return c.json({ error: err.message }, 404)
+    if (err instanceof IllegalTransitionError) return c.json({ error: err.message }, 400)
+    if (err instanceof OrderLifecycleError) return c.json({ error: err.message }, 400)
+    throw err
+  }
+})
+
+/** Customer-initiated dispute (spec section 6) — commerce context only, ownership enforced inside createDispute via `WHERE id = ? AND user_id = ?`. */
+ordersApi.post('/:orderNumber/disputes', async (c) => {
+  const user = c.get('user')!
+  const orderNumber = c.req.param('orderNumber')
+  const body = await c.req.json<{ order_item_id?: number; against_vendor_id?: number; reason: string; description?: string }>().catch(() => null)
+  if (!body?.reason) return c.json({ error: 'reason is required' }, 400)
+
+  const order = await c.env.DB.prepare('SELECT id FROM orders WHERE order_number = ? AND user_id = ?').bind(orderNumber, user.id).first<{ id: number }>()
+  if (!order) return c.json({ error: 'Order not found' }, 404)
+
+  const disputeId = await createDispute(c.env.DB, {
+    orderId: order.id,
+    orderItemId: body.order_item_id ?? null,
+    raisedByUserId: user.id,
+    againstVendorId: body.against_vendor_id ?? null,
+    reason: body.reason,
+    description: body.description,
+  })
+  return c.json({ id: disputeId }, 201)
+})
+
+ordersApi.get('/:orderNumber/disputes', async (c) => {
+  const user = c.get('user')!
+  const orderNumber = c.req.param('orderNumber')
+  const order = await c.env.DB.prepare('SELECT id FROM orders WHERE order_number = ? AND user_id = ?').bind(orderNumber, user.id).first<{ id: number }>()
+  if (!order) return c.json({ error: 'Order not found' }, 404)
+  const results = await getDisputesForOrder(c.env.DB, order.id)
+  return c.json({ results })
+})
+
+ordersApi.get('/:orderNumber/refunds', async (c) => {
+  const user = c.get('user')!
+  const orderNumber = c.req.param('orderNumber')
+  const order = await c.env.DB.prepare('SELECT id FROM orders WHERE order_number = ? AND user_id = ?').bind(orderNumber, user.id).first<{ id: number }>()
+  if (!order) return c.json({ error: 'Order not found' }, 404)
+  const results = await getRefundsForOrder(c.env.DB, order.id)
+  return c.json({ results })
+})
+
+/** Variable-weight additional charges awaiting THIS customer's explicit confirmation (spec section 12 — never auto-debited). */
+ordersApi.get('/:orderNumber/additional-charges', async (c) => {
+  const user = c.get('user')!
+  const orderNumber = c.req.param('orderNumber')
+  const order = await c.env.DB.prepare('SELECT id FROM orders WHERE order_number = ? AND user_id = ?').bind(orderNumber, user.id).first<{ id: number }>()
+  if (!order) return c.json({ error: 'Order not found' }, 404)
+  const results = await getPendingAdditionalCharges(c.env.DB, user.id, order.id)
+  return c.json({ results })
+})
+
+ordersApi.post('/additional-charges/:chargeId/pay', async (c) => {
+  const user = c.get('user')!
+  const chargeId = Number(c.req.param('chargeId'))
+  try {
+    const result = await confirmAdditionalChargePayment(c.env.DB, user.id, chargeId)
+    return c.json({ success: true, ...result })
+  } catch (err) {
+    if (err instanceof SettlementError) return c.json({ error: err.message }, 400)
     throw err
   }
 })
