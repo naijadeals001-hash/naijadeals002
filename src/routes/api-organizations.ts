@@ -15,6 +15,7 @@ import type { AppEnv } from '../types'
 import { requireAuth } from '../lib/auth'
 import { requireOrganizationMember, requireOrganizationRole, requirePermission } from '../lib/rbac'
 import { getVendorForOrganization, createOrganizationStore, type CreateOrganizationStoreInput } from '../lib/stores'
+import { resolveOrganizationProvider, createOrganizationProviderProfile, type CreateProviderProfileInput } from '../lib/providers'
 import {
   createOrganization,
   getOrganizationById,
@@ -291,5 +292,31 @@ organizationsApi.post('/:organizationId/store', requireOrganizationMember, requi
     return c.json({ success: true, vendorId, store: vendor }, 201)
   } catch (err: any) {
     return c.json({ error: err.message ?? 'Failed to create store' }, 400)
+  }
+})
+
+// ---------- Service provider bridge (Service Engine 2.0, spec section 2) ----------
+// The provider_profiles<->organization bridge: an organization can own ONE
+// service provider profile. Creation requires 'services.manage' — already
+// seeded and granted to owner/admin/manager by migration 0037 (discovered
+// during Service Engine inspection: zero NEW permission-seeding SQL was
+// needed for this, unlike the Marketplace Engine's store.manage).
+
+organizationsApi.get('/:organizationId/provider', requireOrganizationMember, async (c) => {
+  const organizationId = Number(c.req.param('organizationId'))
+  const provider = await resolveOrganizationProvider(c.env.DB, c.get('user')!.id, organizationId)
+  return c.json({ provider })
+})
+
+organizationsApi.post('/:organizationId/provider', requireOrganizationMember, requirePermission('services.manage'), async (c) => {
+  const organizationId = Number(c.req.param('organizationId'))
+  const body = await c.req.json<Partial<CreateProviderProfileInput>>().catch(() => null)
+  if (!body?.display_name) return c.json({ error: 'display_name is required' }, 400)
+  try {
+    const providerId = await createOrganizationProviderProfile(c.env.DB, organizationId, body as CreateProviderProfileInput)
+    const provider = await resolveOrganizationProvider(c.env.DB, c.get('user')!.id, organizationId)
+    return c.json({ success: true, providerId, provider }, 201)
+  } catch (err: any) {
+    return c.json({ error: err.message ?? 'Failed to create service provider profile' }, 400)
   }
 })

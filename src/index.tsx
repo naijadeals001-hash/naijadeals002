@@ -23,6 +23,9 @@ import { placeholderRoute } from './routes/placeholder'
 import { versionRoute } from './routes/version'
 import { i18nApi } from './routes/api-i18n'
 import { sellerApi } from './routes/api-seller'
+import { servicesApi } from './routes/api-services'
+import { serviceRequestsApi } from './routes/api-service-requests'
+import { providerApi } from './routes/api-provider'
 
 // SSR pages
 import { homePage } from './pages/home'
@@ -88,6 +91,9 @@ app.route('/api/wishlist', wishlistApi)
 app.route('/api/ecosystem', ecosystemApi)
 app.route('/api/i18n', i18nApi)
 app.route('/api/seller', sellerApi)
+app.route('/api', servicesApi)
+app.route('/api', serviceRequestsApi)
+app.route('/api', providerApi)
 
 // ---------- SSR pages ----------
 app.get('/', homePage)

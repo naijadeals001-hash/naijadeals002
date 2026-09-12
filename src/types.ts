@@ -21,6 +21,14 @@ export type AppEnv = {
      * import between types.ts and lib/organizations.ts.
      */
     orgMembership?: import('./lib/organizations').MembershipResolution
+    /**
+     * Set by requireActiveProvider (src/lib/providers.ts) once the
+     * gig_provider profile is resolved server-side from the AUTHENTICATED
+     * session user's id — NEVER from a client-supplied provider_profile_id.
+     * Mirrors sellerVendor/orgMembership's resolution discipline exactly for
+     * the Service Engine (migration 0039).
+     */
+    providerProfile?: ProviderProfileRow
   }
 }
 
@@ -670,6 +678,287 @@ export interface OrganizationAddressRow {
   latitude: number | null
   longitude: number | null
   is_default: number
+  created_at: string
+  updated_at: string
+}
+
+// ============================================================
+// Service Engine 2.0 (migration 0039)
+// ============================================================
+
+/** provider_profiles (migration 0025), reused as-is for Service Engine providers. provider_type is always 'gig_provider' for services; primary_category_id/identity_organization_id are additive (migration 0039). */
+export interface ProviderProfileRow {
+  id: number
+  user_id: number
+  provider_type: 'gig_provider' | 'host' | 'driver_operator' | 'restaurant_operator'
+  organization_id: number | null
+  identity_organization_id: number | null
+  primary_category_id: number | null
+  display_name: string
+  bio: string
+  contact_email: string | null
+  contact_phone: string | null
+  country_iso: string
+  service_area_json: string
+  verification_status: 'pending' | 'verified' | 'rejected'
+  operational_status: 'active' | 'paused' | 'suspended'
+  onboarding_completed_at: string | null
+  rating_avg: number
+  rating_count: number
+  metadata_json: string
+  avatar_url: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type ServiceListingStatus = 'draft' | 'pending_review' | 'active' | 'paused' | 'rejected' | 'archived'
+export type ServiceType = 'at_provider_location' | 'at_customer_location' | 'online' | 'mobile' | 'remote' | 'hybrid' | 'in_person'
+export type ServicePricingModel = 'fixed' | 'starting_price' | 'hourly' | 'daily' | 'per_visit' | 'per_session' | 'per_km' | 'per_sqm' | 'custom_quote' | 'price_range' | 'negotiable'
+
+export interface ServiceListingRow {
+  id: number
+  provider_profile_id: number
+  bookable_listing_id: number | null
+  category_id: number
+  title: string
+  description: string
+  service_type: ServiceType
+  pricing_model: ServicePricingModel
+  base_price_kobo: number | null
+  max_price_kobo: number | null
+  currency: string
+  duration_minutes: number | null
+  requirements_json: string
+  media_json: string
+  terms: string
+  cancellation_policy: string
+  status: ServiceListingStatus
+  is_active: number
+  rating_avg: number
+  rating_count: number
+  created_at: string
+  updated_at: string
+  // joined convenience fields
+  category_name?: string
+  category_slug?: string
+  provider_display_name?: string
+  provider_rating_avg?: number
+  provider_verification_status?: string
+}
+
+export interface ServicePackageRow {
+  id: number
+  service_listing_id: number
+  title: string
+  description: string
+  price_kobo: number
+  duration_minutes: number | null
+  included_json: string
+  limits_json: string
+  sort_order: number
+  is_active: number
+  created_at: string
+}
+
+export interface ServiceAreaRow {
+  id: number
+  provider_profile_id: number
+  country_iso: string
+  region: string | null
+  city: string | null
+  neighborhood: string | null
+  radius_km: number | null
+  latitude: number | null
+  longitude: number | null
+  is_online_only: number
+  created_at: string
+}
+
+export interface ServiceResourceRow {
+  id: number
+  provider_profile_id: number
+  name: string
+  role_title: string | null
+  is_active: number
+  created_at: string
+}
+
+export interface ServiceAvailabilityHourRow {
+  id: number
+  resource_id: number
+  day_of_week: number
+  start_time: string
+  end_time: string
+  buffer_minutes: number
+  is_active: number
+}
+
+export type ServiceRequestStatus = 'draft' | 'submitted' | 'matching' | 'quoted' | 'accepted' | 'scheduled' | 'in_progress' | 'completed' | 'cancelled' | 'disputed'
+export type ServiceUrgency = 'normal' | 'urgent' | 'emergency'
+
+export interface ServiceRequestRow {
+  id: number
+  request_number: string
+  customer_user_id: number
+  category_id: number
+  service_listing_id: number | null
+  title: string
+  description: string
+  country_iso: string
+  city: string | null
+  address_line1: string | null
+  latitude: number | null
+  longitude: number | null
+  preferred_date: string | null
+  preferred_time: string | null
+  budget_kobo: number | null
+  urgency: ServiceUrgency
+  status: ServiceRequestStatus
+  created_at: string
+  updated_at: string
+}
+
+export interface ServiceRequestRequirementRow {
+  id: number
+  service_request_id: number
+  key: string
+  label: string
+  value: string | null
+}
+
+export interface ServiceRequestAttachmentRow {
+  id: number
+  service_request_id: number
+  url: string
+  media_type: string
+  created_at: string
+}
+
+export type ServiceQuoteStatus = 'draft' | 'sent' | 'viewed' | 'accepted' | 'rejected' | 'expired' | 'withdrawn'
+
+export interface ServiceQuoteRow {
+  id: number
+  service_request_id: number
+  provider_profile_id: number
+  price_kobo: number
+  currency: string
+  estimated_duration_minutes: number | null
+  proposed_date: string | null
+  proposed_time: string | null
+  scope: string
+  materials_included: number
+  travel_fee_kobo: number
+  notes: string
+  status: ServiceQuoteStatus
+  expires_at: string | null
+  version: number
+  supersedes_quote_id: number | null
+  created_at: string
+  updated_at: string
+  // joined convenience fields
+  provider_display_name?: string
+  provider_rating_avg?: number
+}
+
+export type ServiceOrderStatus =
+  | 'accepted'
+  | 'scheduled'
+  | 'provider_arriving'
+  | 'in_progress'
+  | 'completed'
+  | 'customer_confirmed'
+  | 'paid'
+  | 'cancelled'
+  | 'declined'
+  | 'expired'
+  | 'disputed'
+  | 'refunded'
+  | 'no_show'
+
+export interface ServiceOrderRow {
+  id: number
+  order_number: string
+  service_request_id: number
+  service_quote_id: number
+  customer_user_id: number
+  provider_profile_id: number
+  booking_id: number | null
+  price_kobo: number
+  travel_fee_kobo: number
+  additional_charges_kobo: number
+  platform_fee_kobo: number
+  total_kobo: number
+  currency: string
+  payment_status: 'unpaid' | 'deposit_paid' | 'escrow_held' | 'released' | 'refunded' | 'partially_refunded'
+  status: ServiceOrderStatus
+  scheduled_at: string | null
+  completed_at: string | null
+  cancelled_at: string | null
+  cancellation_reason: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface ServiceOrderEventRow {
+  id: number
+  service_order_id: number
+  previous_status: string | null
+  new_status: string
+  actor_user_id: number | null
+  metadata_json: string
+  created_at: string
+}
+
+export interface ServiceMediaRow {
+  id: number
+  provider_profile_id: number | null
+  service_listing_id: number | null
+  media_type: string
+  url: string
+  caption: string | null
+  media_category: string
+  sort_order: number
+  created_at: string
+}
+
+/** bookable_listings (migration 0024), reused as-is by the Service Engine — service_listing_id is additive (migration 0039). */
+export interface BookableListingRow {
+  id: number
+  listing_type: 'gig_service' | 'stay_unit'
+  provider_user_id: number
+  title: string
+  description: string
+  country_iso: string
+  city: string | null
+  booking_mode: 'instant' | 'request'
+  pricing_unit: 'per_booking' | 'per_hour' | 'per_night'
+  base_price_kobo: number
+  currency: string
+  is_active: number
+  category: string | null
+  cover_image_url: string | null
+  service_listing_id: number | null
+  created_at: string
+  updated_at: string
+}
+
+/** bookings (migration 0024), reused as-is. */
+export interface BookingRow {
+  id: number
+  booking_number: string
+  listing_id: number
+  listing_type_snapshot: string
+  customer_user_id: number
+  provider_user_id: number
+  starts_at: string
+  ends_at: string
+  guests_count: number | null
+  total_price_kobo: number
+  currency: string
+  payment_status: 'unpaid' | 'escrow_held' | 'released' | 'refunded'
+  payment_reference: string | null
+  status: 'pending_request' | 'confirmed' | 'declined' | 'cancelled' | 'completed' | 'no_show'
+  cancelled_reason: string | null
   created_at: string
   updated_at: string
 }
