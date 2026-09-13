@@ -726,15 +726,40 @@ environment only.
 
 ## 34. Final Checkpoint
 
-To be filled in immediately before the final commit/push in this same
-session, once this document itself is staged:
+Recorded after `git commit` + `git push` + verification, per the
+mandated Phase 9 sequencing.
 
-- **Local HEAD SHA (before this commit):** `99db15c`
-- **This document's commit SHA:** recorded below after `git commit`
-- **origin/main SHA after fetch:** recorded below after `git fetch`
-- **GitHub API main SHA:** recorded below after querying the API
-- **Three-way match:** recorded below
+- **Pre-closure local HEAD (before this document's commit):** `99db15c`
+- **Engine 9 closure commit SHA (contains this file, the
+  `07.providers-outbox.test.mjs` fix, and the regression driver
+  script):** `da656c447299cc6f7f5780e6c2ba8d68831cd528`
+- **origin/main SHA after `git fetch origin`:**
+  `da656c447299cc6f7f5780e6c2ba8d68831cd528`
+- **GitHub API main branch SHA
+  (`gh api repos/naijadeals001-hash/naijadeals002/branches/main`):**
+  `da656c447299cc6f7f5780e6c2ba8d68831cd528`
+- **Three-way match:** ✅ CONFIRMED — local HEAD = origin/main = GitHub
+  API main, all three identical.
+- **Push:** fast-forward, `360f133..da656c4  main -> main`, no force
+  push, no history rewrite.
+- **Working tree after push:** `git status --short` → empty (clean).
 
-(See the commit message and the final report in this session for the
-actual recorded SHAs — this section intentionally is completed as the
-very last step, after `git push`, per the mandated Phase 9 sequencing.)
+This section could not be filled in with real values at the moment
+this document was first written, because the SHA of the commit that
+contains this document cannot be known before that commit exists.
+It was completed in a small, non-destructive follow-up commit made
+immediately after the verified push, containing only this section's
+text — no application code, no test code, and no other document
+content changed in that follow-up commit.
+
+(See the final chat-level completion report in this session for the
+follow-up commit's own SHA and confirmation that it is included in
+the same verified `main` branch.)
+
+(Historical note, retained for audit-trail transparency: this section
+was originally written as a placeholder — "recorded below after `git
+commit`" / "after `git fetch`" / "after querying the API" — because
+this section is necessarily completed as the very last step, after
+`git push`, per the mandated Phase 9 sequencing. It was filled in with
+the real SHAs above in a follow-up commit, as explained earlier in
+this section.)
