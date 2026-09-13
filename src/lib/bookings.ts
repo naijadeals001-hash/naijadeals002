@@ -12,10 +12,27 @@
  * services.ts, audited here from the start rather than fixed later).
  */
 import type { BookableListingRow, BookingResourceRow } from '../types'
+import { enqueueSearchIndexEvent } from './search-index-events'
 
 export class NotOwnedListingError extends Error {
   constructor() {
     super('Bookable listing not found or not owned by this provider/organization')
+  }
+}
+
+/**
+ * Engine 11 event writer, called inline after each real write path in this
+ * file commits — mirrors seller-products.ts/services.ts's emit*SearchEvent()
+ * helpers exactly (read updated_at back from the row, own try/catch, never
+ * fatal to the booking listing write it follows).
+ */
+async function emitBookableListingSearchEvent(db: D1Database, listingId: number): Promise<void> {
+  try {
+    const row = await db.prepare('SELECT updated_at FROM bookable_listings WHERE id = ?').bind(listingId).first<{ updated_at: string }>()
+    if (!row) return
+    await enqueueSearchIndexEvent(db, { entityType: 'bookable_listing', entityId: listingId, operation: 'upsert', sourceUpdatedAt: row.updated_at })
+  } catch (err) {
+    console.error('bookings: search index event enqueue failed (non-fatal, bookable listing write already committed)', err)
   }
 }
 
@@ -94,6 +111,7 @@ export async function createBookableListing(db: D1Database, providerUserId: numb
   )
   await db.batch(statements)
 
+  await emitBookableListingSearchEvent(db, listingId)
   return listingId
 }
 
@@ -224,7 +242,12 @@ export async function updateBookableListing(db: D1Database, providerUserId: numb
     .prepare(`UPDATE bookable_listings SET ${fields.join(', ')} WHERE id = ? AND provider_user_id = ? AND organization_id IS NULL`)
     .bind(...binds, listingId, providerUserId)
     .run()
-  return (result.meta.rows_written ?? 0) > 0
+  const updated = (result.meta.rows_written ?? 0) > 0
+  // Engine 11: only a genuine ownership-matched update may enqueue a
+  // re-index signal — a 0-row UPDATE (wrong provider / org-owned listing
+  // hitting the individual-identity path) must not.
+  if (updated) await emitBookableListingSearchEvent(db, listingId)
+  return updated
 }
 
 /** Individual-identity listing list (see getOwnedListingForProvider's doc comment for the `organization_id IS NULL` rationale — Invariant #7 fix). */
