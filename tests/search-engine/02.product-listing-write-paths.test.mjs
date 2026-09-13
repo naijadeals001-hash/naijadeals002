@@ -55,10 +55,57 @@ test('updateProduct: a genuine field change produces a SECOND, DISTINCT search_i
   await createListing(db, vendorId, { product_id: productId, price_kobo: 100000, stock: 5 })
   assert.equal(await sellerOwnsProduct(db, vendorId, productId), true)
 
-  // Force updated_at to visibly differ from creation instant (D1's
-  // datetime('now') has 1-second resolution) so this test does not
-  // depend on the two calls straddling a wall-clock second by luck.
-  await db.prepare(`UPDATE products SET updated_at = datetime('now', '-5 seconds') WHERE id = ?`).bind(productId).run()
+  // DETERMINISM FIX (Category B — proven, not assumed; see
+  // docs/ENGINE-11-SEARCH-DISCOVERY-PHASE-1-VERIFICATION.md / migration
+  // 0047's header): search_index_events' idempotency_key is
+  // `${entity_type}:${entity_id}:${operation}:${source_updated_at}` BY
+  // DESIGN — enqueueSearchIndexEvent() intentionally collapses two
+  // events for the same entity+operation at the SAME source_updated_at
+  // value via `ON CONFLICT(idempotency_key) DO NOTHING` (this is the
+  // exact same CAS-guard discipline Engine 9/7 already established, and
+  // File 01's own Test 5 already independently proves "a NEWER
+  // source_updated_at produces a DISTINCT new row" — the contract is
+  // correct, this test's PRECONDITION for exercising it was not).
+  //
+  // ROOT CAUSE (confirmed by reading updateProduct()'s implementation,
+  // not assumed): `updateProduct()` always appends a LITERAL
+  // `updated_at = datetime('now')` SQL clause bound to the real UPDATE
+  // statement — it is the actual UPDATE's own timestamp write, not a
+  // value the caller supplies or that gets read back unmodified. So the
+  // ORIGINAL approach of manually rewinding the stored updated_at value
+  // beforehand (whether by a flat "-5 seconds" or any other offset) can
+  // never work: whatever is written pre-emptively is unconditionally
+  // clobbered by updateProduct()'s own datetime('now') at call time.
+  // (An earlier attempt at this fix rewound the value "-10 seconds
+  // relative to the current read" — that failed for the identical
+  // reason and was empirically confirmed still flaky before being
+  // replaced by this approach.)
+  // The event's source_updated_at is read back from that SAME real
+  // wall-clock write immediately after — so the only genuine
+  // precondition for two DISTINCT source_updated_at values is that real
+  // wall-clock time crosses a full D1 1-second resolution boundary
+  // between createProduct()'s write and updateProduct()'s write. The
+  // setup steps above (createTestVendor + createListing + the ownership
+  // check) consume a VARIABLE amount of real time, so relying on them
+  // alone is not deterministic — confirmed by instrumented reproduction
+  // showing an intermittent ~30-40% failure rate across standalone runs,
+  // with failing runs showing pre- and post-update updated_at values
+  // that were byte-identical.
+  //
+  // Fix: explicitly poll D1's OWN clock (not Node's, to avoid any
+  // host/D1 clock-drift assumption) until it reports a value strictly
+  // later than the product's own create-time updated_at, BEFORE calling
+  // updateProduct(). This bounds the wait to at most ~1 second in the
+  // worst case and makes the second-boundary crossing deterministic
+  // rather than incidental. Zero application code touched; the
+  // `notEqual` distinctness assertion below is unchanged and unweakened
+  // — this only guarantees its actual precondition is met.
+  const createdRow = await db.prepare('SELECT updated_at FROM products WHERE id = ?').bind(productId).first()
+  for (;;) {
+    const { now } = await db.prepare(`SELECT datetime('now') AS now`).first()
+    if (now !== createdRow.updated_at) break
+    await new Promise((resolve) => setTimeout(resolve, 50))
+  }
 
   await updateProduct(db, vendorId, productId, { title: 'Search WritePath Test Product B (edited)' })
 
