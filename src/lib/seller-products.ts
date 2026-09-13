@@ -18,6 +18,47 @@
  * case-by-case check.
  */
 import type { ProductRow, ListingRow, VariantRow } from '../types'
+import { enqueueSearchIndexEvent } from './search-index-events'
+
+/**
+ * Engine 11 event writer, called inline at the end of each real write path
+ * in this file — mirrors the DIRECT-CALL precedent found in
+ * order-lifecycle.ts/booking-lifecycle.ts exactly (a separate,
+ * independent, try/catch-wrapped step placed strictly AFTER the business
+ * mutation has already committed). Reads updated_at BACK from the row
+ * (rather than computing a JS-side timestamp) so source_updated_at is
+ * always byte-identical to the canonical column's actual value — the
+ * signal a future indexer will compare against at processing time.
+ * Never throws: a search-index outage must never break a product/listing
+ * write (see search-index-events.ts's module doc comment).
+ */
+async function emitProductSearchEvent(db: D1Database, productId: number, deleted = false): Promise<void> {
+  try {
+    if (deleted) {
+      await enqueueSearchIndexEvent(db, { entityType: 'product', entityId: productId, operation: 'delete', sourceUpdatedAt: new Date().toISOString() })
+      return
+    }
+    const row = await db.prepare('SELECT updated_at FROM products WHERE id = ?').bind(productId).first<{ updated_at: string }>()
+    if (!row) return // row vanished between mutation and read-back — nothing to index
+    await enqueueSearchIndexEvent(db, { entityType: 'product', entityId: productId, operation: 'upsert', sourceUpdatedAt: row.updated_at })
+  } catch (err) {
+    console.error('seller-products: search index event enqueue failed (non-fatal, product write already committed)', err)
+  }
+}
+
+async function emitListingSearchEvent(db: D1Database, listingId: number, deleted = false): Promise<void> {
+  try {
+    if (deleted) {
+      await enqueueSearchIndexEvent(db, { entityType: 'product_listing', entityId: listingId, operation: 'delete', sourceUpdatedAt: new Date().toISOString() })
+      return
+    }
+    const row = await db.prepare('SELECT updated_at FROM product_listings WHERE id = ?').bind(listingId).first<{ updated_at: string }>()
+    if (!row) return
+    await enqueueSearchIndexEvent(db, { entityType: 'product_listing', entityId: listingId, operation: 'upsert', sourceUpdatedAt: row.updated_at })
+  } catch (err) {
+    console.error('seller-products: search index event enqueue failed (non-fatal, listing write already committed)', err)
+  }
+}
 
 export class NotOwnedError extends Error {
   constructor(entity: string, id: number) {
@@ -86,7 +127,9 @@ export async function createProduct(db: D1Database, input: CreateProductInput): 
     )
     .run()
 
-  return Number(result.meta.last_row_id)
+  const productId = Number(result.meta.last_row_id)
+  await emitProductSearchEvent(db, productId)
+  return productId
 }
 
 /**
@@ -153,6 +196,7 @@ export async function updateProduct(db: D1Database, vendorId: number, productId:
   if (fields.length === 0) return
   fields.push(`updated_at = datetime('now')`)
   await db.prepare(`UPDATE products SET ${fields.join(', ')} WHERE id = ?`).bind(...binds, productId).run()
+  await emitProductSearchEvent(db, productId)
 }
 
 // ---------- Listings ----------
@@ -223,7 +267,9 @@ export async function createListing(db: D1Database, vendorId: number, input: Cre
     )
     .run()
 
-  return Number(result.meta.last_row_id)
+  const listingId = Number(result.meta.last_row_id)
+  await emitListingSearchEvent(db, listingId)
+  return listingId
 }
 
 /** Fetches a listing ONLY if owned by vendorId — the "does not exist for you" pattern that prevents cross-vendor enumeration. */
@@ -282,7 +328,12 @@ export async function updateListing(db: D1Database, vendorId: number, listingId:
   // same bug class fixed in services.ts's updateServiceListing during the
   // Service Engine 2.0 pass. The previous `|| result.success` fallback here
   // defeated that protection entirely and is removed.
-  return (result.meta.rows_written ?? 0) > 0
+  const updated = (result.meta.rows_written ?? 0) > 0
+  // Engine 11: only emit a search event for a GENUINE ownership-matched
+  // update — a 0-row UPDATE (wrong vendor / nonexistent listing) must
+  // never enqueue a re-index signal for a row this call didn't touch.
+  if (updated) await emitListingSearchEvent(db, listingId)
+  return updated
 }
 
 /** Lists all listings owned by a vendor, joined with product title/image, for the seller products dashboard. */
