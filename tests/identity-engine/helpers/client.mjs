@@ -150,6 +150,36 @@ export async function cleanupRunNonce(nonce) {
     `DELETE FROM cc_audit_logs WHERE actor_user_id IN (SELECT id FROM users WHERE email LIKE '%${nonce}%') OR entity_id IN (SELECT CAST(id AS TEXT) FROM users WHERE email LIKE '%${nonce}%');` +
     `DELETE FROM cc_domain_events WHERE actor_user_id IN (SELECT id FROM users WHERE email LIKE '%${nonce}%') OR entity_id IN (SELECT CAST(id AS TEXT) FROM users WHERE email LIKE '%${nonce}%');` +
     `DELETE FROM account_preferences WHERE user_id IN (SELECT id FROM users WHERE email LIKE '%${nonce}%');` +
+    `DELETE FROM password_reset_tokens WHERE user_id IN (SELECT id FROM users WHERE email LIKE '%${nonce}%');` +
+    `DELETE FROM identity_verification_tokens WHERE user_id IN (SELECT id FROM users WHERE email LIKE '%${nonce}%');` +
+    `DELETE FROM login_attempts WHERE identifier LIKE '%${nonce}%';` +
+    `DELETE FROM notification_deliveries WHERE outbox_id IN (SELECT id FROM notification_outbox WHERE recipient_user_id IN (SELECT id FROM users WHERE email LIKE '%${nonce}%'));` +
+    `DELETE FROM notification_outbox WHERE recipient_user_id IN (SELECT id FROM users WHERE email LIKE '%${nonce}%');` +
     `DELETE FROM users WHERE email LIKE '%${nonce}%';`
+  )
+}
+
+/**
+ * Broader sweep used by the final consolidated cleanup pass: matches ANY
+ * row whose associated user email matches the 'idtest_' prefix (covers
+ * every RUN_NONCE this harness has ever generated across all test files
+ * in a single sandbox session), not just one specific nonce. Intended to
+ * be called once, at the very end of the full identity-engine test run.
+ */
+export async function cleanupAllIdentityTestFixtures() {
+  await execD1(
+    `DELETE FROM organization_invitations WHERE invited_email LIKE 'idtest_%';` +
+    `DELETE FROM organization_members WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'idtest_%');` +
+    `DELETE FROM organizations WHERE created_by_user_id IN (SELECT id FROM users WHERE email LIKE 'idtest_%');` +
+    `DELETE FROM sessions WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'idtest_%');` +
+    `DELETE FROM cc_audit_logs WHERE actor_user_id IN (SELECT id FROM users WHERE email LIKE 'idtest_%') OR entity_id IN (SELECT CAST(id AS TEXT) FROM users WHERE email LIKE 'idtest_%');` +
+    `DELETE FROM cc_domain_events WHERE actor_user_id IN (SELECT id FROM users WHERE email LIKE 'idtest_%') OR entity_id IN (SELECT CAST(id AS TEXT) FROM users WHERE email LIKE 'idtest_%');` +
+    `DELETE FROM account_preferences WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'idtest_%');` +
+    `DELETE FROM password_reset_tokens WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'idtest_%');` +
+    `DELETE FROM identity_verification_tokens WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'idtest_%');` +
+    `DELETE FROM login_attempts WHERE identifier LIKE 'idtest_%';` +
+    `DELETE FROM notification_deliveries WHERE outbox_id IN (SELECT id FROM notification_outbox WHERE recipient_user_id IN (SELECT id FROM users WHERE email LIKE 'idtest_%'));` +
+    `DELETE FROM notification_outbox WHERE recipient_user_id IN (SELECT id FROM users WHERE email LIKE 'idtest_%');` +
+    `DELETE FROM users WHERE email LIKE 'idtest_%';`
   )
 }
