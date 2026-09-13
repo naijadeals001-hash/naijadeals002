@@ -20,10 +20,28 @@ import type {
   ServicePricingModel,
   ServiceListingStatus
 } from '../types'
+import { enqueueSearchIndexEvent } from './search-index-events'
 
 export class NotOwnedError extends Error {
   constructor(entity: string, id: number) {
     super(`${entity} ${id} not found or not owned by this provider`)
+  }
+}
+
+/**
+ * Engine 11 event writer, called inline after each real write path in this
+ * file commits — mirrors seller-products.ts's emitProductSearchEvent()/
+ * emitListingSearchEvent() exactly (read updated_at BACK from the row
+ * rather than computing a JS-side timestamp; own try/catch so a
+ * search-index failure can never break a service-listing write).
+ */
+async function emitServiceListingSearchEvent(db: D1Database, listingId: number): Promise<void> {
+  try {
+    const row = await db.prepare('SELECT updated_at FROM service_listings WHERE id = ?').bind(listingId).first<{ updated_at: string }>()
+    if (!row) return
+    await enqueueSearchIndexEvent(db, { entityType: 'service_listing', entityId: listingId, operation: 'upsert', sourceUpdatedAt: row.updated_at })
+  } catch (err) {
+    console.error('services: search index event enqueue failed (non-fatal, service listing write already committed)', err)
   }
 }
 
@@ -109,7 +127,9 @@ export async function createServiceListing(db: D1Database, providerProfileId: nu
     )
     .run()
 
-  return Number(result.meta.last_row_id)
+  const listingId = Number(result.meta.last_row_id)
+  await emitServiceListingSearchEvent(db, listingId)
+  return listingId
 }
 
 /** Fetches a listing ONLY if owned by providerProfileId — prevents cross-provider enumeration (spec section 43). */
@@ -167,7 +187,11 @@ export async function updateServiceListing(
     .prepare(`UPDATE service_listings SET ${fields.join(', ')} WHERE id = ? AND provider_profile_id = ?`)
     .bind(...binds, listingId, providerProfileId)
     .run()
-  return (result.meta.rows_written ?? 0) > 0
+  const updated = (result.meta.rows_written ?? 0) > 0
+  // Engine 11: only a genuine ownership-matched update may enqueue a
+  // re-index signal — a 0-row UPDATE (wrong provider) must not.
+  if (updated) await emitServiceListingSearchEvent(db, listingId)
+  return updated
 }
 
 /** All listings owned by a provider — the provider dashboard "My Services" data source. */

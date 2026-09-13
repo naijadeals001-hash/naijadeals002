@@ -110,6 +110,29 @@ export async function createTestProduct(vendorId, label) {
   return Number(result.meta.last_row_id)
 }
 
+/**
+ * category_id=91 is a seeded 'service' category_type reference row
+ * (confirmed present against sqlite_master this session; categories is
+ * CONFIG data, always present in a production-seeded local D1).
+ */
+export async function createTestProviderProfile(label) {
+  const db = await getTestDb()
+  const email = `search_test_${label}_${RUN_NONCE}@test.ng`
+  const user = await db
+    .prepare('INSERT INTO users (email, name, password_hash, password_salt) VALUES (?, ?, ?, ?)')
+    .bind(email, `SearchTest Provider ${label}`, 'test-hash', 'test-salt')
+    .run()
+  const userId = Number(user.meta.last_row_id)
+  const provider = await db
+    .prepare(
+      `INSERT INTO provider_profiles (user_id, provider_type, display_name, country_iso, verification_status, operational_status)
+       VALUES (?, 'gig_provider', ?, 'NG', 'verified', 'active')`
+    )
+    .bind(userId, `SearchTestProvider_${label}_${RUN_NONCE}`)
+    .run()
+  return { userId, providerProfileId: Number(provider.meta.last_row_id) }
+}
+
 export async function createTestProductListing(productId, vendorId, priceKobo = 100000) {
   const db = await getTestDb()
   const result = await db
