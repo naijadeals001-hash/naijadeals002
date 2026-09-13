@@ -1,8 +1,11 @@
 import { Hono } from 'hono'
 import type { AppEnv } from '../types'
-import { hashPassword, verifyPassword, createSession, destroySession, setSessionCookie, clearSessionCookie, getSessionToken } from '../lib/auth'
+import { hashPassword, verifyPassword, createSession, destroySession, setSessionCookie, clearSessionCookie, getSessionToken, isAccountStatusBlocked, requireAuth } from '../lib/auth'
 import { mergeGuestCartIntoUser } from '../lib/cart'
 import { getOrSetGuestToken } from '../lib/guest'
+import { checkLoginThrottle, recordLoginAttempt, getClientIp } from '../lib/login-throttle'
+import { requestPasswordReset, resetPasswordWithToken, WeakPasswordError, InvalidResetTokenError } from '../lib/password-reset'
+import { requestEmailVerification, requestPhoneVerification, confirmVerification, InvalidVerificationTokenError, NoTargetToVerifyError, AlreadyVerifiedError } from '../lib/identity-verification'
 
 export const authApi = new Hono<AppEnv>()
 
@@ -71,14 +74,47 @@ authApi.post('/login', async (c) => {
     return c.json({ error: 'Email/phone and password are required' }, 400)
   }
 
+  const ip = getClientIp(c.req.header('cf-connecting-ip') ?? null)
+
+  // Priority 4 — login throttling. Checked BEFORE the (relatively cheap)
+  // credential lookup so a throttled request never even reaches
+  // verifyPassword — this is deliberately generic/user-safe (429, no
+  // credential disclosure) and never distinguishes "this account is
+  // throttled" from "this IP is throttled" in the response.
+  const throttle = await checkLoginThrottle(c.env.DB, body.identifier, ip)
+  if (throttle.throttled) {
+    return c.json({ error: 'Too many login attempts. Please try again later.', retryAfterSeconds: throttle.retryAfterSeconds }, 429)
+  }
+
   const user = await c.env.DB.prepare('SELECT * FROM users WHERE email = ? OR phone = ?')
     .bind(body.identifier, body.identifier)
     .first<any>()
 
-  if (!user) return c.json({ error: 'Invalid credentials' }, 401)
+  if (!user) {
+    await recordLoginAttempt(c.env.DB, body.identifier, ip, 'failure')
+    return c.json({ error: 'Invalid credentials' }, 401)
+  }
 
   const valid = await verifyPassword(body.password, user.password_hash, user.password_salt)
-  if (!valid) return c.json({ error: 'Invalid credentials' }, 401)
+  if (!valid) {
+    await recordLoginAttempt(c.env.DB, body.identifier, ip, 'failure')
+    return c.json({ error: 'Invalid credentials' }, 401)
+  }
+
+  // Priority 1 — users.status enforcement at the LOGIN boundary. This is
+  // distinct from (and in addition to) attachUser()'s per-request
+  // re-check: a blocked-status account must not even be able to
+  // ESTABLISH a new session in the first place, not just have existing
+  // sessions invalidated. A correct password for a suspended/disabled/
+  // deleted account is deliberately NOT treated as a throttle-relevant
+  // "failure" (the credential itself was correct — recording it as a
+  // password failure would be dishonest and could mask genuine
+  // credential-stuffing signal), but login is still refused.
+  if (isAccountStatusBlocked(user.status)) {
+    return c.json({ error: 'This account is not available for login. Contact support if you believe this is a mistake.' }, 403)
+  }
+
+  await recordLoginAttempt(c.env.DB, body.identifier, ip, 'success')
 
   const guestToken = getOrSetGuestToken(c)
   await mergeGuestCartIntoUser(c.env.DB, guestToken, user.id)
@@ -99,4 +135,111 @@ authApi.post('/logout', async (c) => {
 authApi.get('/me', async (c) => {
   const user = c.get('user')
   return c.json({ user })
+})
+
+// ---------- Priority 2: Password reset ----------
+
+/**
+ * Deliberately returns the SAME 200 response whether or not the
+ * identifier matched a real account (account-enumeration protection —
+ * an attacker probing emails must not be able to distinguish "this
+ * account exists" from "it doesn't" via this endpoint's response).
+ */
+authApi.post('/password-reset/request', async (c) => {
+  const body = await c.req.json<{ identifier: string }>().catch(() => null)
+  if (!body?.identifier) return c.json({ error: 'identifier is required' }, 400)
+
+  const user = await c.env.DB.prepare('SELECT id, name FROM users WHERE email = ? OR phone = ?')
+    .bind(body.identifier, body.identifier)
+    .first<{ id: number; name: string }>()
+
+  if (user) {
+    const url = new URL(c.req.url)
+    const baseUrl = `${url.protocol}//${url.host}`
+    try {
+      await requestPasswordReset(c.env.DB, user.id, user.name, baseUrl)
+    } catch (err) {
+      console.error('requestPasswordReset failed', user.id, err)
+    }
+  }
+
+  return c.json({ success: true, message: 'If an account matches, a reset link has been sent.' })
+})
+
+authApi.post('/password-reset/confirm', async (c) => {
+  const body = await c.req.json<{ token: string; new_password: string }>().catch(() => null)
+  if (!body?.token || !body?.new_password) {
+    return c.json({ error: 'token and new_password are required' }, 400)
+  }
+  try {
+    await resetPasswordWithToken(c.env.DB, body.token, body.new_password)
+    return c.json({ success: true })
+  } catch (err) {
+    if (err instanceof InvalidResetTokenError) return c.json({ error: err.message }, 400)
+    if (err instanceof WeakPasswordError) return c.json({ error: err.message }, 400)
+    console.error('resetPasswordWithToken failed', err)
+    return c.json({ error: 'Failed to reset password' }, 500)
+  }
+})
+
+// ---------- Priority 3: Email / phone verification ----------
+// All request/confirm routes require an authenticated session — a
+// verification token can only ever be requested for or confirmed against
+// the CALLER'S OWN account (c.get('user').id), never a client-supplied
+// target user id.
+
+authApi.post('/verify-email/request', requireAuth, async (c) => {
+  const user = c.get('user')!
+  const url = new URL(c.req.url)
+  const baseUrl = `${url.protocol}//${url.host}`
+  try {
+    await requestEmailVerification(c.env.DB, user.id, baseUrl)
+    return c.json({ success: true })
+  } catch (err) {
+    if (err instanceof NoTargetToVerifyError) return c.json({ error: err.message }, 400)
+    if (err instanceof AlreadyVerifiedError) return c.json({ error: err.message }, 409)
+    console.error('requestEmailVerification failed', user.id, err)
+    return c.json({ error: 'Failed to send verification email' }, 500)
+  }
+})
+
+authApi.post('/verify-email/confirm', requireAuth, async (c) => {
+  const user = c.get('user')!
+  const body = await c.req.json<{ token: string }>().catch(() => null)
+  if (!body?.token) return c.json({ error: 'token is required' }, 400)
+  try {
+    await confirmVerification(c.env.DB, user.id, 'email', body.token)
+    return c.json({ success: true })
+  } catch (err) {
+    if (err instanceof InvalidVerificationTokenError) return c.json({ error: err.message }, 400)
+    console.error('confirmVerification(email) failed', user.id, err)
+    return c.json({ error: 'Failed to verify email' }, 500)
+  }
+})
+
+authApi.post('/verify-phone/request', requireAuth, async (c) => {
+  const user = c.get('user')!
+  try {
+    await requestPhoneVerification(c.env.DB, user.id)
+    return c.json({ success: true })
+  } catch (err) {
+    if (err instanceof NoTargetToVerifyError) return c.json({ error: err.message }, 400)
+    if (err instanceof AlreadyVerifiedError) return c.json({ error: err.message }, 409)
+    console.error('requestPhoneVerification failed', user.id, err)
+    return c.json({ error: 'Failed to send verification code' }, 500)
+  }
+})
+
+authApi.post('/verify-phone/confirm', requireAuth, async (c) => {
+  const user = c.get('user')!
+  const body = await c.req.json<{ code: string }>().catch(() => null)
+  if (!body?.code) return c.json({ error: 'code is required' }, 400)
+  try {
+    await confirmVerification(c.env.DB, user.id, 'phone', body.code)
+    return c.json({ success: true })
+  } catch (err) {
+    if (err instanceof InvalidVerificationTokenError) return c.json({ error: err.message }, 400)
+    console.error('confirmVerification(phone) failed', user.id, err)
+    return c.json({ error: 'Failed to verify phone' }, 500)
+  }
 })

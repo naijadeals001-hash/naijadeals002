@@ -88,7 +88,7 @@ export async function getUserFromToken(db: D1Database, token: string): Promise<A
   const tokenHash = await sha256Hex(token)
   const row = await db
     .prepare(
-      `SELECT u.id, u.email, u.phone, u.name, u.role, u.preferred_language
+      `SELECT u.id, u.email, u.phone, u.name, u.role, u.preferred_language, u.status
        FROM sessions s
        JOIN users u ON u.id = s.user_id
        WHERE s.token_hash = ? AND s.expires_at > datetime('now')`
@@ -96,6 +96,26 @@ export async function getUserFromToken(db: D1Database, token: string): Promise<A
     .bind(tokenHash)
     .first<AuthUser>()
   return row ?? null
+}
+
+/**
+ * Account lifecycle statuses (migration 0037) that must NEVER retain normal
+ * authenticated access, even mid-session (a session created while the user
+ * was 'active' must stop working the moment status flips away from
+ * 'active', since getUserFromToken re-reads this column fresh on every
+ * request — no caching, no exceptions). `pending_verification` is
+ * DELIBERATELY excluded: this matches src/lib/search-eligibility.ts's
+ * existing precedent (only suspended/disabled/deleted disqualify an owning
+ * user's listings from search) — a not-yet-verified user is still a normal
+ * authenticated user of the platform, just with verification-gated
+ * features elsewhere (Priority 3). Engine 1 and Engine 11 must never
+ * silently disagree on this list.
+ */
+const BLOCKED_ACCOUNT_STATUSES = new Set(['suspended', 'disabled', 'deleted'])
+
+/** True if this account status must be treated as "cannot authenticate" for protected access purposes. */
+export function isAccountStatusBlocked(status: string | null | undefined): boolean {
+  return !!status && BLOCKED_ACCOUNT_STATUSES.has(status)
 }
 
 export function setSessionCookie(c: Context, token: string) {
@@ -116,12 +136,34 @@ export function getSessionToken(c: Context): string | null {
   return getCookie(c, SESSION_COOKIE) ?? null
 }
 
-/** Hono middleware: attaches c.get('user') if a valid session cookie is present. Never blocks the request. */
+/**
+ * Hono middleware: attaches c.get('user') if a valid session cookie is
+ * present. Never blocks the request (routes that require auth use
+ * requireAuth/requireAuthPage below).
+ *
+ * Engine 1 Identity Completion — users.status enforcement: status is
+ * re-read from the DB on EVERY request (getUserFromToken has no cache), so
+ * an admin-triggered suspend/disable/soft-delete takes effect immediately
+ * on the user's very next request even though their session cookie/token
+ * is technically still unexpired. For a blocked status we ALSO proactively
+ * destroy the now-invalid session row (lazy cleanup — no cron needed on
+ * hosted deploy) and clear the cookie, so the browser doesn't keep
+ * resending a session that will never authenticate again. c.get('user')
+ * is set to null in this case, which is exactly what requireAuth/
+ * requireAuthPage already treat as "not authenticated" — no other
+ * downstream code needed to change.
+ */
 export async function attachUser(c: Context<AppEnv>, next: () => Promise<void>) {
   const token = getSessionToken(c)
   if (token) {
     const user = await getUserFromToken(c.env.DB, token)
-    c.set('user', user)
+    if (user && isAccountStatusBlocked(user.status)) {
+      await destroySession(c.env.DB, token)
+      clearSessionCookie(c)
+      c.set('user', null)
+    } else {
+      c.set('user', user)
+    }
   } else {
     c.set('user', null)
   }

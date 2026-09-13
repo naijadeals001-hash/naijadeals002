@@ -114,3 +114,21 @@ export async function revokeAllOtherSessions(db: D1Database, userId: number, cur
     await db.prepare('DELETE FROM sessions WHERE user_id = ?').bind(userId).run()
   }
 }
+
+/**
+ * Revokes ALL of a user's sessions, INCLUDING their current one — no
+ * exception. Distinct from revokeAllOtherSessions (which deliberately
+ * preserves the caller's own session for the "log out other devices"
+ * self-service action). This is the admin-triggered variant: when an admin
+ * suspends/disables/soft-deletes an account (Engine 1 Identity Completion,
+ * users.status enforcement), every existing session for that account must
+ * stop working immediately, not just "other" ones — the target user should
+ * not be able to keep using a browser tab that was already logged in.
+ * attachUser() also independently re-checks users.status on every request
+ * and would block a blocked-status user even if a session row survived, so
+ * this call is defense-in-depth / immediate cleanup rather than the sole
+ * enforcement mechanism.
+ */
+export async function revokeAllSessionsForUser(db: D1Database, userId: number): Promise<void> {
+  await db.prepare('DELETE FROM sessions WHERE user_id = ?').bind(userId).run()
+}

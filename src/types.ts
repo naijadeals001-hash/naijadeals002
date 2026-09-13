@@ -40,6 +40,15 @@ export interface AuthUser {
   role: string
   /** Nullable — NULL means "no saved preference yet", detector falls through to cookie/browser/country. Migration 0012. */
   preferred_language?: string | null
+  /**
+   * Account lifecycle state (migration 0037): active | pending_verification |
+   * suspended | disabled | deleted. Engine 1 Identity Completion (this pass)
+   * makes this the SAME column Engine 11's search-eligibility.ts already
+   * reads for owner-status exclusion — attachUser() now enforces it too, so
+   * both engines agree on what a non-active user means. See src/lib/auth.ts's
+   * attachUser() for the enforcement logic and per-status behavior.
+   */
+  status: string
 }
 
 export interface CategoryRow {

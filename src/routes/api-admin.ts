@@ -28,6 +28,7 @@ import {
 import { getOpenDisputesForAdmin, resolveDispute, createAndExecuteRefund, RefundError } from '../lib/refunds'
 import { createCategoryAttribute, updateCategoryAttribute, deleteCategoryAttribute, getAttributesForCategory } from '../lib/attributes'
 import { getAllCountries } from '../lib/country'
+import { applyUserStatusDecision, isValidAccountStatus, UserNotFoundError, InvalidStatusError } from '../lib/user-lifecycle'
 
 export const adminApi = new Hono<AppEnv>()
 
@@ -241,4 +242,42 @@ adminApi.post('/notifications/retry-failed', async (c) => {
   const limit = Math.min(Number(c.req.query('limit') ?? 25) || 25, 100)
   const result = await retryFailedDeliveries(c.env.DB, limit)
   return c.json(result)
+})
+
+// ---------- Engine 1: Identity & Access — users.status admin mutation ----------
+//
+// Closes the Engine 1 gap-matrix finding: users.status existed and was
+// already read by Engine 11's search-eligibility.ts, but nothing could
+// ever transition it, and auth.ts never enforced it. This is the ONLY
+// route in the codebase permitted to change a user's account lifecycle
+// status — gated by the same requireAuth + requirePlatformRole('admin')
+// mounted for this whole router above, so ordinary customers/sellers/
+// providers structurally cannot reach it (never a self-service or
+// cross-user mutation path). See src/lib/user-lifecycle.ts for the
+// atomic status-change + audit-log + session-revocation implementation.
+
+adminApi.post('/users/:id/status', async (c) => {
+  const admin = c.get('user')!
+  const targetUserId = Number(c.req.param('id'))
+  if (!targetUserId || Number.isNaN(targetUserId)) {
+    return c.json({ error: 'Invalid user id' }, 400)
+  }
+
+  const body = await c.req.json<{ status?: string; reason?: string }>().catch(() => null)
+  if (!body || typeof body.status !== 'string') {
+    return c.json({ error: 'status is required' }, 400)
+  }
+  if (!isValidAccountStatus(body.status)) {
+    return c.json({ error: 'status must be one of: active, pending_verification, suspended, disabled, deleted' }, 400)
+  }
+
+  try {
+    const result = await applyUserStatusDecision(c.env.DB, targetUserId, body.status, admin.id, admin.name, body.reason)
+    return c.json({ success: true, ...result })
+  } catch (err) {
+    if (err instanceof UserNotFoundError) return c.json({ error: err.message }, 404)
+    if (err instanceof InvalidStatusError) return c.json({ error: err.message }, 400)
+    console.error('applyUserStatusDecision failed', targetUserId, err)
+    return c.json({ error: 'Failed to update user status' }, 500)
+  }
 })
