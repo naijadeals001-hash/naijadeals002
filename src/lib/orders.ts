@@ -1,6 +1,6 @@
 import type { CartItemRow } from '../types'
 import { debitWallet, InsufficientFundsError } from './wallet'
-import { validateCoupon, incrementCouponUsage } from './coupons'
+import { validateCoupon, claimCouponUsage } from './coupons'
 import { confirmCommissionsForOrderIfAttributed } from './affiliate'
 import { createShipmentsForPaidOrder } from './logistics-naijashop-bridge'
 
@@ -56,18 +56,37 @@ export async function createPendingOrder(
   const subtotal = items.reduce((sum, item) => sum + item.price_kobo * item.quantity, 0)
   const deliveryFee = calculateDeliveryFeeKobo(items, deliveryMethod)
 
+  // CONCURRENCY-SAFE COUPON CLAIM (Engine 12 Phase 0 audit remediation — see
+  // src/lib/coupons.ts's claimCouponUsage() doc comment for the full CAS rationale).
+  // The claim MUST happen and MUST succeed BEFORE discountKobo is baked into the
+  // order total/insert below. The prior implementation computed discountKobo from
+  // validateCoupon()'s SELECT-based check, inserted the order with that discount
+  // ALREADY applied, and only attempted the usage-count increment afterwards — so
+  // a losing claim (coupon exhausted/deactivated/expired in the gap between the
+  // SELECT and the write) would still leave the order sitting with a discount that
+  // was never actually, exclusively secured. Now: validate (cheap read, gives a
+  // fast/friendly error path), then atomically CLAIM (the only step that actually
+  // reserves a usage slot), and only apply discountKobo to the order if the claim
+  // itself won. A losing claim behaves exactly like an invalid coupon — proceed
+  // without a discount rather than blocking checkout, per the pre-existing
+  // documented fallback behavior (this is unchanged product behavior, only the
+  // point at which "did it actually work" is determined has been corrected).
   let discountKobo = 0
-  let appliedCouponId: number | null = null
   let appliedCouponCode: string | null = null
   if (couponCode) {
     const validation = await validateCoupon(db, couponCode, subtotal)
     if (validation.valid && validation.coupon) {
-      discountKobo = validation.discountKobo ?? 0
-      appliedCouponId = validation.coupon.id
-      appliedCouponCode = validation.coupon.code
+      const claimed = await claimCouponUsage(db, validation.coupon.id)
+      if (claimed) {
+        discountKobo = validation.discountKobo ?? 0
+        appliedCouponCode = validation.coupon.code
+      }
+      // claimed === false: someone else's concurrent request won the last slot (or the
+      // coupon was deactivated/expired in the gap between validation and the claim
+      // attempt) — proceed without a discount, matching the pre-existing fallback.
     }
-    // If the coupon is no longer valid at the moment of order creation (e.g. someone else just
-    // used up the last redemption), we simply proceed without a discount rather than blocking checkout.
+    // validation.valid === false: coupon not found / inactive / expired / usage_limit
+    // already exhausted / below min_order — proceed without a discount, unchanged.
   }
 
   const total = Math.max(0, subtotal + deliveryFee - discountKobo)
@@ -120,9 +139,9 @@ export async function createPendingOrder(
   )
   await db.batch(itemInserts)
 
-  if (appliedCouponId) {
-    await incrementCouponUsage(db, appliedCouponId)
-  }
+  // Coupon usage was already atomically claimed above, BEFORE this order was inserted —
+  // no post-insert increment step needed (see the claim block earlier in this function
+  // for the full rationale on why the claim must precede, not follow, the insert).
 
   return { orderId, orderNumber, totalKobo: total, discountKobo, deliveryFeeKobo: deliveryFee }
 }

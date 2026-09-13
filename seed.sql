@@ -41,38 +41,77 @@ INSERT OR IGNORE INTO categories (id, slug, name, icon, parent_id, sort_order) V
   (80, 'books', 'Books', 'menu_book', NULL, 9),
   (90, 'automotive', 'Automotive', 'directions_car', NULL, 10);
 
-INSERT OR IGNORE INTO brands (id, slug, name, is_nigerian) VALUES
+-- Engine 12 Legacy Remediation (2026-09-13): brand curation columns
+-- (logo_url/is_featured/display_order/status) are now carried DIRECTLY in
+-- this INSERT, not left to a separate migration's UPDATE statements to
+-- populate after the fact.
+--
+-- ROOT CAUSE this fixes: this file's own `DELETE FROM brands` (above) +
+-- `INSERT OR IGNORE` with only 4 columns previously wiped the curation that
+-- migrations/0006_brand_merchandising.sql applies via `ALTER TABLE` +
+-- `UPDATE ... WHERE slug = ...` — because migrations run ONCE and are
+-- never replayed, while this seed file IS explicitly documented (README.md)
+-- to be re-run during local dev bootstrap. Any reseed after migration 0006
+-- had already applied silently reset every brand back to
+-- is_featured=0/display_order=NULL/logo_url=NULL, permanently emptying the
+-- homepage's "Top Brands" section with no error and no warning (confirmed
+-- live during the Engine 12 Phase 0 audit — see
+-- docs/ENGINE-12-PROMOTION-ADVERTISING-GAP-MATRIX.md §6.4 and
+-- docs/ENGINE-12-LEGACY-REMEDIATION.md §6 for the full forensic writeup).
+--
+-- FIX RATIONALE: seed.sql, not the migration, is the correct place to fix
+-- this. Migrations are immutable once applied (0006 has already run
+-- against every existing environment and must never be edited/replayed).
+-- seed.sql is the file that is actually re-run on every local dev reseed,
+-- so making ITS OWN insert self-sufficient — carrying the exact same
+-- curation values migration 0006 established — is what makes reseeding
+-- deterministic: run seed.sql any number of times, in any order relative
+-- to migrations, and the result is always the same intended curated state.
+-- This is data-only (still fully DB-driven, matches migration 0006's own
+-- "no UI code should ever hardcode brand order" rule) — no TSX/component
+-- changes, no query-logic changes to getTopBrands() in catalog.ts.
+--
+-- Values below are copied VERBATIM from migration 0006_brand_merchandising.sql's
+-- UPDATE statements (24 brands get a real git-tracked logo_url under
+-- public/static/brands/; of those, the same 12 flagship brands keep
+-- is_featured=1 with the identical display_order 1-12; the remaining 6
+-- brands with zero active products in this seed catalog are intentionally
+-- left with logo_url=NULL, matching migration 0006's own documented
+-- "non-viable brands" exclusion — they are correctly excluded from Top
+-- Brands by getTopBrands()'s existing product_count >= 1 join, not by this
+-- seed file inventing a new rule).
+INSERT OR IGNORE INTO brands (id, slug, name, is_nigerian, logo_url, is_featured, display_order, status) VALUES
 
-  (1,'apple','Apple',0),
-  (2,'samsung','Samsung',0),
-  (3,'sony','Sony',0),
-  (4,'jbl','JBL',0),
-  (5,'hp','HP',0),
-  (6,'lg','LG',0),
-  (7,'dyson','Dyson',0),
-  (8,'midea','Midea',0),
-  (9,'scanfrost','Scanfrost',1),
-  (10,'binatone','Binatone',1),
-  (11,'nike','Nike',0),
-  (12,'adidas','Adidas',0),
-  (13,'zaron','Zaron Cosmetics',1),
-  (14,'indomie','Indomie',1),
-  (15,'nestle','Nestlé',0),
-  (16,'golden-penny','Golden Penny',1),
-  (17,'davido-fragrance','DXVI by Davido',1),
-  (18,'orijin','Orijin',1),
-  (19,'hisense','Hisense',0),
-  (20,'tecno','Tecno',1),
-  (21,'infinix','Infinix',1),
-  (22,'itel','itel',1),
-  (23,'anker','Anker',0),
-  (24,'maybelline','Maybelline',0),
-  (25,'shea-moisture-ng','Shea Radiance NG',1),
-  (26,'ariel','Ariel',0),
-  (27,'dettol','Dettol',0),
-  (28,'peak','Peak Milk',1),
-  (29,'nasco','Nasco',1),
-  (30,'polystar','Polystar',1);
+  (1,'apple','Apple',0,'/static/brands/apple.png',1,1,'active'),
+  (2,'samsung','Samsung',0,'/static/brands/samsung.png',1,2,'active'),
+  (3,'sony','Sony',0,'/static/brands/sony.png',1,4,'active'),
+  (4,'jbl','JBL',0,'/static/brands/jbl.png',0,NULL,'active'),
+  (5,'hp','HP',0,'/static/brands/hp.png',1,9,'active'),
+  (6,'lg','LG',0,'/static/brands/lg.png',1,5,'active'),
+  (7,'dyson','Dyson',0,'/static/brands/dyson.png',1,11,'active'),
+  (8,'midea','Midea',0,'/static/brands/midea.png',0,NULL,'active'),
+  (9,'scanfrost','Scanfrost',1,'/static/brands/scanfrost.png',0,NULL,'active'),
+  (10,'binatone','Binatone',1,'/static/brands/binatone.png',0,NULL,'active'),
+  (11,'nike','Nike',0,'/static/brands/nike.png',1,3,'active'),
+  (12,'adidas','Adidas',0,NULL,0,NULL,'active'),
+  (13,'zaron','Zaron Cosmetics',1,'/static/brands/zaron.png',0,NULL,'active'),
+  (14,'indomie','Indomie',1,'/static/brands/indomie.png',1,7,'active'),
+  (15,'nestle','Nestlé',0,'/static/brands/nestle.png',1,6,'active'),
+  (16,'golden-penny','Golden Penny',1,'/static/brands/golden-penny.png',1,8,'active'),
+  (17,'davido-fragrance','DXVI by Davido',1,NULL,0,NULL,'active'),
+  (18,'orijin','Orijin',1,'/static/brands/orijin.png',0,NULL,'active'),
+  (19,'hisense','Hisense',0,'/static/brands/hisense.png',0,NULL,'active'),
+  (20,'tecno','Tecno',1,'/static/brands/tecno.png',1,12,'active'),
+  (21,'infinix','Infinix',1,'/static/brands/infinix.png',0,NULL,'active'),
+  (22,'itel','itel',1,NULL,0,NULL,'active'),
+  (23,'anker','Anker',0,'/static/brands/anker.png',0,NULL,'active'),
+  (24,'maybelline','Maybelline',0,'/static/brands/maybelline.png',0,NULL,'active'),
+  (25,'shea-moisture-ng','Shea Radiance NG',1,NULL,0,NULL,'active'),
+  (26,'ariel','Ariel',0,'/static/brands/ariel.png',0,NULL,'active'),
+  (27,'dettol','Dettol',0,'/static/brands/dettol.png',0,NULL,'active'),
+  (28,'peak','Peak Milk',1,'/static/brands/peak.png',1,10,'active'),
+  (29,'nasco','Nasco',1,NULL,0,NULL,'active'),
+  (30,'polystar','Polystar',1,NULL,0,NULL,'active');
 
 INSERT OR IGNORE INTO vendors (id, slug, name, description, logo_url, banner_url, city, state, is_verified, rating_avg, rating_count, positive_feedback_percent, response_time_hours, joined_year) VALUES
 

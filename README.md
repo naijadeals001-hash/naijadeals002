@@ -35,7 +35,7 @@
 - **Wishlist** (`/account/wishlist`): save/remove products, session-scoped
 - **Top Brands** merchandising strip on the homepage: DB-backed (`is_featured`/`display_order`/`status` columns, migration 0006), never hardcoded in TSX
 - **Saved Addresses** (`/account/addresses`): full CRUD, mobile bottom-sheet UX
-- **Hero Campaign Carousel foundation** (this pass — see below): DB-backed `hero_campaigns` table + service + homepage-feed cache integration + `<HeroCarousel>` component, ready for `home.tsx` to consume in the eventual homepage rebuild. Auto-rotating, swipe/keyboard-accessible, `<picture>` art-directed responsive imagery, zero layout shift. **Not yet wired into `home.tsx`** — the live homepage still shows the older static `/static/banners/*` images until that rebuild happens.
+- **Hero Campaign Carousel**: DB-backed `hero_campaigns` table + service + homepage-feed cache integration + `<HeroCarousel>` component. **Live and wired into `home.tsx`** — `getActiveHeroCampaigns()` is registered as a `homepage-feed.ts` section loader, and `home.tsx` renders `<HeroCarousel campaigns={feed.hero_campaigns} />` directly (confirmed by code inspection and re-verified via the Engine 12 Legacy Remediation pass, see `docs/ENGINE-12-LEGACY-REMEDIATION.md`). Status-gated (`status='active'`) and schedule-gated (`starts_at`/`ends_at`) at the query level, so campaigns can be queued or retired without a code deploy. Auto-rotating, swipe/keyboard-accessible, `<picture>` art-directed responsive imagery, zero layout shift.
 - Ecosystem teaser page (NaijaEats/NaijaGigs/NaijaStay — "coming soon") and Help/FAQ page
 - All money handled as **integer kobo** end-to-end — no floating point currency bugs
 - Custom SVG placeholder image generator (`/ph.svg`) — used for products only; never used for hero/brand imagery (zero-placeholder rule)
@@ -144,7 +144,6 @@ before/after audit trail: `docs/ENGINEERING-SOP-BACKUP-RULE.md`.
 - Real vendor onboarding/dashboard (vendors are seed data only)
 - Escrow dispute flow (order lifecycle stops at `processing`/`escrow_held`; no admin release/dispute UI yet)
 - Reviews are seed data only — no "leave a review" flow yet
-- **Hero Campaign Carousel is built but not yet wired into `home.tsx`** — the DB table, service, cache loader, component, and client JS all exist and are Playwright-verified; the homepage itself still needs a rebuild pass to consume `feed.hero_campaigns` via `<HeroCarousel>` in place of the static `/static/banners/*` grid
 - NaijaEats / NaijaGigs / NaijaStay / NaijaFresh / NaijaDrive / NaijaSend — teaser/ecosystem-awareness only, no functionality yet
 - Rate limiting / abuse protection on auth endpoints
 - Production Paystack keys / secrets configuration
