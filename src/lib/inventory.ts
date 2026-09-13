@@ -19,10 +19,29 @@
  * checkout) uses these functions going forward.
  */
 import type { ListingRow } from '../types'
+import { enqueueSearchIndexEvent } from './search-index-events'
 
 export class InsufficientStockError extends Error {
   constructor(public listingId: number, public requested: number, public available: number) {
     super(`Insufficient stock for listing ${listingId}: requested ${requested}, available ${available}`)
+  }
+}
+
+/**
+ * Engine 11 event writer, called inline after adjustStock's batch commits
+ * — mirrors seller-products.ts/services.ts/bookings.ts's emit*SearchEvent()
+ * pattern exactly (read updated_at back from the row, own try/catch, never
+ * fatal to the stock mutation it follows). This is write path #9 of the
+ * 9 confirmed real write paths (previously missed - adjustStock emitted
+ * zero events of any kind before this instrumentation).
+ */
+async function emitProductListingSearchEvent(db: D1Database, listingId: number): Promise<void> {
+  try {
+    const row = await db.prepare('SELECT updated_at FROM product_listings WHERE id = ?').bind(listingId).first<{ updated_at: string }>()
+    if (!row) return
+    await enqueueSearchIndexEvent(db, { entityType: 'product_listing', entityId: listingId, operation: 'upsert', sourceUpdatedAt: row.updated_at })
+  } catch (err) {
+    console.error('inventory: search index event enqueue failed (non-fatal, stock adjustment already committed)', err)
   }
 }
 
@@ -78,6 +97,7 @@ export async function adjustStock(
       .bind(listingId, opts.variantId ?? null, delta, reason, opts.orderId ?? null, opts.actorUserId ?? null, opts.note ?? null, clampedStock),
   ])
 
+  await emitProductListingSearchEvent(db, listingId)
   return clampedStock
 }
 
