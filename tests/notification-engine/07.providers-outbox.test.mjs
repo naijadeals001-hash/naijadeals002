@@ -108,14 +108,18 @@ test('outbox: a successful in_app dispatch reaches terminal state "delivered" wi
 test('outbox: a channel dispatch that transiently fails is recorded as "failed"/"transient" WITH a scheduled next_retry_at, and does not block the outbox event from reaching "processed"', async () => {
   const db = await getTestDb()
   const userId = await createTestUser('outbox_transient')
-  const key = `outbox_transient_event:${userId}`
-  // Force an explicit preference row selecting the 'email' channel for a
-  // category, then use the sentinel string in the payload's rendered body
-  // via a dedicated template so the REAL dispatch path (not a synthetic
-  // delivery row) produces the failure.
-  await db.prepare(`INSERT INTO notification_templates (event_type, channel, locale, version, subject_template, body_template, is_active) VALUES ('outbox_transient_event', 'email', 'en', 1, 'Test', '__SIMULATE_TRANSIENT_FAILURE__', 1)`).run()
+  // eventType/key include userId to stay unique across repeated runs of
+  // this file against the SAME persistent local D1 SQLite file (this
+  // table has no per-test-run reset) — a static literal here previously
+  // collided with a leftover row from an earlier standalone run of this
+  // file, tripping notification_templates' UNIQUE(event_type, channel,
+  // locale, version) constraint on the second run. See docs/ENGINE-9-
+  // COMMUNICATION-NOTIFICATION-AUDIT.md's Test Architecture section.
+  const eventType = `outbox_transient_event_${userId}`
+  const key = `${eventType}:${userId}`
+  await db.prepare(`INSERT INTO notification_templates (event_type, channel, locale, version, subject_template, body_template, is_active) VALUES ('${eventType}', 'email', 'en', 1, 'Test', '__SIMULATE_TRANSIENT_FAILURE__', 1)`).run()
 
-  const enq = await enqueueAndProcessNow(db, { idempotencyKey: key, eventType: 'outbox_transient_event', recipientUserId: userId, category: 'payment', payload: {} })
+  const enq = await enqueueAndProcessNow(db, { idempotencyKey: key, eventType, recipientUserId: userId, category: 'payment', payload: {} })
   const outboxRow = await queryOneD1(`SELECT status FROM notification_outbox WHERE id = ${enq.outboxId}`)
   assert.equal(outboxRow.status, 'processed', 'a per-channel transient failure must not block the outbox event from reaching processed')
 
@@ -129,10 +133,11 @@ test('outbox: a channel dispatch that transiently fails is recorded as "failed"/
 test('outbox: a channel dispatch that PERMANENTLY fails is recorded as "failed"/"permanent" with NO next_retry_at — never scheduled for a pointless retry', async () => {
   const db = await getTestDb()
   const userId = await createTestUser('outbox_permanent')
-  const key = `outbox_permanent_event:${userId}`
-  await db.prepare(`INSERT INTO notification_templates (event_type, channel, locale, version, subject_template, body_template, is_active) VALUES ('outbox_permanent_event', 'email', 'en', 1, 'Test', '__SIMULATE_PERMANENT_FAILURE__', 1)`).run()
+  const eventType = `outbox_permanent_event_${userId}`
+  const key = `${eventType}:${userId}`
+  await db.prepare(`INSERT INTO notification_templates (event_type, channel, locale, version, subject_template, body_template, is_active) VALUES ('${eventType}', 'email', 'en', 1, 'Test', '__SIMULATE_PERMANENT_FAILURE__', 1)`).run()
 
-  const enq = await enqueueAndProcessNow(db, { idempotencyKey: key, eventType: 'outbox_permanent_event', recipientUserId: userId, category: 'payment', payload: {} })
+  const enq = await enqueueAndProcessNow(db, { idempotencyKey: key, eventType, recipientUserId: userId, category: 'payment', payload: {} })
   const delivery = await queryOneD1(`SELECT status, failure_class, next_retry_at FROM notification_deliveries WHERE outbox_id = ${enq.outboxId} AND channel = 'email'`)
   assert.equal(delivery.status, 'failed')
   assert.equal(delivery.failure_class, 'permanent')
@@ -142,9 +147,10 @@ test('outbox: a channel dispatch that PERMANENTLY fails is recorded as "failed"/
 test('outbox retry: retryFailedDeliveries picks up a due transient failure, re-dispatches it, and a SUCCEEDING retry moves it to "delivered" without creating a duplicate delivery row', async () => {
   const db = await getTestDb()
   const userId = await createTestUser('retry_success')
-  const key = `retry_success_event:${userId}`
-  await db.prepare(`INSERT INTO notification_templates (event_type, channel, locale, version, subject_template, body_template, is_active) VALUES ('retry_success_event', 'email', 'en', 1, 'Test', '__SIMULATE_TRANSIENT_FAILURE__', 1)`).run()
-  const enq = await enqueueAndProcessNow(db, { idempotencyKey: key, eventType: 'retry_success_event', recipientUserId: userId, category: 'payment', payload: {} })
+  const eventType = `retry_success_event_${userId}`
+  const key = `${eventType}:${userId}`
+  await db.prepare(`INSERT INTO notification_templates (event_type, channel, locale, version, subject_template, body_template, is_active) VALUES ('${eventType}', 'email', 'en', 1, 'Test', '__SIMULATE_TRANSIENT_FAILURE__', 1)`).run()
+  const enq = await enqueueAndProcessNow(db, { idempotencyKey: key, eventType, recipientUserId: userId, category: 'payment', payload: {} })
 
   const deliveryBefore = await queryOneD1(`SELECT id FROM notification_deliveries WHERE outbox_id = ${enq.outboxId} AND channel = 'email'`)
 
@@ -152,8 +158,8 @@ test('outbox retry: retryFailedDeliveries picks up a due transient failure, re-d
   // swap the template to a non-failing body so the retry SUCCEEDS this
   // time (simulating "the transient provider issue cleared up").
   await db.prepare(`UPDATE notification_deliveries SET next_retry_at = datetime('now', '-1 minutes') WHERE id = ${deliveryBefore.id}`).run()
-  await db.prepare(`UPDATE notification_templates SET is_active = 0 WHERE event_type = 'retry_success_event' AND channel = 'email'`).run()
-  await db.prepare(`INSERT INTO notification_templates (event_type, channel, locale, version, subject_template, body_template, is_active) VALUES ('retry_success_event', 'email', 'en', 2, 'Test', 'Recovered body, no sentinel', 1)`).run()
+  await db.prepare(`UPDATE notification_templates SET is_active = 0 WHERE event_type = '${eventType}' AND channel = 'email'`).run()
+  await db.prepare(`INSERT INTO notification_templates (event_type, channel, locale, version, subject_template, body_template, is_active) VALUES ('${eventType}', 'email', 'en', 2, 'Test', 'Recovered body, no sentinel', 1)`).run()
 
   const outcome = await retryFailedDeliveries(db, 10)
   assert.ok(outcome.attempted >= 1)
@@ -171,9 +177,10 @@ test('outbox retry: retryFailedDeliveries picks up a due transient failure, re-d
 test('outbox retry: a delivery whose next_retry_at has NOT yet arrived is correctly skipped by retryFailedDeliveries', async () => {
   const db = await getTestDb()
   const userId = await createTestUser('retry_not_due')
-  const key = `retry_not_due_event:${userId}`
-  await db.prepare(`INSERT INTO notification_templates (event_type, channel, locale, version, subject_template, body_template, is_active) VALUES ('retry_not_due_event', 'email', 'en', 1, 'Test', '__SIMULATE_TRANSIENT_FAILURE__', 1)`).run()
-  const enq = await enqueueAndProcessNow(db, { idempotencyKey: key, eventType: 'retry_not_due_event', recipientUserId: userId, category: 'payment', payload: {} })
+  const eventType = `retry_not_due_event_${userId}`
+  const key = `${eventType}:${userId}`
+  await db.prepare(`INSERT INTO notification_templates (event_type, channel, locale, version, subject_template, body_template, is_active) VALUES ('${eventType}', 'email', 'en', 1, 'Test', '__SIMULATE_TRANSIENT_FAILURE__', 1)`).run()
+  const enq = await enqueueAndProcessNow(db, { idempotencyKey: key, eventType, recipientUserId: userId, category: 'payment', payload: {} })
 
   const delivery = await queryOneD1(`SELECT id, next_retry_at FROM notification_deliveries WHERE outbox_id = ${enq.outboxId} AND channel = 'email'`)
   assert.ok(delivery.next_retry_at, 'sanity: a next_retry_at must have been scheduled')
@@ -188,9 +195,10 @@ test('outbox retry: a delivery whose next_retry_at has NOT yet arrived is correc
 test('outbox retry: two CONCURRENT retryFailedDeliveries passes over the SAME due row never double-dispatch it (CAS-claimed, exactly one performs the retry)', async () => {
   const db = await getTestDb()
   const userId = await createTestUser('retry_concurrent')
-  const key = `retry_concurrent_event:${userId}`
-  await db.prepare(`INSERT INTO notification_templates (event_type, channel, locale, version, subject_template, body_template, is_active) VALUES ('retry_concurrent_event', 'email', 'en', 1, 'Test', 'Fine now', 1)`).run()
-  const enq = await enqueueAndProcessNow(db, { idempotencyKey: key, eventType: 'retry_concurrent_event', recipientUserId: userId, category: 'payment', payload: {} })
+  const eventType = `retry_concurrent_event_${userId}`
+  const key = `${eventType}:${userId}`
+  await db.prepare(`INSERT INTO notification_templates (event_type, channel, locale, version, subject_template, body_template, is_active) VALUES ('${eventType}', 'email', 'en', 1, 'Test', 'Fine now', 1)`).run()
+  const enq = await enqueueAndProcessNow(db, { idempotencyKey: key, eventType, recipientUserId: userId, category: 'payment', payload: {} })
 
   // Manually synthesize a due transient-failed state on this row (bypassing
   // needing the sentinel dance twice) to focus purely on the CAS-claim race.
@@ -205,9 +213,10 @@ test('outbox retry: two CONCURRENT retryFailedDeliveries passes over the SAME du
 test('outbox retry: a delivery that has exhausted MAX_DELIVERY_ATTEMPTS (5) is never picked up again by retryFailedDeliveries, remaining genuinely terminal', async () => {
   const db = await getTestDb()
   const userId = await createTestUser('retry_exhausted')
-  const key = `retry_exhausted_event:${userId}`
-  await db.prepare(`INSERT INTO notification_templates (event_type, channel, locale, version, subject_template, body_template, is_active) VALUES ('retry_exhausted_event', 'email', 'en', 1, 'Test', 'x', 1)`).run()
-  const enq = await enqueueAndProcessNow(db, { idempotencyKey: key, eventType: 'retry_exhausted_event', recipientUserId: userId, category: 'payment', payload: {} })
+  const eventType = `retry_exhausted_event_${userId}`
+  const key = `${eventType}:${userId}`
+  await db.prepare(`INSERT INTO notification_templates (event_type, channel, locale, version, subject_template, body_template, is_active) VALUES ('${eventType}', 'email', 'en', 1, 'Test', 'x', 1)`).run()
+  const enq = await enqueueAndProcessNow(db, { idempotencyKey: key, eventType, recipientUserId: userId, category: 'payment', payload: {} })
   const delivery = await queryOneD1(`SELECT id FROM notification_deliveries WHERE outbox_id = ${enq.outboxId} AND channel = 'email'`)
 
   // Simulate having already exhausted the retry budget: attempt_count=5
