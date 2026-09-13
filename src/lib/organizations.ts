@@ -91,6 +91,16 @@ export async function updateOrganizationProfile(
   const fields: string[] = []
   const values: any[] = []
   for (const [key, value] of Object.entries(input)) {
+    // Skip keys explicitly set to `undefined` — the route layer always
+    // builds a full object literal (name, display_name, description, ...)
+    // from the request body, so any field the CALLER omitted from a
+    // partial PATCH becomes `undefined` here, not simply absent from
+    // `input`. D1's bind() rejects `undefined` outright (D1_TYPE_ERROR),
+    // so without this guard ANY partial update that didn't touch every
+    // single optional field would 500. `null` is deliberately still
+    // bound through (a caller explicitly clearing a field to NULL is a
+    // valid, distinct intent from "didn't send this field at all").
+    if (value === undefined) continue
     fields.push(`${key} = ?`)
     values.push(value)
   }
