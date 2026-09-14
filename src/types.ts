@@ -29,6 +29,17 @@ export type AppEnv = {
      * the Service Engine (migration 0039).
      */
     providerProfile?: ProviderProfileRow
+    /**
+     * Set by requireControlCenterAuth / requireControlCenterApiAuth
+     * (src/lib/control-center-rbac.ts) once the CALLER'S Control Center
+     * role/permission set has been resolved server-side from the
+     * AUTHENTICATED session user's id — NEVER from anything client-supplied.
+     * Mirrors orgMembership/providerProfile's resolution discipline exactly.
+     * See migration 0013 (schema) + migration 0050 (seed data) for the
+     * cc_roles/cc_permissions/cc_role_permissions/cc_user_roles tables this
+     * resolves against.
+     */
+    ccAccess?: import('./lib/control-center-rbac').ControlCenterAccessResolution
   }
 }
 
@@ -1515,4 +1526,56 @@ export interface GpsEventRow {
   received_at: string
   source: 'driver_app' | 'system_test'
   metadata_json: string
+}
+
+// ============================================================
+// Enterprise Control Center — Phase 1 (migration 0013 schema, migration
+// 0050 seed data). See src/lib/control-center-rbac.ts's module doc comment
+// for the full authorization-chain rationale:
+//   Existing Identity -> Existing Auth -> Authenticated Session ->
+//   Control Center Authorization -> Granular CC RBAC -> Privileged Operation
+// ============================================================
+
+/** cc_roles — the fixed, platform-defined Control Center role catalog (migration 0050). is_system=1 for every seeded row; Phase 1 has no custom-role concept. */
+export interface CcRoleRow {
+  id: number
+  key: string
+  name: string
+  description: string
+  is_system: number
+  created_at: string
+}
+
+/** cc_permissions — the global Control Center permission catalog, dot-notation keys (e.g. 'vendors.verify'). */
+export interface CcPermissionRow {
+  id: number
+  key: string
+  category: string
+  name: string
+  description: string
+}
+
+/** cc_user_roles — the person <-> Control Center role bridge. UNIQUE(user_id, role_id): a user may hold more than one CC role simultaneously (permission sets union). */
+export interface CcUserRoleRow {
+  id: number
+  user_id: number
+  role_id: number
+  assigned_by_user_id: number | null
+  assigned_at: string
+}
+
+/** cc_audit_logs (migration 0013) — the shared Control Center / admin audit trail every privileged mutation must write to. See src/lib/control-center-audit.ts. */
+export interface CcAuditLogRow {
+  id: number
+  actor_user_id: number | null
+  actor_name_snapshot: string
+  action: string
+  entity_type: string
+  entity_id: string | null
+  before_json: string | null
+  after_json: string | null
+  ip_address: string | null
+  context_json: string | null
+  success: number
+  created_at: string
 }

@@ -138,6 +138,27 @@ export async function applyModerationDecision(
   return { previousStatus, newStatus }
 }
 
+/**
+ * Admin-facing: every moderation decision across all vendors, most recent
+ * first — the Control Center Moderation screen's "Decision History" panel
+ * (Phase-2 Functional Activation, Workstream A quick win). Reads the SAME
+ * cc_audit_logs rows applyModerationDecision() already writes; no new
+ * table, no parallel history mechanism.
+ */
+export async function getRecentModerationDecisions(db: D1Database, limit = 50) {
+  const { results } = await db
+    .prepare(
+      `SELECT id, actor_user_id, actor_name_snapshot, entity_id, before_json, after_json, context_json, created_at
+       FROM cc_audit_logs
+       WHERE action = 'listing_moderation_decision'
+       ORDER BY created_at DESC, id DESC
+       LIMIT ?`
+    )
+    .bind(limit)
+    .all()
+  return results
+}
+
 /** Seller-facing: this vendor's own moderation-decision history, scoped strictly by vendor_id via the listing's context_json — never another seller's. */
 export async function getModerationHistoryForVendor(db: D1Database, vendorId: number, limit = 50) {
   const { results } = await db

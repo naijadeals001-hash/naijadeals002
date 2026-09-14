@@ -30,6 +30,7 @@ import { adminApi } from './routes/api-admin'
 import { notificationsApi } from './routes/api-notifications'
 import { bookingsApi } from './routes/api-bookings'
 import { logisticsApi } from './routes/api-logistics'
+import { apiControlCenterRoutes } from './routes/api-control-center'
 
 // SSR pages
 import { homePage } from './pages/home'
@@ -54,6 +55,7 @@ import { sellerInventoryPage } from './pages/seller-inventory'
 import { affiliatePage } from './pages/affiliate'
 import { accountPage } from './pages/account'
 import { organizationPage } from './pages/organization'
+import { controlCenterRoutes } from './routes/control-center'
 
 type Bindings = AppEnv['Bindings'] & { PAYSTACK_SECRET_KEY?: string }
 type Env = { Bindings: Bindings; Variables: AppEnv['Variables'] }
@@ -111,6 +113,13 @@ app.route('/api', serviceRequestsApi)
 app.route('/api', providerApi)
 app.route('/api/admin', adminApi)
 app.route('/api/notifications', notificationsApi)
+// Enterprise Control Center privileged mutation API — see
+// src/lib/control-center-rbac.ts's doc comment for the full auth chain
+// (Engine 1 session -> cc_user_roles -> granular cc_permissions). Gated
+// entirely within apiControlCenterRoutes itself (requireControlCenterApiAuth
+// on '*', then per-route requireControlCenterPermission), never by anything
+// mounted here.
+app.route('/api/control-center', apiControlCenterRoutes)
 
 // ---------- SSR pages ----------
 app.get('/', homePage)
@@ -176,5 +185,17 @@ app.get('/seller/products', requireAuthPage, requireActiveSeller, sellerProducts
 app.get('/seller/orders', requireAuthPage, requireActiveSeller, sellerOrdersPage)
 app.get('/seller/finance', requireAuthPage, requireActiveSeller, sellerFinancePage)
 app.get('/seller/inventory', requireAuthPage, requireActiveSeller, sellerInventoryPage)
+
+// ---------- Enterprise Control Center — Phase 1 (Sections 4-19) ----------
+// Deliberately mounted as its own sub-app rather than individual app.get()
+// lines: controlCenterRoutes owns its OWN full auth chain internally
+// (real POST /login + POST /logout are UNGATED by design so a
+// Control-Center-authorized-but-not-yet-authenticated visitor can reach
+// them, then EVERYTHING else registered after
+// `controlCenterRoutes.use('*', requireControlCenterAuth)` inside that file
+// is gated). No route in this mount is ever reachable without passing a
+// genuine server-side authorization check — see control-center.ts and
+// control-center-rbac.ts.
+app.route('/control-center', controlCenterRoutes)
 
 export default app
