@@ -32,8 +32,9 @@ catalogApi.get('/countries', async (c) => {
   return c.json({ results })
 })
 
+/** All PRODUCT-taxonomy categories (any depth) — the mega-menu / catalog-browsing data source. Scoped to category_type='product' so NaijaGigs' service categories never leak into a marketplace listing (Phase 1a bug fix). */
 catalogApi.get('/categories', async (c) => {
-  const { results } = await c.env.DB.prepare('SELECT * FROM categories ORDER BY sort_order ASC').all<CategoryRow>()
+  const { results } = await c.env.DB.prepare(`SELECT * FROM categories WHERE category_type = 'product' ORDER BY level ASC, sort_order ASC`).all<CategoryRow>()
   return c.json(results)
 })
 
@@ -92,8 +93,16 @@ catalogApi.get('/products', async (c) => {
   const binds: any[] = []
 
   if (category) {
-    sql += ' AND (cat.slug = ? OR cat.parent_id = (SELECT id FROM categories WHERE slug = ?))'
-    binds.push(category, category)
+    // Match the category or any descendant at any depth via the materialized path
+    // (migration 0053) — a "Fashion" filter must also surface "Ankara Fabric" products,
+    // not just its direct children.
+    const categoryRoot = await c.env.DB.prepare('SELECT id, path FROM categories WHERE slug = ?').bind(category).first<{ id: number; path: string | null }>()
+    if (categoryRoot) {
+      sql += ' AND (cat.id = ? OR cat.path LIKE ?)'
+      binds.push(categoryRoot.id, `${categoryRoot.path ?? categoryRoot.id}/%`)
+    } else {
+      sql += ' AND 1 = 0'
+    }
   }
   if (q) {
     sql += ' AND (p.title LIKE ? OR p.description LIKE ? OR v.name LIKE ?)'

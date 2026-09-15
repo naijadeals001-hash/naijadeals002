@@ -79,12 +79,19 @@ export async function getNigerianBrandProducts(db: D1Database, limit = 10): Prom
   return results
 }
 
+/**
+ * Products in a category OR any of its descendants at any depth (department
+ * -> group -> subcategory -> leaf), via the materialized path (migration
+ * 0053). Replaces the old "direct children only" join, which silently
+ * missed grandchildren/leaves once the taxonomy grew past 2 levels.
+ */
 export async function getByCategory(db: D1Database, categorySlug: string, limit = 20): Promise<ProductWithListingRow[]> {
+  const root = await db.prepare(`SELECT id, path FROM categories WHERE slug = ?`).bind(categorySlug).first<{ id: number; path: string | null }>()
+  if (!root) return []
+  const prefix = `${root.path ?? root.id}/`
   const { results } = await db
-    .prepare(
-      `${PRODUCT_CARD_SELECT} AND (cat.slug = ? OR cat.parent_id = (SELECT id FROM categories WHERE slug = ?)) ORDER BY p.sales_count DESC LIMIT ?`
-    )
-    .bind(categorySlug, categorySlug, limit)
+    .prepare(`${PRODUCT_CARD_SELECT} AND (cat.id = ? OR cat.path LIKE ?) ORDER BY p.sales_count DESC LIMIT ?`)
+    .bind(root.id, `${prefix}%`, limit)
     .all<ProductWithListingRow>()
   return results
 }
@@ -124,17 +131,38 @@ export async function getPopularVendors(db: D1Database, limit = 8): Promise<Vend
   return results
 }
 
+/**
+ * Top-level PRODUCT categories only (category_type='product') — this is the
+ * NaijaShop marketplace taxonomy's departments (migration 0053, level=1).
+ * BUG FIX (Phase 1a inspection): this function previously had no
+ * category_type filter, so it could return NaijaGigs' SERVICE categories
+ * (Home Services, Beauty Services, ...) on the product marketplace homepage.
+ * getServiceCategories() in services.ts is the equivalent for category_type='service'.
+ */
 export async function getTopLevelCategories(db: D1Database): Promise<CategoryRow[]> {
   const { results } = await db
-    .prepare('SELECT * FROM categories WHERE parent_id IS NULL ORDER BY sort_order ASC')
+    .prepare(`SELECT * FROM categories WHERE parent_id IS NULL AND category_type = 'product' ORDER BY sort_order ASC`)
     .all<CategoryRow>()
   return results
 }
 
+/** Direct children of a PRODUCT category, scoped to category_type='product' so a service-category slug can never leak subcategories into a marketplace context. */
 export async function getSubcategories(db: D1Database, parentSlug: string): Promise<CategoryRow[]> {
   const { results } = await db
-    .prepare('SELECT c.* FROM categories c JOIN categories p ON p.id = c.parent_id WHERE p.slug = ? ORDER BY c.sort_order ASC')
+    .prepare(`SELECT c.* FROM categories c JOIN categories p ON p.id = c.parent_id WHERE p.slug = ? AND c.category_type = 'product' ORDER BY c.sort_order ASC`)
     .bind(parentSlug)
+    .all<CategoryRow>()
+  return results
+}
+
+/** Every descendant (any depth) of a PRODUCT category, using the materialized path (migration 0053) instead of a recursive CTE — O(1) prefix scan, scales to the 100k-leaf target. */
+export async function getCategoryDescendants(db: D1Database, categorySlug: string): Promise<CategoryRow[]> {
+  const root = await db.prepare(`SELECT id, path FROM categories WHERE slug = ? AND category_type = 'product'`).bind(categorySlug).first<{ id: number; path: string | null }>()
+  if (!root) return []
+  const prefix = `${root.path ?? root.id}/`
+  const { results } = await db
+    .prepare(`SELECT * FROM categories WHERE category_type = 'product' AND (id = ? OR path LIKE ?) ORDER BY level ASC, sort_order ASC`)
+    .bind(root.id, `${prefix}%`)
     .all<CategoryRow>()
   return results
 }
@@ -182,7 +210,7 @@ export async function getPopularCategories(db: D1Database, limit = 10) {
       `SELECT c.id, c.slug, c.name, c.icon, COUNT(p.id) as product_count
        FROM categories c
        JOIN products p ON p.category_id = c.id AND p.is_active = 1
-       WHERE c.parent_id IS NOT NULL
+       WHERE c.parent_id IS NOT NULL AND c.category_type = 'product'
        GROUP BY c.id ORDER BY product_count DESC LIMIT ?`
     )
     .bind(limit)

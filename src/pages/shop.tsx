@@ -22,7 +22,11 @@ export async function shopPage(c: Context<AppEnv>) {
   const offset = (page - 1) * PER_PAGE
 
   const [categories, brands] = await Promise.all([
-    db.prepare('SELECT * FROM categories WHERE parent_id IS NULL ORDER BY sort_order ASC').all<CategoryRow>(),
+    // Phase 1a bug fix: scope to category_type='product' so NaijaGigs' service
+    // categories (Home Services, Beauty Services, ...) never appear as a
+    // marketplace filter option. Departments (level=1) power the sidebar list;
+    // deeper levels are still reachable via getByCategory's descendant match below.
+    db.prepare(`SELECT * FROM categories WHERE parent_id IS NULL AND category_type = 'product' ORDER BY sort_order ASC`).all<CategoryRow>(),
     db.prepare('SELECT slug, name FROM brands ORDER BY name ASC').all<{ slug: string; name: string }>()
   ])
 
@@ -45,9 +49,18 @@ export async function shopPage(c: Context<AppEnv>) {
     WHERE p.is_active = 1
   `
   const binds: any[] = []
+  let categoryRoot: { id: number; path: string | null } | null = null
   if (category) {
-    sql += ' AND (cat.slug = ? OR cat.parent_id = (SELECT id FROM categories WHERE slug = ?))'
-    binds.push(category, category)
+    // Match the category itself OR any descendant at any depth (department -> group
+    // -> subcategory -> leaf) via the materialized path (migration 0053), not just
+    // direct children — a "Fashion" filter must also surface "Ankara Fabric" products.
+    categoryRoot = await db.prepare('SELECT id, path FROM categories WHERE slug = ?').bind(category).first<{ id: number; path: string | null }>()
+    if (categoryRoot) {
+      sql += ' AND (cat.id = ? OR cat.path LIKE ?)'
+      binds.push(categoryRoot.id, `${categoryRoot.path ?? categoryRoot.id}/%`)
+    } else {
+      sql += ' AND 1 = 0' // unknown category slug — honest zero results, not a silent full-catalog fallback
+    }
   }
   if (q) {
     sql += ' AND (p.title LIKE ? OR p.description LIKE ? OR v.name LIKE ?)'

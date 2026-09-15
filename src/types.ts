@@ -70,6 +70,14 @@ export interface CategoryRow {
   image_url: string | null
   parent_id: number | null
   sort_order: number
+  /** 'product' (NaijaShop marketplace taxonomy) | 'service' (NaijaGigs — migration 0039). Always filter by this when a query must be scoped to one taxonomy. */
+  category_type: 'product' | 'service'
+  /** Marketplace Taxonomy Foundation (migration 0053): 1=department, 2=group, 3=subcategory, 4=leaf. NULL on rows that predate this hierarchy (e.g. legacy service categories). */
+  level: number | null
+  /** Materialized ancestor path, e.g. "1/14/203" — enables O(1) descendant lookups without a recursive CTE. NULL on rows that predate migration 0053. */
+  path: string | null
+  /** NULL = global/pan-African category. Set = country-scoped node (e.g. "Nigerian Fashion" -> 'NG'). Migration 0053. */
+  country_iso: string | null
 }
 
 export interface BrandRow {
