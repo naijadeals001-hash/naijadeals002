@@ -116,7 +116,17 @@ for num, label, slugs in BATCH_RULES:
 TRADEMARK_POLICY = "GENERIC_STYLE"
 
 def slugify(text, maxlen=28):
-    s = re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
+    # IMPORTANT: strip apostrophes (and other quote marks) BEFORE the
+    # alnum->dash collapse, so "Men's" -> "mens" not "men-s". A prior
+    # version of this function produced "men-s"/"women-s" slugs that did
+    # NOT match the filenames actually used when downloading Batch 1/2
+    # images (which followed the simpler "mens"/"womens" convention),
+    # causing 9 DB image_url values to point at non-existent files --
+    # caught by a full disk-vs-DB audit after Batch 2. Fixed here so the
+    # mapping's suggested filename always matches what actually gets
+    # saved to disk for Batch 3 onward.
+    s = re.sub(r"[\u2019']", "", text.lower())
+    s = re.sub(r"[^a-z0-9]+", "-", s).strip("-")
     return s[:maxlen].rstrip("-")
 
 def load_products():
