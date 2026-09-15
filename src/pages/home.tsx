@@ -9,7 +9,8 @@ import {
 } from '../lib/catalog'
 import { getHomepageFeed } from '../lib/homepage-feed'
 import { getAllVerticals } from '../lib/ecosystem-verticals'
-import type { AppEnv } from '../types'
+import { getDiscoverableCountries } from '../lib/country'
+import type { AppEnv, VendorRow } from '../types'
 
 /**
  * Homepage — full long-form Amazon/Jumia-style marketplace feed.
@@ -25,16 +26,33 @@ export async function homePage(c: Context<AppEnv>) {
   const locale = c.get('locale')
   const selectedCity = getCookie(c, 'nd_city') || 'Lagos'
 
-  const [categories, feed, dealsNearYou, verticals] = await Promise.all([
+  const [categories, feed, dealsNearYou, verticals, discoverableCountries] = await Promise.all([
     getTopLevelCategories(db),
     getHomepageFeed(db),
     getDealsNearYou(db, selectedCity, 10),
-    getAllVerticals(db)
+    getAllVerticals(db),
+    getDiscoverableCountries(db, 54)
   ])
 
-  // Ecosystem Spotlight (section 17 below) surfaces 3 of the 8 planned verticals as
-  // real photography, not icon+text cards — see that section's comment for why.
-  const spotlightVerticals = verticals.filter((v) => ['eats', 'gigs', 'stay'].includes(v.slug))
+  // Ecosystem Spotlight (section 17 below) is now ARCHITECTED for the full ecosystem,
+  // not a curated 3-of-8 subset (Pat's directive, 2026-09-15): NaijaShop (the one LIVE
+  // vertical — not a DB row, see ecosystem.tsx's identical precedent) is synthesized as
+  // card #1, followed by ALL rows from ecosystem_verticals (currently 8, giving 9 cards
+  // total). Adding a 10th+ vertical later is purely a new INSERT into ecosystem_verticals
+  // (migration 0010) — zero code change here, because this reads the full table, not a
+  // hardcoded slug allowlist like the previous version of this section did.
+  const naijaShopSpotlightCard = {
+    slug: 'shop',
+    route: '/shop',
+    name: 'NaijaShop',
+    tagline: 'Live today — thousands of products, verified vendors.',
+    icon: 'storefront',
+    cta_label: 'Start shopping',
+    hero_image_desktop: '/static/hero/mega-electronics-sale-desktop.jpg',
+    hero_image_mobile: '/static/hero/mega-electronics-sale-mobile.jpg',
+    status: 'live' as const
+  }
+  const spotlightVerticals = [naijaShopSpotlightCard, ...verticals]
 
   return c.render(
     <Layout title="Home" user={user} selectedCity={selectedCity} locale={locale}>
@@ -305,43 +323,102 @@ export async function homePage(c: Context<AppEnv>) {
       </section>
 
       {/* ============ 17. ECOSYSTEM SPOTLIGHT ============
-          VISUAL AUDIT FIX (Pat's "Full Visual Asset Audit" directive, 2026-09-15):
-          This section previously rendered 3 hardcoded icon+text cards with NO image
-          at all, while 16 approved real photography assets for these exact verticals
-          (public/static/ecosystem/{slug}-desktop.jpg, already wired into
-          EcosystemPreview.tsx's hero and into ecosystem_verticals.hero_image_desktop)
-          sat completely unused on the live homepage. Per directive #9 ("reuse existing
-          approved photography where it matches, don't replace unnecessarily") and #17
-          ("SEARCH -> MATCH -> REUSE before GENERATE"), this now reuses those same
-          desktop images as the card photo instead of a bare icon. Content (name,
-          tagline, route) still comes from the DB via getAllVerticals — never hardcoded
-          strings — so flipping a vertical from coming_soon -> live never requires a
-          code change here. */}
+          ARCHITECTURE FIX (Pat's directive, 2026-09-15): a full ecosystem section, not a
+          curated 3-of-8 preview. Renders NaijaShop (the one LIVE vertical, synthesized
+          above since it isn't an ecosystem_verticals row) + ALL 8 planned verticals =
+          9 cards today. This is a horizontally-scrollable strip (the exact pattern
+          already proven at Top Brands/Popular Vendors below) specifically BECAUSE a
+          fixed grid (e.g. md:grid-cols-3) breaks visually and requires a manual layout
+          change every time a vertical is added — a scroll strip does not. Adding a 10th+
+          vertical is a pure INSERT INTO ecosystem_verticals (migration 0010): this
+          section's card count, layout, and code require zero changes when that happens.
+          Real photography for all 9 cards is reused from already-approved assets
+          (public/static/hero/ for NaijaShop, public/static/ecosystem/ for the 8 planned
+          verticals — same images EcosystemPreview.tsx already uses on the full preview
+          pages) — nothing generated for this section. Status badge is driven by each
+          card's real `status` field, never a hardcoded "Coming Soon" string. */}
       {spotlightVerticals.length > 0 && (
         <section class="py-6 md:py-8 border-t border-gray-100">
           <div class="max-w-[100rem] mx-auto px-4 md:px-6 lg:px-8">
-            <h2 class="text-lg md:text-xl font-bold text-gray-900 mb-4">Explore More of the NaijaDeals Ecosystem</h2>
-            <div class="grid md:grid-cols-3 gap-4">
-              {spotlightVerticals.map((v) => (
-                <a href={`/${v.slug}`} class="group bg-white border border-gray-200 rounded-xl overflow-hidden flex flex-col hover:shadow-md hover:border-primary transition-all">
-                  <div class="relative aspect-[16/9] overflow-hidden">
-                    <img
-                      src={v.hero_image_desktop}
-                      alt={v.name}
-                      loading="lazy"
-                      class="w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-300"
-                    />
-                    <span class="absolute top-2 left-2 bg-white/90 text-[11px] font-bold text-gray-700 rounded-full px-2.5 py-1">Coming Soon</span>
+            <h2 class="text-lg md:text-xl font-bold text-gray-900 mb-4">Explore the NaijaDeals Ecosystem</h2>
+            <div class="flex md:grid md:grid-cols-3 lg:grid-cols-4 gap-4 overflow-x-auto md:overflow-visible pb-2 -mx-4 px-4 md:mx-0 md:px-0 snap-x scroll-smooth [&::-webkit-scrollbar]:hidden">
+              {spotlightVerticals.map((v) => {
+                const statusBadge = v.status === 'live'
+                  ? { label: 'Live now', cls: 'bg-primary-fixed text-primary-dark' }
+                  : v.status === 'beta'
+                  ? { label: 'Beta', cls: 'bg-amber-100 text-amber-700' }
+                  : v.status === 'in_development'
+                  ? { label: 'In development', cls: 'bg-blue-100 text-blue-600' }
+                  : { label: 'Coming soon', cls: 'bg-white/90 text-gray-700' }
+                return (
+                  <a href={v.route} class="group shrink-0 snap-start w-64 md:w-auto bg-white border border-gray-200 rounded-xl overflow-hidden flex flex-col hover:shadow-md hover:border-primary transition-all">
+                    <div class="relative aspect-[16/9] overflow-hidden">
+                      <img
+                        src={v.hero_image_desktop}
+                        alt={v.name}
+                        loading="lazy"
+                        class="w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-300"
+                      />
+                      <span class={`absolute top-2 left-2 text-[11px] font-bold rounded-full px-2.5 py-1 ${statusBadge.cls}`}>{statusBadge.label}</span>
+                    </div>
+                    <div class="p-5 flex flex-col flex-1">
+                      <h3 class="font-bold text-gray-800 mb-1 flex items-center gap-2 text-sm">
+                        <span class="material-symbols-outlined text-primary text-lg">{v.icon}</span>
+                        {v.name}
+                      </h3>
+                      <p class="text-xs text-gray-500 mb-3 flex-1 line-clamp-2">{v.tagline}</p>
+                      <span class="text-xs font-semibold text-primary group-hover:underline">{v.cta_label} →</span>
+                    </div>
+                  </a>
+                )
+              })}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* ============ 17b. COUNTRY DISCOVERY (Pat's "All 54 African Countries" directive, 2026-09-15) ============
+          Database-driven, NOT 54 hardcoded cards — see getDiscoverableCountries() in
+          src/lib/country.ts and migration 0054_country_discovery.sql. Renders ZERO
+          countries until real photography is sourced/backfilled into cc_countries.image_url
+          (never /ph.svg) — "show fewer, but all real," same pattern as every other section
+          fixed in this audit. All 54 African UN-member states already have a DB row the
+          moment migration 0054 runs; how many actually appear here is purely a function of
+          how many have had a real image backfilled — zero code change needed as that count
+          grows from 0 toward 54. The africa-glow-map.png backdrop is reused from its
+          existing approved asset (public/static/graphics/), never regenerated. */}
+      {discoverableCountries.length > 0 && (
+        <section class="py-6 md:py-8 border-t border-gray-100 relative overflow-hidden">
+          <img
+            src="/static/graphics/africa-glow-map.png"
+            alt=""
+            aria-hidden="true"
+            class="absolute inset-0 w-full h-full object-cover opacity-[0.04] pointer-events-none"
+          />
+          <div class="max-w-[100rem] mx-auto px-4 md:px-6 lg:px-8 relative">
+            <h2 class="text-lg md:text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+              <span class="material-symbols-outlined text-primary">public</span>
+              Discover Africa on NaijaDeals
+            </h2>
+            <div class="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4 md:mx-0 md:px-0 snap-x scroll-smooth [&::-webkit-scrollbar]:hidden">
+              {discoverableCountries.map((country) => (
+                <div class="shrink-0 snap-start w-48 bg-white border border-gray-200 rounded-xl overflow-hidden">
+                  <div class="relative aspect-[4/3] overflow-hidden">
+                    <img src={country.image_url} alt={country.name} loading="lazy" class="w-full h-full object-cover" />
+                    {country.status === 'LIVE' && (
+                      <span class="absolute top-2 left-2 text-[10px] font-bold bg-primary-fixed text-primary-dark rounded-full px-2 py-0.5">Live</span>
+                    )}
                   </div>
-                  <div class="p-6 flex flex-col flex-1">
-                    <h3 class="font-bold text-gray-800 mb-1 flex items-center gap-2">
-                      <span class="material-symbols-outlined text-primary text-lg">{v.icon}</span>
-                      {v.name}
-                    </h3>
-                    <p class="text-sm text-gray-500 mb-4 flex-1">{v.tagline}</p>
-                    <span class="text-sm font-semibold text-primary group-hover:underline">{v.cta_label} →</span>
+                  <div class="p-3">
+                    <p class="text-sm font-semibold text-gray-800 flex items-center gap-1.5">
+                      {country.flag_emoji && <span aria-hidden="true">{country.flag_emoji}</span>}
+                      {country.name}
+                    </p>
+                    {country.short_description && (
+                      <p class="text-xs text-gray-500 mt-1 line-clamp-2">{country.short_description}</p>
+                    )}
                   </div>
-                </a>
+                </div>
               ))}
             </div>
           </div>

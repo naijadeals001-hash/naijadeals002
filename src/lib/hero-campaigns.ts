@@ -15,7 +15,7 @@ import type { HeroCampaignRow } from '../types'
  * so it inherits that module's TTL cache (one D1 query per cache window, not one
  * per visitor) automatically — see homepage-feed.ts for the cache mechanics.
  */
-export async function getActiveHeroCampaigns(db: D1Database, limit = 8): Promise<HeroCampaignRow[]> {
+export async function getActiveHeroCampaigns(db: D1Database, limit = 12): Promise<HeroCampaignRow[]> {
   const { results } = await db
     .prepare(
       `SELECT id, slug, title, subtitle, image_desktop_url, image_mobile_url,

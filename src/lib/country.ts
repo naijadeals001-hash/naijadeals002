@@ -42,6 +42,51 @@ export async function getLiveCountries(db: D1Database): Promise<CountryRow[]> {
 }
 
 /**
+ * Country Discovery (Pat's "All 54 African Countries" directive, 2026-09-15,
+ * migration 0054) — a customer-facing storytelling row, DISTINCT in purpose
+ * from getAllCountries()/getLiveCountries() above (which power the
+ * seller-facing "ship to" / "available in" serviceability selectors).
+ */
+export interface CountryDiscoveryRow {
+  id: number
+  iso_code: string
+  name: string
+  region: string
+  status: string
+  flag_emoji: string | null
+  short_description: string | null
+  image_url: string
+}
+
+/**
+ * VISUAL AUDIT compliance (Pat's directive): only countries with a REAL,
+ * verified photo (image_url set AND not the /ph.svg placeholder-generator
+ * route) are eligible — a country can never render in this section without a
+ * real asset. This is the exact same "show fewer, but all real" pattern
+ * already applied to getTopBrands()/getPopularVendors()/PRODUCT_CARD_SELECT
+ * (see catalog.ts). All 54 African UN-member states have a DB row (migration
+ * 0054) the moment this ships; how many of them actually RENDER on the
+ * homepage is purely a function of how many have had real photography
+ * sourced/backfilled into image_url so far — zero code change needed as that
+ * number grows from 0 toward 54. `display_on_homepage` is a separate,
+ * independent admin kill-switch (e.g. to temporarily pull a country without
+ * losing its sourced asset).
+ */
+export async function getDiscoverableCountries(db: D1Database, limit = 54): Promise<CountryDiscoveryRow[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT id, iso_code, name, region, status, flag_emoji, short_description, image_url
+       FROM cc_countries
+       WHERE display_on_homepage = 1 AND image_url IS NOT NULL AND image_url NOT LIKE '/ph.svg%'
+       ORDER BY (status = 'LIVE') DESC, display_order ASC
+       LIMIT ?`
+    )
+    .bind(limit)
+    .all<CountryDiscoveryRow>()
+  return results
+}
+
+/**
  * Whether a listing is available in `countryIso`. Rule (spec section 11's
  * conceptual model): absence of ANY explicit row for a listing means
  * "available only in the vendor's own country_iso" — the honest default

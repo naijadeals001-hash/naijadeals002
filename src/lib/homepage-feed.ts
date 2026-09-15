@@ -35,7 +35,7 @@ const TTL_SECONDS = 120 // recompute at most once every 2 minutes per section
 const SECTION_LOADERS: Record<string, (db: D1Database) => Promise<any>> = {
   // Hero campaigns listed first: it's the top-of-page section, and keeping it first
   // in this map makes the cache-warm order match the visual reading order.
-  hero_campaigns: (db) => getActiveHeroCampaigns(db, 8),
+  hero_campaigns: (db) => getActiveHeroCampaigns(db, 12),
   flash_deals: (db) => getFlashDeals(db, 12),
   best_sellers: (db) => getBestSellers(db, 12),
   new_arrivals: (db) => getNewArrivals(db, 12),
