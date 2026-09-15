@@ -41,8 +41,21 @@ import {
   type ProviderVerificationDecision,
   type ProviderOperationalStatusDecision,
 } from '../lib/control-center-verification'
-import { applyModerationDecision, getListingForModeration, type ModerationDecision } from '../lib/moderation'
+import { applyModerationDecision, getListingForModeration, getPendingModerationQueue, type ModerationDecision } from '../lib/moderation'
 import { applyUserStatusDecision, isValidAccountStatus, UserNotFoundError, InvalidStatusError } from '../lib/user-lifecycle'
+import {
+  createCollection,
+  updateCollection,
+  setCollectionActive,
+  getAllCollectionsForAdmin,
+  addProductToCollectionOrdered,
+  removeProductFromCollectionById,
+  reorderCollectionProducts,
+  getCollectionProductsForAdmin,
+} from '../lib/collections-admin'
+import { getOpenDisputesForAdmin, resolveDispute, createAndExecuteRefund, RefundError } from '../lib/refunds'
+import { createCategoryAttribute, updateCategoryAttribute, deleteCategoryAttribute, getAttributesForCategory } from '../lib/attributes'
+import { getAllCountries } from '../lib/country'
 
 export const apiControlCenterRoutes = new Hono<AppEnv>()
 
@@ -366,3 +379,216 @@ apiControlCenterRoutes.post(
     }
   }
 )
+
+// ============================================================
+// ADR-001 STEP 2 — re-home the orphan administrative routes
+// (docs/ADR-001-IMPLEMENTATION-PLAN.md §4). These routes previously
+// existed ONLY in src/routes/api-admin.ts, gated by the legacy
+// requirePlatformRole('admin') (users.role==='admin'). They are moved
+// here in full (not duplicated — api-admin.ts's originals are deleted
+// in the same commit, per the implementation plan's §4.1 "re-home, not
+// re-gate-in-place" decision) and re-gated with the Control Center's own
+// requireControlCenterPermission(key), following this file's existing
+// thin-controller shape exactly. Business logic is completely untouched
+// — every handler below delegates to the SAME lib function api-admin.ts
+// used, with zero behavioral change to request/response contracts.
+//
+// COUNT CORRECTION (found during this step's mandatory fresh pre-
+// implementation audit, per the authorization's "do not rely exclusively
+// on previous reports" instruction): the Implementation Plan's §3.2 table
+// lists 20 routes for this step. Live inspection of THIS FILE shows
+// `GET /moderation/listings/:id` already exists here (added by commit
+// 5d203d7 — which is this very plan's OWN STATED BASELINE, so the plan's
+// route table was not cross-checked against its own baseline's CC file
+// before being written). That route is correctly NOT duplicated below —
+// only the genuinely-missing `GET /moderation/queue` (list) is added for
+// the moderation domain. Net new routes added by this step: 19, not 20
+// (or ADR-001's original, now-superseded "17" figure, which predates the
+// Step 1 permission migration and this file's Phase 2 quick-win commit).
+//
+// Permission mapping (ADR-001 Implementation Plan §3.2, verified live
+// against this repository's actual cc_permissions/cc_role_permissions
+// state before implementation, not assumed from the plan alone):
+//   Moderation queue list        -> moderation.read   (existing key)
+//   Collections (9 routes)       -> catalog.read / catalog.manage (Step 1)
+//   Category Attributes (4)      -> catalog.read / catalog.manage (Step 1)
+//   Disputes list/resolve (2)    -> disputes.read / disputes.manage (existing)
+//   Order refund                 -> refunds.approve  (existing key)
+//   Countries list                -> configuration.countries.read (Step 1)
+//   Notifications overview       -> notifications.read (existing key)
+// ============================================================
+
+// ---------- Moderation queue (requires moderation.read) ----------
+// NOTE: GET /moderation/listings/:id already exists above (line ~269,
+// added by the Phase 2 quick-win commit 5d203d7) — this adds ONLY the
+// missing queue-LIST route. Not a duplicate.
+
+apiControlCenterRoutes.get('/moderation/queue', requireControlCenterPermission('moderation.read'), async (c) => {
+  const results = await getPendingModerationQueue(c.env.DB, Number(c.req.query('limit') ?? 100))
+  return c.json({ results })
+})
+
+// ---------- Collections / merchandising (requires catalog.read / catalog.manage) ----------
+
+apiControlCenterRoutes.get('/collections', requireControlCenterPermission('catalog.read'), async (c) => {
+  const results = await getAllCollectionsForAdmin(c.env.DB)
+  return c.json({ results })
+})
+
+apiControlCenterRoutes.post('/collections', requireControlCenterPermission('catalog.manage'), async (c) => {
+  const user = c.get('user')!
+  const body = await c.req.json().catch(() => ({}))
+  if (!body.slug || !body.name) return c.json({ error: 'slug and name are required' }, 400)
+  try {
+    const id = await createCollection(c.env.DB, user.id, body)
+    return c.json({ id }, 201)
+  } catch (err: any) {
+    return c.json({ error: err.message ?? 'Failed to create collection' }, 400)
+  }
+})
+
+apiControlCenterRoutes.patch('/collections/:id', requireControlCenterPermission('catalog.manage'), async (c) => {
+  const id = Number(c.req.param('id'))
+  const body = await c.req.json().catch(() => ({}))
+  const ok = await updateCollection(c.env.DB, id, body)
+  if (!ok) return c.json({ error: 'Collection not found' }, 404)
+  return c.json({ success: true })
+})
+
+apiControlCenterRoutes.post('/collections/:id/activate', requireControlCenterPermission('catalog.manage'), async (c) => {
+  const ok = await setCollectionActive(c.env.DB, Number(c.req.param('id')), true)
+  if (!ok) return c.json({ error: 'Collection not found' }, 404)
+  return c.json({ success: true })
+})
+
+apiControlCenterRoutes.post('/collections/:id/deactivate', requireControlCenterPermission('catalog.manage'), async (c) => {
+  const ok = await setCollectionActive(c.env.DB, Number(c.req.param('id')), false)
+  if (!ok) return c.json({ error: 'Collection not found' }, 404)
+  return c.json({ success: true })
+})
+
+apiControlCenterRoutes.get('/collections/:id/products', requireControlCenterPermission('catalog.read'), async (c) => {
+  const results = await getCollectionProductsForAdmin(c.env.DB, Number(c.req.param('id')))
+  return c.json({ results })
+})
+
+apiControlCenterRoutes.post('/collections/:id/products', requireControlCenterPermission('catalog.manage'), async (c) => {
+  const collectionId = Number(c.req.param('id'))
+  const body = await c.req.json<{ product_id: number; sort_order?: number }>().catch(() => null)
+  if (!body?.product_id) return c.json({ error: 'product_id required' }, 400)
+  try {
+    await addProductToCollectionOrdered(c.env.DB, collectionId, body.product_id, body.sort_order)
+    return c.json({ success: true })
+  } catch (err: any) {
+    return c.json({ error: err.message ?? 'Failed to add product' }, 400)
+  }
+})
+
+apiControlCenterRoutes.delete('/collections/:id/products/:productId', requireControlCenterPermission('catalog.manage'), async (c) => {
+  const ok = await removeProductFromCollectionById(c.env.DB, Number(c.req.param('id')), Number(c.req.param('productId')))
+  if (!ok) return c.json({ error: 'Product not in this collection' }, 404)
+  return c.json({ success: true })
+})
+
+apiControlCenterRoutes.post('/collections/:id/reorder', requireControlCenterPermission('catalog.manage'), async (c) => {
+  const body = await c.req.json<{ product_ids: number[] }>().catch(() => null)
+  if (!Array.isArray(body?.product_ids)) return c.json({ error: 'product_ids array required' }, 400)
+  await reorderCollectionProducts(c.env.DB, Number(c.req.param('id')), body.product_ids)
+  return c.json({ success: true })
+})
+
+// ---------- Category attribute definitions (requires catalog.read / catalog.manage) ----------
+
+apiControlCenterRoutes.get('/categories/:categoryId/attributes', requireControlCenterPermission('catalog.read'), async (c) => {
+  const results = await getAttributesForCategory(c.env.DB, Number(c.req.param('categoryId')))
+  return c.json({ results })
+})
+
+apiControlCenterRoutes.post('/categories/:categoryId/attributes', requireControlCenterPermission('catalog.manage'), async (c) => {
+  const categoryId = Number(c.req.param('categoryId'))
+  const body = await c.req.json().catch(() => ({}))
+  if (!body.key || !body.label || !body.data_type) return c.json({ error: 'key, label and data_type are required' }, 400)
+  try {
+    const id = await createCategoryAttribute(c.env.DB, { ...body, category_id: categoryId })
+    return c.json({ id }, 201)
+  } catch (err: any) {
+    return c.json({ error: err.message ?? 'Failed to create attribute' }, 400)
+  }
+})
+
+apiControlCenterRoutes.patch('/attributes/:id', requireControlCenterPermission('catalog.manage'), async (c) => {
+  const body = await c.req.json().catch(() => ({}))
+  try {
+    const ok = await updateCategoryAttribute(c.env.DB, Number(c.req.param('id')), body)
+    if (!ok) return c.json({ error: 'Attribute not found' }, 404)
+    return c.json({ success: true })
+  } catch (err: any) {
+    return c.json({ error: err.message ?? 'Failed to update attribute' }, 400)
+  }
+})
+
+apiControlCenterRoutes.delete('/attributes/:id', requireControlCenterPermission('catalog.manage'), async (c) => {
+  const ok = await deleteCategoryAttribute(c.env.DB, Number(c.req.param('id')))
+  if (!ok) return c.json({ error: 'Attribute not found' }, 404)
+  return c.json({ success: true })
+})
+
+// ---------- Disputes & refunds (requires disputes.read / disputes.manage / refunds.approve) ----------
+
+apiControlCenterRoutes.get('/disputes', requireControlCenterPermission('disputes.read'), async (c) => {
+  const results = await getOpenDisputesForAdmin(c.env.DB, Number(c.req.query('limit') ?? 100))
+  return c.json({ results })
+})
+
+apiControlCenterRoutes.post('/disputes/:id/resolve', requireControlCenterPermission('disputes.manage'), async (c) => {
+  const user = c.get('user')!
+  const body = await c.req.json<{ status: 'resolved' | 'rejected'; note: string }>().catch(() => null)
+  if (!body?.status || !body?.note) return c.json({ error: 'status and note are required' }, 400)
+  const ok = await resolveDispute(c.env.DB, Number(c.req.param('id')), user.id, body.status, body.note)
+  if (!ok) return c.json({ error: 'Dispute not found or already resolved' }, 404)
+  return c.json({ success: true })
+})
+
+apiControlCenterRoutes.post('/orders/:orderId/refund', requireControlCenterPermission('refunds.approve'), async (c) => {
+  const user = c.get('user')!
+  const orderId = Number(c.req.param('orderId'))
+  const body = await c.req.json<{ order_item_id?: number; amount_kobo: number; reason: string; refund_type?: string }>().catch(() => null)
+  if (!body?.amount_kobo || !body?.reason) return c.json({ error: 'amount_kobo and reason are required' }, 400)
+  try {
+    const result = await createAndExecuteRefund(c.env.DB, {
+      orderId,
+      orderItemId: body.order_item_id ?? null,
+      amountKobo: Number(body.amount_kobo),
+      reason: body.reason,
+      refundType: (body.refund_type as any) ?? 'partial',
+      initiatedByUserId: user.id,
+      initiatedByRole: 'admin',
+    })
+    return c.json({ success: true, ...result })
+  } catch (err: any) {
+    if (err instanceof RefundError) return c.json({ error: err.message }, 400)
+    throw err
+  }
+})
+
+// ---------- Country reference data (requires configuration.countries.read) ----------
+
+apiControlCenterRoutes.get('/countries', requireControlCenterPermission('configuration.countries.read'), async (c) => {
+  const results = await getAllCountries(c.env.DB)
+  return c.json({ results })
+})
+
+// ---------- Notifications overview (requires notifications.read) ----------
+// NOTE: this is a distinct, read-only OVERVIEW/aggregate endpoint — not to
+// be confused with the /notifications/process-outbox and /retry-failed
+// routes above, which already existed here (Phase 2 quick-win, gated by
+// notifications.manage) as CC-equivalents of 2 of the 4 ADR-001 §3
+// *overlapping* routes (Step 3, not this Step 2). This route has NO
+// api-control-center.ts equivalent before this commit — it is a genuine
+// re-home of api-admin.ts's GET /notifications/overview only.
+
+apiControlCenterRoutes.get('/notifications/overview', requireControlCenterPermission('notifications.read'), async (c) => {
+  const { getNotificationEngineOverview } = await import('../lib/notification-observability')
+  const overview = await getNotificationEngineOverview(c.env.DB)
+  return c.json(overview)
+})
