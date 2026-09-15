@@ -124,6 +124,230 @@
     });
   })();
 
+  // ---------- All Categories mega-menu (desktop flyout + mobile accordion) ----------
+  // Single source of truth for category browsing: GET /api/catalog/categories/tree
+  // (src/lib/mega-menu.ts) returns the FULL live taxonomy (departments -> groups ->
+  // subcategories -> African/country leaves) as a nested tree. Fetched lazily, once,
+  // on first interaction — never server-rendered into every page — same lazy-fetch
+  // convention as initWalletNav/initWishlistNav above. Desktop renders it as a
+  // department-rail + multi-column flyout panel; mobile renders it as an inline
+  // accordion inside the existing off-canvas drawer. Both consume the same cached
+  // tree, fetched only once no matter which surface opens first.
+  (function initMegaMenu() {
+    var desktopBtn = document.getElementById('all-categories-btn');
+    var desktopPanel = document.getElementById('mega-menu-panel');
+    var desktopDepts = document.getElementById('mega-menu-depts');
+    var desktopPanels = document.getElementById('mega-menu-panels');
+    var desktopLoading = document.getElementById('mega-menu-loading');
+
+    var mobileBtn = document.getElementById('mobile-all-categories-btn');
+    var mobileChevron = document.getElementById('mobile-all-categories-chevron');
+    var mobileList = document.getElementById('mobile-mega-menu-list');
+
+    if (!desktopBtn && !mobileBtn) return; // neither surface present on this page
+
+    var tree = null;     // cached GET /api/catalog/categories/tree result
+    var fetchPromise = null;
+    var activeDeptIndex = 0;
+
+    function fetchTree() {
+      if (fetchPromise) return fetchPromise;
+      fetchPromise = api('/api/catalog/categories/tree').then(function (res) {
+        tree = (res.ok && Array.isArray(res.data)) ? res.data : [];
+        return tree;
+      }).catch(function () {
+        tree = [];
+        return tree;
+      });
+      return fetchPromise;
+    }
+
+    // ----- Desktop: department rail (left) + multi-column panel (right) -----
+    function renderDeptRail() {
+      desktopDepts.innerHTML = '';
+      tree.forEach(function (dept, i) {
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'w-full flex items-center gap-2.5 px-4 py-2 text-sm text-left transition-colors ' +
+          (i === activeDeptIndex ? 'bg-white text-primary font-semibold' : 'text-gray-700 hover:bg-gray-100');
+        btn.setAttribute('data-dept-index', String(i));
+        btn.innerHTML = '<span class="material-symbols-outlined text-lg shrink-0">' + (dept.icon || 'category') + '</span>' +
+          '<span class="truncate">' + dept.name + '</span>';
+        btn.addEventListener('mouseenter', function () { setActiveDept(i); });
+        btn.addEventListener('click', function () { setActiveDept(i); });
+        desktopDepts.appendChild(btn);
+      });
+    }
+
+    // Recursively renders a <ul> of category links at any nesting depth.
+    // Needed because real taxonomy depth varies by branch — most groups are only
+    // 1 level deep, but African/country-scoped paths go 2-3 levels deeper (e.g.
+    // Fashion -> African Fashion -> Nigerian Fashion -> Nigerian Fabrics ->
+    // Ankara Fabric is 5 levels total, 3 below the mega-menu's "group" column).
+    // A depth-capped hardcoded renderer would silently truncate exactly those
+    // deep African leaves, so this walks `children` all the way down instead.
+    function renderLeafList(nodes, depth) {
+      var list = document.createElement('ul');
+      list.className = depth === 0 ? 'space-y-1.5' : 'pl-3 mt-1 space-y-1 border-l border-gray-100';
+      nodes.forEach(function (node) {
+        var li = document.createElement('li');
+        var a = document.createElement('a');
+        a.href = '/shop?category=' + encodeURIComponent(node.slug);
+        a.className = depth === 0
+          ? 'text-sm text-gray-600 hover:text-primary hover:underline'
+          : 'text-xs text-gray-500 hover:text-primary hover:underline';
+        a.textContent = node.name;
+        li.appendChild(a);
+        if (node.children && node.children.length) {
+          li.appendChild(renderLeafList(node.children, depth + 1));
+        }
+        list.appendChild(li);
+      });
+      return list;
+    }
+
+    function renderDeptPanel(dept) {
+      desktopPanels.innerHTML = '';
+      if (!dept || !dept.children || !dept.children.length) {
+        var empty = document.createElement('p');
+        empty.className = 'text-sm text-gray-400';
+        empty.textContent = 'No subcategories yet.';
+        desktopPanels.appendChild(empty);
+        return;
+      }
+      var grid = document.createElement('div');
+      grid.className = 'grid grid-cols-3 gap-x-6 gap-y-5';
+      dept.children.forEach(function (group) {
+        var col = document.createElement('div');
+        var heading = document.createElement('a');
+        heading.href = '/shop?category=' + encodeURIComponent(group.slug);
+        heading.className = 'block text-sm font-semibold text-gray-900 hover:text-primary mb-2';
+        heading.textContent = group.name;
+        col.appendChild(heading);
+
+        col.appendChild(renderLeafList(group.children || [], 0));
+        grid.appendChild(col);
+      });
+      desktopPanels.appendChild(grid);
+    }
+
+    function setActiveDept(i) {
+      activeDeptIndex = i;
+      renderDeptRail();
+      renderDeptPanel(tree[i]);
+    }
+
+    function openDesktopPanel() {
+      desktopPanel.classList.remove('hidden');
+      desktopBtn.setAttribute('aria-expanded', 'true');
+      if (tree) { desktopLoading.classList.add('hidden'); return; }
+      desktopLoading.classList.remove('hidden');
+      fetchTree().then(function () {
+        desktopLoading.classList.add('hidden');
+        if (!tree.length) {
+          desktopLoading.textContent = 'Categories are unavailable right now.';
+          desktopLoading.classList.remove('hidden');
+          return;
+        }
+        renderDeptRail();
+        renderDeptPanel(tree[activeDeptIndex]);
+      });
+    }
+
+    function closeDesktopPanel() {
+      desktopPanel.classList.add('hidden');
+      desktopBtn.setAttribute('aria-expanded', 'false');
+    }
+
+    if (desktopBtn && desktopPanel) {
+      desktopBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var isOpen = !desktopPanel.classList.contains('hidden');
+        if (isOpen) { closeDesktopPanel(); } else { openDesktopPanel(); }
+      });
+      document.addEventListener('click', function (e) {
+        if (!desktopPanel.classList.contains('hidden') && !desktopPanel.contains(e.target) && e.target !== desktopBtn) {
+          closeDesktopPanel();
+        }
+      });
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') closeDesktopPanel();
+      });
+    }
+
+    // ----- Mobile: inline accordion inside the existing off-canvas drawer -----
+    // Same recursion rationale as renderLeafList() above — real African/country
+    // branches go deeper than one level below a "group" (e.g. Nigerian Fabrics
+    // -> Ankara Fabric), so this must walk `children` fully, not just one hop.
+    function renderMobileLeafLinks(nodes, depth) {
+      var wrap = document.createElement('div');
+      wrap.className = depth > 1 ? 'pl-3 border-l border-gray-100' : '';
+      nodes.forEach(function (node) {
+        var link = document.createElement('a');
+        link.href = '/shop?category=' + encodeURIComponent(node.slug);
+        link.className = 'block text-sm text-gray-500 py-1 pl-2';
+        link.textContent = node.name;
+        wrap.appendChild(link);
+        if (node.children && node.children.length) {
+          wrap.appendChild(renderMobileLeafLinks(node.children, depth + 1));
+        }
+      });
+      return wrap;
+    }
+
+    function renderMobileAccordion() {
+      mobileList.innerHTML = '';
+      if (!tree.length) {
+        var p = document.createElement('p');
+        p.className = 'px-3 py-2 text-xs text-gray-400';
+        p.textContent = 'Categories are unavailable right now.';
+        mobileList.appendChild(p);
+        return;
+      }
+      tree.forEach(function (dept) {
+        var details = document.createElement('details');
+        details.className = 'border-b border-gray-50 last:border-b-0';
+
+        var summary = document.createElement('summary');
+        summary.className = 'flex items-center gap-2.5 py-2 pr-2 text-sm font-medium text-gray-800 cursor-pointer select-none';
+        summary.innerHTML = '<span class="material-symbols-outlined text-lg text-gray-500">' + (dept.icon || 'category') + '</span>' + dept.name;
+        details.appendChild(summary);
+
+        var body = document.createElement('div');
+        body.className = 'pl-8 pb-2 space-y-2';
+        (dept.children || []).forEach(function (group) {
+          var groupWrap = document.createElement('div');
+          var groupLink = document.createElement('a');
+          groupLink.href = '/shop?category=' + encodeURIComponent(group.slug);
+          groupLink.className = 'block text-sm font-semibold text-gray-700 py-1';
+          groupLink.textContent = group.name;
+          groupWrap.appendChild(groupLink);
+          groupWrap.appendChild(renderMobileLeafLinks(group.children || [], 1));
+          body.appendChild(groupWrap);
+        });
+        details.appendChild(body);
+        mobileList.appendChild(details);
+      });
+    }
+
+    if (mobileBtn && mobileList) {
+      mobileBtn.addEventListener('click', function () {
+        var isOpen = !mobileList.classList.contains('hidden');
+        if (isOpen) {
+          mobileList.classList.add('hidden');
+          mobileBtn.setAttribute('aria-expanded', 'false');
+          if (mobileChevron) mobileChevron.style.transform = '';
+          return;
+        }
+        mobileList.classList.remove('hidden');
+        mobileBtn.setAttribute('aria-expanded', 'true');
+        if (mobileChevron) mobileChevron.style.transform = 'rotate(180deg)';
+        if (tree) { renderMobileAccordion(); return; }
+        fetchTree().then(renderMobileAccordion);
+      });
+    }
+  })();
+
   // ---------- Wallet balance in header nav ----------
   (function initWalletNav() {
     const el = document.getElementById('wallet-balance-nav');

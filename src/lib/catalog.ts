@@ -237,6 +237,21 @@ export async function getDealsNearYou(db: D1Database, city: string, limit = 10):
   return fallback
 }
 
+/**
+ * "African Discovery" rails (Phase 1b) — products whose DIRECT category node
+ * is scoped to a specific country (migration 0053's country_iso column,
+ * e.g. "Ankara Fabric" -> NG). This is the real in-tree African layer, not a
+ * collections/banner substitute — see migration 0053's header comment and
+ * scripts/seed/generate_phase1a_seed.py's country_iso inheritance logic.
+ */
+export async function getProductsByCountry(db: D1Database, countryIso: string, limit = 12): Promise<ProductWithListingRow[]> {
+  const { results } = await db
+    .prepare(`${PRODUCT_CARD_SELECT} AND cat.country_iso = ? ORDER BY p.rating_count DESC, p.id DESC LIMIT ?`)
+    .bind(countryIso, limit)
+    .all<ProductWithListingRow>()
+  return results
+}
+
 /** Fetches product cards by an explicit id list, preserving the given order — used to hydrate "Recently Viewed" from client-side localStorage ids. */
 export async function getProductsByIds(db: D1Database, ids: number[]): Promise<ProductWithListingRow[]> {
   if (ids.length === 0) return []

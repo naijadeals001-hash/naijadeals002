@@ -280,14 +280,14 @@ export async function homePage(c: Context<AppEnv>) {
       <section class="py-6 md:py-8 border-t border-gray-100">
         <div class="max-w-[100rem] mx-auto px-4 md:px-6 lg:px-8">
           <div class="grid md:grid-cols-2 gap-4">
-            <a href="/shop?category=groceries" class="relative rounded-xl overflow-hidden group aspect-[16/7]">
+            <a href="/shop?category=grocery-and-food" class="relative rounded-xl overflow-hidden group aspect-[16/7]">
               <img src="/static/banners/banner-3.jpg" alt="Weekly groceries delivered fast" class="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-300" />
               <div class="absolute inset-0 bg-gradient-to-r from-black/50 to-transparent flex flex-col justify-center px-6">
                 <p class="text-white font-bold text-lg">Weekly groceries, delivered fast</p>
                 <span class="text-white/90 text-sm mt-1">Shop groceries →</span>
               </div>
             </a>
-            <a href="/shop?category=home-kitchen" class="relative rounded-xl overflow-hidden group aspect-[16/7]">
+            <a href="/shop?category=home-and-kitchen" class="relative rounded-xl overflow-hidden group aspect-[16/7]">
               <img src="/static/banners/banner-4.jpg" alt="Kit out your kitchen for less" class="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-300" />
               <div class="absolute inset-0 bg-gradient-to-r from-black/50 to-transparent flex flex-col justify-center px-6">
                 <p class="text-white font-bold text-lg">Kit out your kitchen for less</p>

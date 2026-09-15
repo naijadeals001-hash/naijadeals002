@@ -5,6 +5,7 @@ import { getHomepageFeed } from '../lib/homepage-feed'
 import { getAllCollections, getCollectionBySlug, getProductsInCollection } from '../lib/collections'
 import { getProductAttributeValues } from '../lib/attributes'
 import { getLiveCountries } from '../lib/country'
+import { getMegaMenuTree } from '../lib/mega-menu'
 
 export const catalogApi = new Hono<AppEnv>()
 
@@ -40,6 +41,16 @@ catalogApi.get('/categories', async (c) => {
 
 catalogApi.get('/categories/top', async (c) => {
   const results = await getTopLevelCategories(c.env.DB)
+  return c.json(results)
+})
+
+/**
+ * Nested Department -> Group -> Subcategory -> Leaf tree (any depth, African/
+ * country-specific nodes in-line) — the DB-driven "All Categories" mega-menu's
+ * sole data source (Phase 1b). See src/lib/mega-menu.ts.
+ */
+catalogApi.get('/categories/tree', async (c) => {
+  const results = await getMegaMenuTree(c.env.DB)
   return c.json(results)
 })
 

@@ -40,17 +40,19 @@ const ECOSYSTEM_LINKS = [
   { href: '/aura', label: 'Aura AI', icon: 'auto_awesome', live: false }
 ]
 
-const CATEGORY_NAV = [
-  { href: '/shop?category=electronics', label: 'Electronics' },
-  { href: '/shop?category=phones-tablets', label: 'Phones & Tablets' },
-  { href: '/shop?category=fashion', label: 'Fashion' },
-  { href: '/shop?category=home-kitchen', label: 'Home & Kitchen' },
-  { href: '/shop?category=groceries', label: 'Groceries' },
-  { href: '/shop?category=beauty-health', label: 'Beauty & Health' },
-  { href: '/shop?category=sports-outdoors', label: 'Sports & Outdoors' },
-  { href: '/shop?category=baby-products', label: 'Baby Products' },
-  { href: '/shop?category=automotive', label: 'Automotive' }
-]
+/**
+ * Phase 1b: the old hardcoded slug list above (removed) drifted out of sync
+ * with the real taxonomy the moment migration 0053's seed landed (e.g.
+ * `home-kitchen`/`groceries` never matched the real `home-and-kitchen`/
+ * `grocery-and-food` slugs) — every link 404'd-to-empty via shop.tsx's
+ * honest-zero-results fallback. The header's category surface is now 100%
+ * DB-driven: the "All Categories" mega-menu (built client-side in app.js's
+ * initMegaMenu() from GET /api/catalog/categories/tree — see
+ * src/lib/mega-menu.ts) is the ONLY way to browse categories from the
+ * header. No per-page server prop threading needed since it's fetched once,
+ * lazily, on first open, same pattern as the existing wallet-balance/
+ * wishlist-ids header badges below.
+ */
 
 export const Layout: FC<LayoutProps> = ({ title, description, user, cartCount = 0, wishlistCount = 0, selectedCity = 'Lagos', locale, children }) => {
   const t = createTranslator(locale)
@@ -93,22 +95,28 @@ export const Layout: FC<LayoutProps> = ({ title, description, user, cartCount = 
             z-order swallows clicks meant for the other, no matter which one
             is "on top". See app.js for the full writeup. */}
         <header id="site-header" class="sticky top-0 z-[60] shadow-sm bg-primary-dark">
-          {/* ===== DESKTOP: utility bar + main header + category nav ===== */}
+          {/* ===== DESKTOP: 3-tier header (Phase 1b, reference-matched) ===== */}
           <div class="hidden md:block bg-primary-dark text-white">
-            {/* Utility bar */}
+            {/* ---------- TIER 1: Utility bar ---------- */}
             <div class="border-b border-white/10">
               <div class="max-w-[100rem] mx-auto flex items-center justify-between px-6 lg:px-8 py-1.5 text-xs text-white/70">
                 <div class="flex items-center gap-4">
-                  <span>Nigeria's Super App — Shop · Fresh · Eats · Gigs · Stay · Drive · Send · Stream</span>
+                  <span>One Africa. More Possibilities.</span>
                 </div>
                 <div class="flex items-center gap-4">
                   <a href="/seller" class="hover:text-white transition-colors">{t('nav_sell_on_naijadeals')}</a>
+                  <a href="/organizations/business" class="hover:text-white transition-colors hidden lg:inline">Business</a>
                   <a href="/help" class="hover:text-white transition-colors">{t('nav_help_center')}</a>
+                  <a href="/orders" class="hover:text-white transition-colors hidden lg:inline">Track Order</a>
+                  <span class="hidden xl:flex items-center gap-1.5 text-white/50">
+                    <span class="material-symbols-outlined text-sm">smartphone</span>
+                    Download App
+                  </span>
                   <LanguageSelector locale={locale} variant="utility-bar" />
                 </div>
               </div>
             </div>
-            {/* Main header */}
+            {/* ---------- TIER 2: Main header — logo, search, account/cart ---------- */}
             <div class="max-w-[100rem] mx-auto flex items-center gap-4 px-6 lg:px-8 py-2.5">
               <a href="/" class="flex items-center shrink-0 bg-white/5 hover:bg-white/10 transition-colors rounded-lg px-3 py-1.5" aria-label="NaijaDeals home">
                 <span class="text-xl font-bold tracking-tight">Naija<span class="text-primary-fixed">Deals</span></span>
@@ -120,10 +128,6 @@ export const Layout: FC<LayoutProps> = ({ title, description, user, cartCount = 
                 </select>
               </label>
               <form action="/shop" method="get" class="flex flex-1 max-w-2xl items-stretch rounded-md overflow-hidden bg-white">
-                <select name="category" aria-label="Search category" class="hidden sm:block px-2 text-xs text-gray-600 border-r border-gray-200 outline-none bg-gray-50">
-                  <option value="">All Categories</option>
-                  {CATEGORY_NAV.map((c) => <option value={c.href.split('=')[1]}>{c.label}</option>)}
-                </select>
                 <input
                   type="text"
                   name="q"
@@ -138,6 +142,9 @@ export const Layout: FC<LayoutProps> = ({ title, description, user, cartCount = 
                 <a href="/wallet" class="hidden lg:flex flex-col justify-center leading-tight px-2.5 py-1.5 rounded-lg hover:bg-white/10 transition-colors">
                   <span class="text-[11px] text-white/70">{t('nav_balance')}</span>
                   <span class="text-sm font-semibold" id="wallet-balance-nav">--</span>
+                </a>
+                <a href="/account" aria-label="Messages" class="hidden lg:flex flex-col items-center justify-center px-2.5 py-1.5 rounded-lg hover:bg-white/10 transition-colors">
+                  <span class="material-symbols-outlined text-xl">mail</span>
                 </a>
                 <a href="/account/wishlist" class="hidden lg:flex relative flex-col justify-center leading-tight px-2.5 py-1.5 rounded-lg hover:bg-white/10 transition-colors">
                   <span class="material-symbols-outlined text-xl">favorite</span>
@@ -157,9 +164,6 @@ export const Layout: FC<LayoutProps> = ({ title, description, user, cartCount = 
                 <a href="/orders" class="hidden lg:flex flex-col justify-center leading-tight px-2.5 py-1.5 rounded-lg hover:bg-white/10 transition-colors">
                   <span class="text-sm font-semibold">{t('nav_orders_returns')}</span>
                 </a>
-                <a href="/affiliate" class="hidden xl:flex flex-col justify-center leading-tight px-2.5 py-1.5 rounded-lg hover:bg-white/10 transition-colors">
-                  <span class="text-sm font-semibold">Affiliate Center</span>
-                </a>
                 <a href="/cart" class="relative flex items-end gap-1 px-2.5 py-1.5 rounded-lg hover:bg-white/10 transition-colors">
                   <span class="material-symbols-outlined text-2xl">shopping_cart</span>
                   <span
@@ -170,34 +174,46 @@ export const Layout: FC<LayoutProps> = ({ title, description, user, cartCount = 
                 </a>
               </div>
             </div>
-            {/* Category nav bar */}
-            <nav class="bg-primary border-t border-white/10">
-              <div class="max-w-[100rem] mx-auto flex items-center gap-1 px-6 lg:px-8 py-2 text-sm font-medium overflow-x-auto">
-                <a href="/shop" class="flex items-center gap-1.5 shrink-0 px-2 py-1 rounded hover:bg-white/10 transition-colors font-semibold">
-                  <span class="material-symbols-outlined text-lg">menu</span>{t('nav_all')}
-                </a>
-                {CATEGORY_NAV.map((link) => (
-                  <a href={link.href} class="flex items-center gap-1 shrink-0 px-2 py-1 rounded hover:bg-white/10 transition-colors">
-                    {link.label}
-                  </a>
-                ))}
+            {/* ---------- TIER 3: All Categories trigger (DB-driven mega-menu) + ecosystem nav ---------- */}
+            <nav class="bg-primary border-t border-white/10 relative">
+              <div class="max-w-[100rem] mx-auto flex items-center gap-1 px-6 lg:px-8 py-0 text-sm font-medium">
+                {/* All Categories — opens the DB-driven mega-menu (src/lib/mega-menu.ts via
+                    GET /api/catalog/categories/tree). Fetched lazily on first click by
+                    initMegaMenu() in app.js — NO hardcoded category list here at all,
+                    replacing the old static CATEGORY_NAV array entirely (Phase 1b). */}
+                <button
+                  type="button"
+                  id="all-categories-btn"
+                  aria-haspopup="true"
+                  aria-expanded="false"
+                  aria-controls="mega-menu-panel"
+                  class="flex items-center gap-1.5 shrink-0 px-3 py-2.5 bg-primary-dark hover:bg-black/20 transition-colors font-semibold"
+                >
+                  <span class="material-symbols-outlined text-lg">menu</span>
+                  All Categories
+                  <span class="material-symbols-outlined text-base">expand_more</span>
+                </button>
+                <div id="mega-menu-panel" class="hidden absolute left-0 top-full z-50 w-full lg:w-[960px] bg-white border border-gray-200 rounded-b-xl shadow-2xl overflow-hidden" role="menu" aria-label="All categories">
+                  <div class="flex max-h-[70vh]">
+                    <div id="mega-menu-depts" class="w-56 shrink-0 bg-gray-50 border-r border-gray-100 overflow-y-auto py-2"></div>
+                    <div id="mega-menu-panels" class="flex-1 overflow-y-auto p-5"></div>
+                  </div>
+                  <div id="mega-menu-loading" class="p-10 text-center text-gray-400 text-sm">Loading categories…</div>
+                </div>
+                {/* Ecosystem pills — the "one super-app, not nine websites" strip */}
+                <div class="flex items-center gap-1 overflow-x-auto [&::-webkit-scrollbar]:hidden">
+                  {ECOSYSTEM_LINKS.map((eco) => (
+                    <a href={eco.href} class="flex items-center gap-1.5 shrink-0 px-2.5 py-2.5 hover:bg-white/10 transition-colors text-white/90">
+                      <span class="material-symbols-outlined text-base">{eco.icon}</span>
+                      {eco.label.replace('Naija', '')}
+                      {!eco.live && <span class="text-[9px] bg-white/15 rounded px-1 py-0.5">Soon</span>}
+                    </a>
+                  ))}
+                </div>
                 <span class="w-px h-4 bg-white/20 shrink-0 mx-1"></span>
-                <a href="/shop?deals=1" class="flex items-center gap-1 shrink-0 px-2 py-1 rounded hover:bg-white/10 transition-colors text-primary-fixed font-semibold">{t('nav_deals')}</a>
-                <a href="/wallet" class="flex items-center gap-1 shrink-0 px-2 py-1 rounded hover:bg-white/10 transition-colors">NaijaDeals Plus</a>
+                <a href="/shop?deals=1" class="flex items-center gap-1 shrink-0 px-2.5 py-2.5 hover:bg-white/10 transition-colors text-primary-fixed font-semibold">{t('nav_deals')}</a>
               </div>
             </nav>
-            {/* Ecosystem shortcuts strip */}
-            <div class="bg-primary-dark/60 border-t border-white/10">
-              <div class="max-w-[100rem] mx-auto flex items-center gap-4 px-6 lg:px-8 py-1.5 text-xs overflow-x-auto">
-                {ECOSYSTEM_LINKS.map((eco) => (
-                  <a href={eco.href} class="flex items-center gap-1 shrink-0 text-white/70 hover:text-white transition-colors">
-                    <span class="material-symbols-outlined text-sm">{eco.icon}</span>
-                    {eco.label}
-                    {!eco.live && <span class="text-[9px] bg-white/10 rounded px-1">Soon</span>}
-                  </a>
-                ))}
-              </div>
-            </div>
           </div>
 
           {/* ===== MOBILE: 3-row header (brand+actions / search / ecosystem scroller) ===== */}
@@ -284,14 +300,25 @@ export const Layout: FC<LayoutProps> = ({ title, description, user, cartCount = 
             <a href="/" class="flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-gray-800 hover:bg-gray-50">
               <span class="material-symbols-outlined text-xl text-gray-500">home</span>{t('nav_home')}
             </a>
-            <a href="/shop" class="flex items-center gap-3 px-4 py-2.5 text-sm font-semibold text-gray-800 hover:bg-gray-50">
-              <span class="material-symbols-outlined text-xl text-gray-500">menu</span>{t('nav_all')}
-            </a>
-            {CATEGORY_NAV.map((link) => (
-              <a href={link.href} class="flex items-center gap-3 pl-11 pr-4 py-2 text-sm text-gray-600 hover:bg-gray-50">
-                {link.label}
-              </a>
-            ))}
+            {/* All Categories — mobile accordion trigger. Populated lazily and
+                client-side from the same /api/catalog/categories/tree endpoint
+                the desktop mega-menu uses (see initMegaMenu() in app.js).
+                No hardcoded category list here — replaces the old CATEGORY_NAV. */}
+            <button
+              id="mobile-all-categories-btn"
+              type="button"
+              aria-expanded="false"
+              aria-controls="mobile-mega-menu-list"
+              class="w-full flex items-center justify-between gap-3 px-4 py-2.5 text-sm font-semibold text-gray-800 hover:bg-gray-50"
+            >
+              <span class="flex items-center gap-3">
+                <span class="material-symbols-outlined text-xl text-gray-500">menu</span>{t('nav_all')}
+              </span>
+              <span id="mobile-all-categories-chevron" class="material-symbols-outlined text-lg text-gray-400 transition-transform">expand_more</span>
+            </button>
+            <div id="mobile-mega-menu-list" class="hidden pl-4 pr-2 pb-1">
+              <p id="mobile-mega-menu-loading" class="px-3 py-2 text-xs text-gray-400">Loading categories…</p>
+            </div>
             <a href="/shop?deals=1" class="flex items-center gap-3 px-4 py-2.5 text-sm font-semibold text-primary hover:bg-gray-50 border-t border-gray-100 mt-1">
               <span class="material-symbols-outlined text-xl">bolt</span>{t('nav_deals')}
             </a>

@@ -1,0 +1,32 @@
+[
+  {
+    "results": [
+      {
+        "id": 1,
+        "listing_id": 81,
+        "min_quantity": 10,
+        "max_quantity": 49,
+        "unit_price_kobo": 450000,
+        "tier_label": null,
+        "sort_order": 0,
+        "is_active": 1,
+        "created_at": "2026-09-12 05:06:17"
+      },
+      {
+        "id": 2,
+        "listing_id": 81,
+        "min_quantity": 50,
+        "max_quantity": null,
+        "unit_price_kobo": 400000,
+        "tier_label": null,
+        "sort_order": 1,
+        "is_active": 1,
+        "created_at": "2026-09-12 05:06:17"
+      }
+    ],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  }
+]
