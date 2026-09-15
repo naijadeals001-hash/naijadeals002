@@ -106,11 +106,11 @@
       "country_iso": "MA",
       "batch": 3,
       "batch_label": "Beauty / Health",
-      "image_path": "/static/products/074-pure-moroccan-argan-oil-100m.jpg",
+      "image_path": "/static/products/074-pure-moroccan-argan-oil-100ml.jpg",
       "additional_images": [],
       "trademark_handling": "NO_BRAND_NEEDED",
       "generation_brief": "Professional e-commerce studio product photograph of: Pure Moroccan Argan Oil 100ml. Category: Argan Products. Moroccan market context -- if culturally/regionally distinctive (fabric pattern, craft style, packaging), render it authentically. Clean, well-lit, neutral or soft-gradient background (white/light-grey studio), realistic proportions, no text overlays, no watermarks.",
-      "status": "PENDING"
+      "status": "DONE"
     },
     {
       "product_id": 37,
@@ -250,11 +250,11 @@
       "country_iso": null,
       "batch": 3,
       "batch_label": "Beauty / Health",
-      "image_path": "/static/products/066-shea-butter-body-lotion-500m.jpg",
+      "image_path": "/static/products/066-shea-butter-body-lotion-500ml.jpg",
       "additional_images": [],
       "trademark_handling": "NO_BRAND_NEEDED",
       "generation_brief": "Professional e-commerce studio product photograph of: Shea Butter Body Lotion 500ml. Category: Body Care. Clean, well-lit, neutral or soft-gradient background (white/light-grey studio), realistic proportions, no text overlays, no watermarks.",
-      "status": "PENDING"
+      "status": "DONE"
     },
     {
       "product_id": 26,
@@ -523,11 +523,11 @@
       "country_iso": null,
       "batch": 3,
       "batch_label": "Beauty / Health",
-      "image_path": "/static/products/069-zaron-full-coverage-foundati.jpg",
+      "image_path": "/static/products/069-zaron-full-coverage-foundation.jpg",
       "additional_images": [],
       "trademark_handling": "GENERIC_STYLE",
       "generation_brief": "Professional e-commerce studio product photograph of: Zaron Full Coverage Foundation. Category: Face Makeup. Depict the general product type/form-factor accurately; DO NOT reproduce the 'Zaron Cosmetics' logo, wordmark, or official trade dress -- neutral/unbranded surface finish, generic packaging or no packaging. Clean, well-lit, neutral or soft-gradient background (white/light-grey studio), realistic proportions, no text overlays, no watermarks.",
-      "status": "PENDING"
+      "status": "DONE"
     },
     {
       "product_id": 65,
@@ -539,11 +539,11 @@
       "country_iso": null,
       "batch": 3,
       "batch_label": "Beauty / Health",
-      "image_path": "/static/products/065-nivea-soft-moisturizing-crea.jpg",
+      "image_path": "/static/products/065-nivea-soft-moisturizing-cream-200ml.jpg",
       "additional_images": [],
       "trademark_handling": "GENERIC_STYLE",
       "generation_brief": "Professional e-commerce studio product photograph of: Nivea Soft Moisturizing Cream 200ml. Category: Facial Care. Depict the general product type/form-factor accurately; DO NOT reproduce the 'Nivea' logo, wordmark, or official trade dress -- neutral/unbranded surface finish, generic packaging or no packaging. Clean, well-lit, neutral or soft-gradient background (white/light-grey studio), realistic proportions, no text overlays, no watermarks.",
-      "status": "PENDING"
+      "status": "DONE"
     },
     {
       "product_id": 93,
@@ -719,7 +719,7 @@
       "additional_images": [],
       "trademark_handling": "NO_BRAND_NEEDED",
       "generation_brief": "Professional e-commerce studio product photograph of: Argan Oil Hair Serum 100ml. Category: Hair Products. Clean, well-lit, neutral or soft-gradient background (white/light-grey studio), realistic proportions, no text overlays, no watermarks.",
-      "status": "PENDING"
+      "status": "DONE"
     },
     {
       "product_id": 91,
@@ -1003,11 +1003,11 @@
       "country_iso": null,
       "batch": 3,
       "batch_label": "Beauty / Health",
-      "image_path": "/static/products/070-house-of-tara-matte-lipstick.jpg",
+      "image_path": "/static/products/070-house-of-tara-matte-lipstick-set.jpg",
       "additional_images": [],
       "trademark_handling": "GENERIC_STYLE",
       "generation_brief": "Professional e-commerce studio product photograph of: House of Tara Matte Lipstick Set. Category: Lip & Eye Makeup. Depict the general product type/form-factor accurately; DO NOT reproduce the 'House of Tara' logo, wordmark, or official trade dress -- neutral/unbranded surface finish, generic packaging or no packaging. Clean, well-lit, neutral or soft-gradient background (white/light-grey studio), realistic proportions, no text overlays, no watermarks.",
-      "status": "PENDING"
+      "status": "DONE"
     },
     {
       "product_id": 49,
@@ -1051,11 +1051,11 @@
       "country_iso": null,
       "batch": 3,
       "batch_label": "Beauty / Health",
-      "image_path": "/static/products/076-digital-blood-pressure-monit.jpg",
+      "image_path": "/static/products/076-digital-blood-pressure-monitor.jpg",
       "additional_images": [],
       "trademark_handling": "GENERIC_STYLE",
       "generation_brief": "Professional e-commerce studio product photograph of: Digital Blood Pressure Monitor. Category: Medical Supplies. Depict the general product type/form-factor accurately; DO NOT reproduce the 'Philips' logo, wordmark, or official trade dress -- neutral/unbranded surface finish, generic packaging or no packaging. Clean, well-lit, neutral or soft-gradient background (white/light-grey studio), realistic proportions, no text overlays, no watermarks.",
-      "status": "PENDING"
+      "status": "DONE"
     },
     {
       "product_id": 22,
@@ -1243,11 +1243,11 @@
       "country_iso": "NG",
       "batch": 3,
       "batch_label": "Beauty / Health",
-      "image_path": "/static/products/072-nigerian-black-soap-shea-bar.jpg",
+      "image_path": "/static/products/072-nigerian-black-soap-and-shea-bar.jpg",
       "additional_images": [],
       "trademark_handling": "NO_BRAND_NEEDED",
       "generation_brief": "Professional e-commerce studio product photograph of: Nigerian Black Soap & Shea Bar. Category: Nigerian Haircare. Nigerian market context -- if culturally/regionally distinctive (fabric pattern, craft style, packaging), render it authentically. Clean, well-lit, neutral or soft-gradient background (white/light-grey studio), realistic proportions, no text overlays, no watermarks.",
-      "status": "PENDING"
+      "status": "DONE"
     },
     {
       "product_id": 39,
@@ -1323,11 +1323,11 @@
       "country_iso": "NG",
       "batch": 3,
       "batch_label": "Beauty / Health",
-      "image_path": "/static/products/071-zaron-nigerian-made-vitamin.jpg",
+      "image_path": "/static/products/071-zaron-vitamin-c-serum.jpg",
       "additional_images": [],
       "trademark_handling": "GENERIC_STYLE",
       "generation_brief": "Professional e-commerce studio product photograph of: Zaron Nigerian Made Vitamin C Serum. Category: Nigerian Skincare. Nigerian market context -- if culturally/regionally distinctive (fabric pattern, craft style, packaging), render it authentically. Depict the general product type/form-factor accurately; DO NOT reproduce the 'Zaron Cosmetics' logo, wordmark, or official trade dress -- neutral/unbranded surface finish, generic packaging or no packaging. Clean, well-lit, neutral or soft-gradient background (white/light-grey studio), realistic proportions, no text overlays, no watermarks.",
-      "status": "PENDING"
+      "status": "DONE"
     },
     {
       "product_id": 60,
@@ -1455,7 +1455,7 @@
       "additional_images": [],
       "trademark_handling": "GENERIC_STYLE",
       "generation_brief": "Professional e-commerce studio product photograph of: Philips Electric Shaver. Category: Personal Care Devices. Depict the general product type/form-factor accurately; DO NOT reproduce the 'Philips' logo, wordmark, or official trade dress -- neutral/unbranded surface finish, generic packaging or no packaging. Clean, well-lit, neutral or soft-gradient background (white/light-grey studio), realistic proportions, no text overlays, no watermarks.",
-      "status": "PENDING"
+      "status": "DONE"
     },
     {
       "product_id": 7,
@@ -1627,11 +1627,11 @@
       "country_iso": "GH",
       "batch": 3,
       "batch_label": "Beauty / Health",
-      "image_path": "/static/products/073-raw-unrefined-ghanaian-shea.jpg",
+      "image_path": "/static/products/073-raw-unrefined-ghanaian-shea-butter-500g.jpg",
       "additional_images": [],
       "trademark_handling": "NO_BRAND_NEEDED",
       "generation_brief": "Professional e-commerce studio product photograph of: Raw Unrefined Ghanaian Shea Butter 500g. Category: Shea Butter Products. Ghanaian market context -- if culturally/regionally distinctive (fabric pattern, craft style, packaging), render it authentically. Clean, well-lit, neutral or soft-gradient background (white/light-grey studio), realistic proportions, no text overlays, no watermarks.",
-      "status": "PENDING"
+      "status": "DONE"
     },
     {
       "product_id": 20,
@@ -1931,11 +1931,11 @@
       "country_iso": null,
       "batch": 3,
       "batch_label": "Beauty / Health",
-      "image_path": "/static/products/075-multivitamin-tablets-60-coun.jpg",
+      "image_path": "/static/products/075-multivitamin-tablets-60-count.jpg",
       "additional_images": [],
       "trademark_handling": "NO_BRAND_NEEDED",
       "generation_brief": "Professional e-commerce studio product photograph of: Multivitamin Tablets (60 Count). Category: Vitamins & Supplements. Clean, well-lit, neutral or soft-gradient background (white/light-grey studio), realistic proportions, no text overlays, no watermarks.",
-      "status": "PENDING"
+      "status": "DONE"
     },
     {
       "product_id": 51,
