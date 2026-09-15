@@ -218,8 +218,6 @@ export async function transitionOrderItemStatus(
     item = await getItemForSeller(db, actor.vendorId, orderItemId)
   } else if (actor.role === 'customer') {
     item = await getItemForCustomer(db, actor.userId, orderItemId)
-  } else if (actor.role === 'admin') {
-    item = await getItemForAdmin(db, orderItemId)
   } else {
     throw new OrderLifecycleError('Unsupported actor role for a client-initiated transition')
   }

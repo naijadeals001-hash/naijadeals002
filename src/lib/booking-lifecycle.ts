@@ -217,8 +217,6 @@ export async function transitionBooking(db: D1Database, bookingId: number, targe
     booking = await getBookingForCustomer(db, actor.userId, bookingId)
   } else if (actor.role === 'provider') {
     booking = await getBookingForProvider(db, actor.organizationId ? null : actor.userId, actor.organizationId ?? null, bookingId)
-  } else if (actor.role === 'admin') {
-    booking = await getBookingForAdmin(db, bookingId)
   } else if (actor.role === 'system') {
     // System-role transitions (e.g. instant-book auto-confirm-on-payment in
     // src/lib/booking-payments.ts) are triggered by TRUSTED server-side code
