@@ -8,6 +8,7 @@ import {
   getDealsNearYou
 } from '../lib/catalog'
 import { getHomepageFeed } from '../lib/homepage-feed'
+import { getAllVerticals } from '../lib/ecosystem-verticals'
 import type { AppEnv } from '../types'
 
 /**
@@ -24,11 +25,16 @@ export async function homePage(c: Context<AppEnv>) {
   const locale = c.get('locale')
   const selectedCity = getCookie(c, 'nd_city') || 'Lagos'
 
-  const [categories, feed, dealsNearYou] = await Promise.all([
+  const [categories, feed, dealsNearYou, verticals] = await Promise.all([
     getTopLevelCategories(db),
     getHomepageFeed(db),
-    getDealsNearYou(db, selectedCity, 10)
+    getDealsNearYou(db, selectedCity, 10),
+    getAllVerticals(db)
   ])
+
+  // Ecosystem Spotlight (section 17 below) surfaces 3 of the 8 planned verticals as
+  // real photography, not icon+text cards — see that section's comment for why.
+  const spotlightVerticals = verticals.filter((v) => ['eats', 'gigs', 'stay'].includes(v.slug))
 
   return c.render(
     <Layout title="Home" user={user} selectedCity={selectedCity} locale={locale}>
@@ -298,26 +304,49 @@ export async function homePage(c: Context<AppEnv>) {
         </div>
       </section>
 
-      {/* ============ 17. ECOSYSTEM SPOTLIGHT ============ */}
-      <section class="py-6 md:py-8 border-t border-gray-100">
-        <div class="max-w-[100rem] mx-auto px-4 md:px-6 lg:px-8">
-          <h2 class="text-lg md:text-xl font-bold text-gray-900 mb-4">Explore More of the NaijaDeals Ecosystem</h2>
-          <div class="grid md:grid-cols-3 gap-4">
-            {[
-              { name: 'NaijaEats', desc: 'Order from local restaurants and get hot meals delivered straight to your door.', cta: 'Order food', icon: 'restaurant' },
-              { name: 'NaijaGigs', desc: 'Book trusted local professionals for home repairs, design work, tutoring and more.', cta: 'Book a service', icon: 'engineering' },
-              { name: 'NaijaStay', desc: 'Find and book apartments, rooms and short-let stays anywhere in the country.', cta: 'Find a stay', icon: 'apartment' }
-            ].map((item) => (
-              <div class="bg-white border border-gray-200 rounded-xl p-6 flex flex-col">
-                <span class="material-symbols-outlined text-4xl text-primary mb-3">{item.icon}</span>
-                <h3 class="font-bold text-gray-800 mb-1">{item.name}</h3>
-                <p class="text-sm text-gray-500 mb-4 flex-1">{item.desc}</p>
-                <a href="/ecosystem" class="text-sm font-semibold text-primary hover:underline">{item.cta} →</a>
-              </div>
-            ))}
+      {/* ============ 17. ECOSYSTEM SPOTLIGHT ============
+          VISUAL AUDIT FIX (Pat's "Full Visual Asset Audit" directive, 2026-09-15):
+          This section previously rendered 3 hardcoded icon+text cards with NO image
+          at all, while 16 approved real photography assets for these exact verticals
+          (public/static/ecosystem/{slug}-desktop.jpg, already wired into
+          EcosystemPreview.tsx's hero and into ecosystem_verticals.hero_image_desktop)
+          sat completely unused on the live homepage. Per directive #9 ("reuse existing
+          approved photography where it matches, don't replace unnecessarily") and #17
+          ("SEARCH -> MATCH -> REUSE before GENERATE"), this now reuses those same
+          desktop images as the card photo instead of a bare icon. Content (name,
+          tagline, route) still comes from the DB via getAllVerticals — never hardcoded
+          strings — so flipping a vertical from coming_soon -> live never requires a
+          code change here. */}
+      {spotlightVerticals.length > 0 && (
+        <section class="py-6 md:py-8 border-t border-gray-100">
+          <div class="max-w-[100rem] mx-auto px-4 md:px-6 lg:px-8">
+            <h2 class="text-lg md:text-xl font-bold text-gray-900 mb-4">Explore More of the NaijaDeals Ecosystem</h2>
+            <div class="grid md:grid-cols-3 gap-4">
+              {spotlightVerticals.map((v) => (
+                <a href={`/${v.slug}`} class="group bg-white border border-gray-200 rounded-xl overflow-hidden flex flex-col hover:shadow-md hover:border-primary transition-all">
+                  <div class="relative aspect-[16/9] overflow-hidden">
+                    <img
+                      src={v.hero_image_desktop}
+                      alt={v.name}
+                      loading="lazy"
+                      class="w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-300"
+                    />
+                    <span class="absolute top-2 left-2 bg-white/90 text-[11px] font-bold text-gray-700 rounded-full px-2.5 py-1">Coming Soon</span>
+                  </div>
+                  <div class="p-6 flex flex-col flex-1">
+                    <h3 class="font-bold text-gray-800 mb-1 flex items-center gap-2">
+                      <span class="material-symbols-outlined text-primary text-lg">{v.icon}</span>
+                      {v.name}
+                    </h3>
+                    <p class="text-sm text-gray-500 mb-4 flex-1">{v.tagline}</p>
+                    <span class="text-sm font-semibold text-primary group-hover:underline">{v.cta_label} →</span>
+                  </div>
+                </a>
+              ))}
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+      )}
 
       {/* ============ 18. ECOSYSTEM CTA BANNER ============ */}
       <section class="py-6 md:py-8">

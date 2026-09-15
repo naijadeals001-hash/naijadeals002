@@ -100,11 +100,25 @@ export async function getByCategory(db: D1Database, categorySlug: string, limit 
  * "Top Brands" — hybrid merchandising ranking:
  *   1. Curated/featured brands first (is_featured = 1), ordered by display_order.
  *   2. Remaining brands fall back to real catalog activity (product_count DESC).
- * Only brands with logo_url set AND at least one active product are eligible —
- * a brand can never render in this section without a real, git-tracked asset.
- * status = 'active' gates future Admin Panel soft-hide without deleting rows.
+ * Only brands with a REAL, verified logo asset AND at least one active product are
+ * eligible — a brand can never render in this section without a real, git-tracked
+ * asset. status = 'active' gates future Admin Panel soft-hide without deleting rows.
  * This function is the ONLY place brand ordering/eligibility is decided; the UI
  * must never hardcode brand names, order, or image paths.
+ *
+ * VISUAL AUDIT FIX (Pat's "Full Visual Asset Audit" directive, 2026-09-15):
+ * `logo_url IS NOT NULL` alone is NOT a valid "has a real image" test — every brand
+ * row was seeded with a non-null placeholder string (`/ph.svg?label=...`), so the
+ * old filter let all 38 brands (including all 12 is_featured ones) pass through and
+ * render as broken/placeholder cards on the live homepage. The customer-facing
+ * question is never "is this column non-null", it's "does this path point at a real
+ * asset". `/ph.svg` is the ONE reserved placeholder-generator route in this app
+ * (see public/ph.svg / wherever it's served) — no real asset ever lives under that
+ * path, so excluding it is a safe, exact test, not a heuristic. Per directive #19/20
+ * ("show fewer, but all real"): if this filter drops every brand below `limit`, the
+ * caller (home.tsx `{feed.top_brands.length > 0 && ...}`) already hides the whole
+ * section rather than padding it with placeholders — that is the CORRECT behavior,
+ * not a bug to work around.
  */
 export async function getTopBrands(db: D1Database, limit = 12) {
   const { results } = await db
@@ -113,7 +127,7 @@ export async function getTopBrands(db: D1Database, limit = 12) {
               COUNT(p.id) as product_count
        FROM brands b
        JOIN products p ON p.brand_id = b.id AND p.is_active = 1
-       WHERE b.logo_url IS NOT NULL AND b.status = 'active'
+       WHERE b.logo_url IS NOT NULL AND b.logo_url NOT LIKE '/ph.svg%' AND b.status = 'active'
        GROUP BY b.id
        ORDER BY b.is_featured DESC, b.display_order ASC, product_count DESC
        LIMIT ?`
@@ -123,9 +137,23 @@ export async function getTopBrands(db: D1Database, limit = 12) {
   return results
 }
 
+/**
+ * Popular Vendors — same placeholder-exclusion fix as getTopBrands (see comment
+ * above). Previously this query had NO image-quality filter at all, so it always
+ * returned `is_verified = 1` vendors regardless of whether their logo_url pointed
+ * at a real asset or the `/ph.svg` placeholder generator. Per directive #19/20,
+ * vendors without a real logo are excluded rather than shown as blank/placeholder
+ * cards; if that drops the result below `limit` (or to zero), the caller in
+ * home.tsx already hides the section entirely via `{feed.popular_vendors.length >
+ * 0 && ...}` — showing fewer real vendors is correct, not a shortfall to patch over.
+ */
 export async function getPopularVendors(db: D1Database, limit = 8): Promise<VendorRow[]> {
   const { results } = await db
-    .prepare('SELECT * FROM vendors WHERE is_verified = 1 ORDER BY rating_count DESC LIMIT ?')
+    .prepare(
+      `SELECT * FROM vendors
+       WHERE is_verified = 1 AND logo_url IS NOT NULL AND logo_url NOT LIKE '/ph.svg%'
+       ORDER BY rating_count DESC LIMIT ?`
+    )
     .bind(limit)
     .all<VendorRow>()
   return results
