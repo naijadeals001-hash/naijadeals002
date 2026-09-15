@@ -5,6 +5,19 @@ import type { ProductWithListingRow, ListingRow, VendorRow, CategoryRow } from '
  * plus a seller_count subquery. This is the shape used everywhere a product is shown as a
  * single card (homepage carousels, search results, category grids). Seller comparison on the
  * PDP queries product_listings directly (see getListingsForProduct below) to show every offer.
+ *
+ * VISUAL AUDIT FIX (Pat's "Full Visual Asset Audit" directive, 2026-09-15, Finding #3):
+ * `p.image_url NOT LIKE '/ph.svg%'` is the same real-asset-vs-placeholder test already
+ * applied to getTopBrands()/getPopularVendors() (see those functions' comments for the
+ * full rationale). Before this fix, a render-based homepage audit found 39 `/ph.svg`
+ * occurrences across ~29 distinct products still surfacing inside otherwise-legitimate
+ * carousels (Recommended, New Arrivals, Nigerian Brands, etc.) because every carousel is
+ * built on this one shared SELECT and none of them had an eligibility filter for image
+ * quality. Adding it HERE, once, closes the gap for all 13 functions built on this
+ * constant simultaneously, and implements the same "show fewer, but all real" principle
+ * (directive #19/20): a carousel with only 8 of its usual 12 products because the other 4
+ * don't have real photography yet is correct behavior, not a bug — it will silently
+ * backfill to the full count as more product-image batches ship (see phase0_mapping.json).
  */
 const PRODUCT_CARD_SELECT = `
   SELECT p.*,
@@ -19,7 +32,7 @@ const PRODUCT_CARD_SELECT = `
   JOIN vendors v ON v.id = l.vendor_id
   JOIN categories cat ON cat.id = p.category_id
   LEFT JOIN brands b ON b.id = p.brand_id
-  WHERE p.is_active = 1
+  WHERE p.is_active = 1 AND p.image_url IS NOT NULL AND p.image_url NOT LIKE '/ph.svg%'
 `
 
 export async function getFlashDeals(db: D1Database, limit = 10): Promise<ProductWithListingRow[]> {

@@ -33,6 +33,11 @@ export async function shopPage(c: Context<AppEnv>) {
   // Buy-box aware query: join each product to its PRIMARY active listing (see catalog.ts
   // PRODUCT_CARD_SELECT for the canonical version of this join — duplicated here because this
   // page needs dynamic WHERE clauses for the filter sidebar, which a fixed helper can't express).
+  //
+  // VISUAL AUDIT FIX (Pat's "Full Visual Asset Audit" directive, 2026-09-15): kept in sync with
+  // catalog.ts's PRODUCT_CARD_SELECT real-asset filter — a product without a verified photo
+  // (image_url still the /ph.svg placeholder-generator route) must never render on the
+  // customer-facing /shop grid either, not just be excluded from homepage carousels.
   let sql = `
     SELECT p.*,
            cat.name as category_name, cat.slug as category_slug,
@@ -46,7 +51,7 @@ export async function shopPage(c: Context<AppEnv>) {
     JOIN vendors v ON v.id = l.vendor_id
     JOIN categories cat ON cat.id = p.category_id
     LEFT JOIN brands b ON b.id = p.brand_id
-    WHERE p.is_active = 1
+    WHERE p.is_active = 1 AND p.image_url IS NOT NULL AND p.image_url NOT LIKE '/ph.svg%'
   `
   const binds: any[] = []
   let categoryRoot: { id: number; path: string | null } | null = null

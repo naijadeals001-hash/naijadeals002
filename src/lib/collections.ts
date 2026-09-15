@@ -37,7 +37,13 @@ export async function getCollectionBySlug(db: D1Database, slug: string): Promise
   return db.prepare('SELECT * FROM collections WHERE slug = ? AND is_active = 1').bind(slug).first<CollectionRow>()
 }
 
-/** Products in a collection, in the same buy-box product-card shape used everywhere else (catalog.ts precedent). */
+/**
+ * Products in a collection, in the same buy-box product-card shape used everywhere else
+ * (catalog.ts precedent). VISUAL AUDIT FIX (Pat's directive, 2026-09-15): same real-asset
+ * filter as catalog.ts's PRODUCT_CARD_SELECT — a product without a verified photo must
+ * never render in a merchandising collection either, even though this endpoint isn't
+ * wired into the homepage yet (it's exposed via /api/catalog/collections for future use).
+ */
 export async function getProductsInCollection(db: D1Database, collectionSlug: string, limit = 24): Promise<ProductWithListingRow[]> {
   const { results } = await db
     .prepare(
@@ -45,6 +51,7 @@ export async function getProductsInCollection(db: D1Database, collectionSlug: st
        JOIN product_collections pc ON pc.product_id = p.id
        JOIN collections col ON col.id = pc.collection_id
        WHERE col.slug = ? AND col.is_active = 1 AND p.is_active = 1
+         AND p.image_url IS NOT NULL AND p.image_url NOT LIKE '/ph.svg%'
        ORDER BY pc.sort_order ASC, p.sales_count DESC
        LIMIT ?`
     )

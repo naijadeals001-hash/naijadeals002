@@ -60,7 +60,9 @@ export async function productPage(c: Context<AppEnv>) {
          JOIN product_listings l ON l.product_id = p.id AND l.is_primary = 1 AND l.is_active = 1
          JOIN vendors v ON v.id = l.vendor_id
          JOIN categories cat ON cat.id = p.category_id
-         WHERE p.category_id = ? AND p.id != ? AND p.is_active = 1 ORDER BY p.rating_count DESC LIMIT 10`
+         WHERE p.category_id = ? AND p.id != ? AND p.is_active = 1
+           AND p.image_url IS NOT NULL AND p.image_url NOT LIKE '/ph.svg%'
+         ORDER BY p.rating_count DESC LIMIT 10`
       )
       .bind(product.category_id, product.id)
       .all<ProductWithListingRow>(),
@@ -103,13 +105,17 @@ export async function productPage(c: Context<AppEnv>) {
   const photoReviews = reviews.results.filter((r) => r.has_photo === 1 && r.photo_url)
 
   // "Frequently bought together" data source (a second query against the raw D1 handle,
-  // separate from the by-category `related` carousel below).
+  // separate from the by-category `related` carousel below). VISUAL AUDIT FIX (Pat's
+  // directive, 2026-09-15): same real-asset filter as the `related` query above — a
+  // product without a verified photo must never appear as an FBT suggestion either.
   const fbtRows = await db
     .prepare(
       `SELECT p.*, l.id as listing_id, l.price_kobo, l.compare_at_price_kobo, l.stock
        FROM products p
        JOIN product_listings l ON l.product_id = p.id AND l.is_primary = 1 AND l.is_active = 1
-       WHERE p.category_id = ? AND p.id != ? AND p.is_active = 1 ORDER BY p.id ASC LIMIT 2`
+       WHERE p.category_id = ? AND p.id != ? AND p.is_active = 1
+         AND p.image_url IS NOT NULL AND p.image_url NOT LIKE '/ph.svg%'
+       ORDER BY p.id ASC LIMIT 2`
     )
     .bind(product.category_id, product.id)
     .all<any>()
