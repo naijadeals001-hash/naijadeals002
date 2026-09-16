@@ -75,10 +75,12 @@ import {
   getCategoryNavTreeForAdmin,
   updateCategoryNavConfig,
   reorderCategoryChildren,
+  reorderCategoryPills,
   getEcosystemNavConfigForAdmin,
   updateEcosystemNavConfig,
 } from '../lib/category-nav-admin'
 import { invalidateEcosystemNavCache } from '../lib/ecosystem-nav'
+import { getCategoryPillNav, invalidateCategoryPillNavCache } from '../lib/category-pill-nav'
 
 export const apiControlCenterRoutes = new Hono<AppEnv>()
 
@@ -854,7 +856,7 @@ apiControlCenterRoutes.patch('/category-nav/:id', requireControlCenterPermission
   const categoryId = Number(c.req.param('id'))
   const body = await c.req.json().catch(() => ({}))
 
-  const allowedKeys = ['is_visible', 'sort_order', 'is_featured_home', 'homepage_priority', 'nav_label_override', 'nav_badge']
+  const allowedKeys = ['is_visible', 'sort_order', 'is_featured_home', 'homepage_priority', 'nav_label_override', 'nav_badge', 'nav_pill_visible', 'nav_pill_order']
   const input: Record<string, unknown> = {}
   for (const key of allowedKeys) {
     if (body[key] !== undefined) input[key] = body[key]
@@ -875,6 +877,15 @@ apiControlCenterRoutes.patch('/category-nav/:id', requireControlCenterPermission
   // feed's TTL) before a customer would ever see it reflected.
   if ('is_featured_home' in input || 'homepage_priority' in input) {
     await invalidateHomepageFeedSection(c.env.DB, 'shop_by_category')
+  }
+
+  // Checkpoint 3: nav_label_override/nav_badge are REUSED by the header pill
+  // strip too (same fields the mega-menu uses — see category-pill-nav.ts's
+  // doc comment on why there is only ever one label/badge concept per
+  // category), so those two fields must also bust the pill cache, not just
+  // the pill-specific visibility/order fields.
+  if ('nav_pill_visible' in input || 'nav_pill_order' in input || 'nav_label_override' in input || 'nav_badge' in input) {
+    await invalidateCategoryPillNavCache(c.env.DB)
   }
 
   await recordControlCenterAction(c.env.DB, {
@@ -912,6 +923,40 @@ apiControlCenterRoutes.post('/category-nav/reorder', requireControlCenterPermiss
     ipAddress: getClientIp(c.req.header('cf-connecting-ip') ?? null),
   })
   return c.json({ success: true })
+})
+
+/**
+ * Checkpoint 3 — full replace of nav_pill_order across the curated pill set.
+ * Deliberately a SEPARATE endpoint from /category-nav/reorder (which is
+ * scoped to one parent's direct children) because pills are intentionally
+ * mixed-depth — there is no single parent_id to scope a pill reorder to.
+ */
+apiControlCenterRoutes.post('/category-nav/reorder-pills', requireControlCenterPermission('catalog.manage'), async (c) => {
+  const admin = c.get('user')!
+  const body = await c.req.json<{ ordered_ids?: number[] }>().catch(() => null)
+  if (!body || !Array.isArray(body.ordered_ids) || body.ordered_ids.length === 0) {
+    return c.json({ error: 'ordered_ids array is required' }, 400)
+  }
+  await reorderCategoryPills(c.env.DB, body.ordered_ids)
+  await invalidateCategoryPillNavCache(c.env.DB)
+  await recordControlCenterAction(c.env.DB, {
+    actorUserId: admin.id,
+    actorName: admin.name,
+    action: 'category_pill_nav_reordered',
+    entityType: 'category',
+    entityId: null,
+    afterState: { ordered_ids: body.ordered_ids },
+    context: { permission_used: 'catalog.manage' },
+    success: true,
+    ipAddress: getClientIp(c.req.header('cf-connecting-ip') ?? null),
+  })
+  return c.json({ success: true })
+})
+
+/** Live preview — returns the EXACT same payload the customer-facing header pill strip consumes (getCategoryPillNav, via the SAME cache-backed function Layout.tsx calls), so "what an admin sees in Preview" and "what a customer actually gets" can never structurally diverge. */
+apiControlCenterRoutes.get('/category-nav/pill-preview', requireControlCenterPermission('catalog.read'), async (c) => {
+  const results = await getCategoryPillNav(c.env.DB)
+  return c.json({ results })
 })
 
 /** Live preview — returns the EXACT same tree shape the customer-facing mega-menu consumes (getMegaMenuTree, via the public tree route's own module), so "what an admin sees in Preview" and "what a customer actually gets" can never structurally diverge. Deliberately re-imports getMegaMenuTree rather than re-deriving a parallel tree here. */

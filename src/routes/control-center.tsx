@@ -2657,7 +2657,15 @@ controlCenterRoutes.get('/categories', requireControlCenterPermission('catalog.r
     nav_label_override: cat.nav_label_override,
     nav_badge: cat.nav_badge,
     product_count: cat.product_count,
+    // Checkpoint 3: header category-pill fields — deliberately independent
+    // of is_visible (mega-menu) / is_featured_home (homepage rails). Reused
+    // here on the SAME flat CATEGORIES array the tree above already renders
+    // from, so the pill panel below needs no second data fetch.
+    nav_pill_visible: cat.nav_pill_visible,
+    nav_pill_order: cat.nav_pill_order,
   })))
+
+  const currentPillCount = categories.filter((cat) => cat.nav_pill_visible === 1).length
 
   return c.render(
     <ControlCenterLayout title="Category Manager" user={user} ccAccess={ccAccess} active="categories">
@@ -2750,6 +2758,77 @@ controlCenterRoutes.get('/categories', requireControlCenterPermission('catalog.r
           </div>
           <div id="cat-cc-tree" class="divide-y divide-ccborder/60"></div>
           <div id="cat-cc-empty" class="hidden px-4 py-10 text-center text-sm text-gray-500">No categories match these filters.</div>
+        </div>
+
+        {/* ============================================================
+            HEADER PILL NAVIGATION — Checkpoint 3, LIVE, wired to the
+            customer-facing header. DELIBERATELY INDEPENDENT of the
+            mega-menu tree above (is_visible) and homepage merchandising
+            (is_featured_home) — see nav_pill_visible/nav_pill_order
+            (migration 0063). This panel reuses the SAME flat CATEGORIES
+            array already sent for the tree above; no second data fetch.
+            Any category at ANY depth can be promoted to a pill — this is
+            NOT restricted to level-1 departments. ============================================================ */}
+        <div class="mt-10">
+          <div class="flex items-center gap-2 mb-2 flex-wrap">
+            <h2 class="text-lg font-bold text-white">Header Pill Navigation</h2>
+            <span class="text-[10px] font-bold uppercase tracking-wide bg-ccaccent/15 border border-ccaccent/30 text-ccaccent rounded-full px-2 py-0.5">Live — controls customer header</span>
+            <span id="cat-pill-count-badge" class="text-[10px] font-bold uppercase tracking-wide bg-black/30 border border-white/10 text-gray-400 rounded-full px-2 py-0.5">{currentPillCount} pills active</span>
+          </div>
+          <p class="text-sm text-gray-500 max-w-3xl mb-4">
+            The curated header category-pill strip (Electronics, Fashion, Phones &amp; Tablets, Supermarket, etc.) reads
+            <code class="text-gray-400"> nav_pill_visible</code> / <code class="text-gray-400">nav_pill_order</code> via
+            <code class="text-gray-400"> getCategoryPillNav()</code> — completely separate columns from the mega-menu's
+            <code class="text-gray-400"> is_visible</code> and the homepage rails' <code class="text-gray-400">is_featured_home</code>.
+            Pills can mix taxonomy depths (a level-1 department pill next to a level-2 subcategory pill) — every pill links to
+            its real <code class="text-gray-400">/shop?category=&lt;slug&gt;</code>, no hardcoded URLs. Changes bust the same
+            <code class="text-gray-400"> homepage_feed_cache</code> row (section <code class="text-gray-400">category_pill_nav_header</code>)
+            used elsewhere — visible on the real site within one TTL window (≤120s) or immediately once invalidated on save.
+          </p>
+
+          <div class="flex flex-wrap items-center gap-2 mb-4">
+            <div class="relative flex-1 min-w-[220px]">
+              <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-lg">search</span>
+              <input id="pill-cc-search" type="text" placeholder="Search categories to add as a pill…" class="w-full bg-black/30 border border-ccborder rounded-lg pl-9 pr-3 py-2 text-sm text-gray-200 outline-none focus:border-ccaccent/50" />
+            </div>
+            <select id="pill-cc-filter-dept" class="bg-black/30 border border-ccborder rounded-lg px-3 py-2 text-sm text-gray-300 outline-none focus:border-ccaccent/50">
+              <option value="">All departments</option>
+              {departments.map((d) => <option value={String(d.id)}>{d.name}</option>)}
+            </select>
+            <select id="pill-cc-filter-level" class="bg-black/30 border border-ccborder rounded-lg px-3 py-2 text-sm text-gray-300 outline-none focus:border-ccaccent/50">
+              <option value="">All levels</option>
+              <option value="1">Level 1 — Department</option>
+              <option value="2">Level 2 — Group</option>
+              <option value="3">Level 3 — Subcategory</option>
+              <option value="4">Level 4 — Leaf</option>
+            </select>
+            <select id="pill-cc-filter-scope" class="bg-black/30 border border-ccborder rounded-lg px-3 py-2 text-sm text-gray-300 outline-none focus:border-ccaccent/50">
+              <option value="pills">Current pills only</option>
+              <option value="all">All categories (add new pill)</option>
+            </select>
+            <button id="pill-cc-preview-desktop-btn" type="button" class="flex items-center gap-1.5 bg-ccaccent/10 border border-ccaccent/30 text-ccaccent font-bold text-sm px-4 py-2 rounded-lg hover:bg-ccaccent/20 transition-colors">
+              <span class="material-symbols-outlined text-base">desktop_windows</span> Preview desktop
+            </button>
+            <button id="pill-cc-preview-mobile-btn" type="button" class="flex items-center gap-1.5 bg-ccaccent/10 border border-ccaccent/30 text-ccaccent font-bold text-sm px-4 py-2 rounded-lg hover:bg-ccaccent/20 transition-colors">
+              <span class="material-symbols-outlined text-base">smartphone</span> Preview mobile
+            </button>
+          </div>
+
+          <p id="pill-cc-count-label" class="text-xs text-gray-500 mb-2"></p>
+
+          <div class="bg-ccpanel border border-ccborder rounded-xl overflow-hidden">
+            <div class="grid grid-cols-[24px_1fr_90px_140px_140px_90px_170px] gap-2 px-4 py-2.5 border-b border-ccborder text-[11px] font-bold text-gray-500 uppercase tracking-wide">
+              <div></div>
+              <div>Category</div>
+              <div class="text-center">Level</div>
+              <div class="text-center">Label / Badge</div>
+              <div class="text-center">Pill order</div>
+              <div class="text-center">Pill visible</div>
+              <div class="text-right">Actions</div>
+            </div>
+            <div id="pill-cc-tbody" class="divide-y divide-ccborder/60"></div>
+            <div id="pill-cc-empty" class="hidden px-4 py-10 text-center text-sm text-gray-500">No categories match these filters.</div>
+          </div>
         </div>
 
         {/* Ecosystem navigation — LIVE, wired to the customer-facing header (Micro-Checkpoint 2A) */}
@@ -2855,6 +2934,69 @@ controlCenterRoutes.get('/categories', requireControlCenterPermission('catalog.r
             <button type="button" id="cat-cc-preview-close" class="text-gray-400 hover:text-gray-900"><span class="material-symbols-outlined">close</span></button>
           </div>
           <div id="cat-cc-preview-body" class="p-5 grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+        </div>
+      </div>
+
+      {/* Header pill edit modal — separate from cat-cc-modal (mega-menu edit)
+          because the field set is different (pill visible/order/label/badge
+          vs. mega-menu visible/sort_order/featured/priority). Reuses the same
+          nav_label_override/nav_badge fields under the hood via the existing
+          PATCH /category-nav/:id endpoint. */}
+      {canManage && (
+        <div id="pill-cc-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div class="bg-ccpanel border border-ccborder rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div class="flex items-center justify-between px-5 py-4 border-b border-ccborder">
+              <h3 class="text-base font-bold text-white">Edit header pill</h3>
+              <button type="button" id="pill-cc-modal-close" class="text-gray-500 hover:text-white"><span class="material-symbols-outlined">close</span></button>
+            </div>
+            <form id="pill-cc-form" class="p-5 flex flex-col gap-4">
+              <input type="hidden" id="pill-cc-f-id" />
+              <div>
+                <p class="text-xs text-gray-500">Category</p>
+                <p id="pill-cc-f-name" class="text-sm font-bold text-white mt-0.5"></p>
+                <p id="pill-cc-f-slug" class="text-xs text-gray-600 font-mono"></p>
+              </div>
+              <label class="flex items-center gap-2 text-sm text-gray-300">
+                <input type="checkbox" id="pill-cc-f-visible" class="w-4 h-4 accent-ccaccent" />
+                Show as a header pill
+              </label>
+              <div>
+                <label class="block text-xs font-semibold text-gray-400 mb-1">Pill order (nav_pill_order)</label>
+                <input type="number" id="pill-cc-f-order" class="w-full bg-black/30 border border-ccborder rounded-lg px-3 py-2 text-sm text-gray-200 outline-none focus:border-ccaccent/50" />
+                <p class="text-[11px] text-gray-600 mt-1">Lower = appears first. Only affects the header pill strip — independent of mega-menu order.</p>
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-gray-400 mb-1">Navigation label override</label>
+                <input type="text" id="pill-cc-f-label" class="w-full bg-black/30 border border-ccborder rounded-lg px-3 py-2 text-sm text-gray-200 outline-none focus:border-ccaccent/50" placeholder="Leave blank to use real category name" />
+                <p class="text-[11px] text-gray-600 mt-1">Shared with the mega-menu label — e.g. "Grocery &amp; Food" → "Supermarket".</p>
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-gray-400 mb-1">Navigation badge</label>
+                <input type="text" id="pill-cc-f-badge" class="w-full bg-black/30 border border-ccborder rounded-lg px-3 py-2 text-sm text-gray-200 outline-none focus:border-ccaccent/50" placeholder="e.g. New, Hot — leave blank for none" />
+              </div>
+              <div class="flex items-center gap-2 pt-2">
+                <button type="submit" class="flex-1 bg-ccaccent text-ccbg font-bold text-sm py-2.5 rounded-lg hover:opacity-90 transition-opacity">Save changes</button>
+                <button type="button" id="pill-cc-form-cancel" class="px-4 py-2.5 text-sm font-semibold text-gray-400 hover:text-white">Cancel</button>
+              </div>
+              <p id="pill-cc-form-error" class="hidden text-xs text-red-400"></p>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Pill preview modal (desktop + mobile) — renders the EXACT data
+          returned by GET /category-nav/pill-preview, which is the SAME
+          getCategoryPillNav() the real header calls. */}
+      <div id="pill-cc-preview-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+        <div class="bg-primary-dark rounded-2xl w-full max-w-3xl max-h-[85vh] overflow-y-auto">
+          <div class="flex items-center justify-between px-5 py-4 border-b border-white/10 sticky top-0 bg-primary-dark z-10">
+            <div>
+              <h3 id="pill-cc-preview-title" class="text-base font-bold text-white">Header pill preview</h3>
+              <p class="text-xs text-white/60">Same data, same getCategoryPillNav() function the real header calls.</p>
+            </div>
+            <button type="button" id="pill-cc-preview-close" class="text-white/60 hover:text-white"><span class="material-symbols-outlined">close</span></button>
+          </div>
+          <div id="pill-cc-preview-body" class="p-5"></div>
         </div>
       </div>
 
@@ -3146,6 +3288,290 @@ controlCenterRoutes.get('/categories', requireControlCenterPermission('catalog.r
           });
 
           renderTree();
+
+          // ============================================================
+          // HEADER PILL NAVIGATION panel (Checkpoint 3). Reuses the SAME
+          // CATEGORIES array as the mega-menu tree above — no second fetch.
+          // ============================================================
+          function pillMatchesFilters(c, scope) {
+            var q = document.getElementById('pill-cc-search').value.trim().toLowerCase();
+            var dept = document.getElementById('pill-cc-filter-dept').value;
+            var level = document.getElementById('pill-cc-filter-level').value;
+            if (scope === 'pills' && c.nav_pill_visible !== 1) return false;
+            if (q && c.name.toLowerCase().indexOf(q) === -1 && c.slug.toLowerCase().indexOf(q) === -1) return false;
+            if (level && String(c.level) !== level) return false;
+            if (dept) {
+              var cur = c, found = (String(c.id) === dept);
+              while (cur && cur.parent_id && !found) {
+                cur = CATEGORIES.filter(function (x) { return x.id === cur.parent_id; })[0];
+                if (cur && String(cur.id) === dept) found = true;
+              }
+              if (!found) return false;
+            }
+            return true;
+          }
+
+          function ancestorPath(c) {
+            var parts = [];
+            var cur = c;
+            while (cur && cur.parent_id) {
+              cur = CATEGORIES.filter(function (x) { return x.id === cur.parent_id; })[0];
+              if (cur) parts.unshift(cur.name);
+            }
+            return parts.join(' / ');
+          }
+
+          function renderPillRow(c) {
+            var row = document.createElement('div');
+            row.className = 'grid grid-cols-[24px_1fr_90px_140px_140px_90px_170px] gap-2 px-4 py-2.5 items-center text-sm pill-cc-row';
+            row.setAttribute('data-id', c.id);
+            row.setAttribute('draggable', (CAN_MANAGE && c.nav_pill_visible === 1) ? 'true' : 'false');
+
+            var handleCell = document.createElement('div');
+            if (c.nav_pill_visible === 1 && CAN_MANAGE) {
+              handleCell.className = 'text-gray-600 cursor-grab pill-cc-drag-handle';
+              handleCell.title = 'Drag to reorder pills';
+              handleCell.innerHTML = '<span class="material-symbols-outlined text-lg">drag_indicator</span>';
+            }
+            row.appendChild(handleCell);
+
+            var nameCell = document.createElement('div');
+            nameCell.className = 'min-w-0';
+            var nameLine = document.createElement('div');
+            nameLine.className = 'flex items-center gap-1.5 truncate';
+            var label = document.createElement('span');
+            label.className = 'truncate font-semibold ' + (c.nav_pill_visible ? 'text-gray-200' : 'text-gray-500');
+            label.textContent = c.nav_label_override || c.name;
+            nameLine.appendChild(label);
+            if (c.nav_label_override) {
+              var orig = document.createElement('span');
+              orig.className = 'text-[10px] text-gray-600 shrink-0';
+              orig.textContent = '(' + c.name + ')';
+              nameLine.appendChild(orig);
+            }
+            if (c.nav_badge) {
+              var badge = document.createElement('span');
+              badge.className = 'text-[9px] font-bold uppercase bg-ccaccent/15 text-ccaccent px-1.5 py-0.5 rounded shrink-0';
+              badge.textContent = c.nav_badge;
+              nameLine.appendChild(badge);
+            }
+            nameCell.appendChild(nameLine);
+            var pathLine = document.createElement('div');
+            pathLine.className = 'text-[11px] text-gray-600 truncate';
+            pathLine.textContent = (ancestorPath(c) ? ancestorPath(c) + ' / ' : '') + c.slug;
+            nameCell.appendChild(pathLine);
+            row.appendChild(nameCell);
+
+            var levelCell = document.createElement('div');
+            levelCell.className = 'text-center text-gray-400 text-xs';
+            levelCell.textContent = 'L' + c.level;
+            row.appendChild(levelCell);
+
+            var labelCell = document.createElement('div');
+            labelCell.className = 'text-center text-[11px] text-gray-500 truncate';
+            labelCell.textContent = (c.nav_label_override ? 'Label set' : '—') + (c.nav_badge ? ' · Badge' : '');
+            row.appendChild(labelCell);
+
+            var orderCell = document.createElement('div');
+            orderCell.className = 'text-center text-gray-400 text-xs';
+            orderCell.textContent = c.nav_pill_visible ? (c.nav_pill_order == null ? '—' : c.nav_pill_order) : '—';
+            row.appendChild(orderCell);
+
+            var visCell = document.createElement('div');
+            visCell.className = 'text-center';
+            var visInput = document.createElement('input');
+            visInput.type = 'checkbox';
+            visInput.className = 'w-4 h-4 accent-ccaccent pill-vis-toggle';
+            visInput.checked = c.nav_pill_visible === 1;
+            visInput.disabled = !CAN_MANAGE;
+            visInput.addEventListener('change', function () { quickTogglePillVisible(c.id, visInput.checked); });
+            visCell.appendChild(visInput);
+            row.appendChild(visCell);
+
+            var actionsCell = document.createElement('div');
+            actionsCell.className = 'text-right';
+            if (CAN_MANAGE) {
+              var editBtn = document.createElement('button');
+              editBtn.type = 'button';
+              editBtn.className = 'text-xs font-semibold text-ccaccent hover:underline';
+              editBtn.textContent = 'Edit';
+              editBtn.addEventListener('click', function () { openPillEditModal(c); });
+              actionsCell.appendChild(editBtn);
+            } else {
+              actionsCell.innerHTML = '<span class="text-xs text-gray-600">View only</span>';
+            }
+            row.appendChild(actionsCell);
+
+            return row;
+          }
+
+          function renderPillTable() {
+            var tbody = document.getElementById('pill-cc-tbody');
+            var empty = document.getElementById('pill-cc-empty');
+            var scope = document.getElementById('pill-cc-filter-scope').value;
+            tbody.innerHTML = '';
+            var rows = CATEGORIES.filter(function (c) { return pillMatchesFilters(c, scope); });
+            rows.sort(function (a, b) {
+              if (scope === 'pills') return (a.nav_pill_order || 0) - (b.nav_pill_order || 0);
+              return a.name.localeCompare(b.name);
+            });
+            document.getElementById('pill-cc-count-label').textContent = rows.length + ' categories shown (' + (scope === 'pills' ? 'current pills' : 'all categories') + ')';
+            var activeCount = CATEGORIES.filter(function (c) { return c.nav_pill_visible === 1; }).length;
+            document.getElementById('cat-pill-count-badge').textContent = activeCount + ' pills active';
+            if (rows.length === 0) { empty.classList.remove('hidden'); bindPillDragAndDrop(); return; }
+            empty.classList.add('hidden');
+            rows.forEach(function (c) { tbody.appendChild(renderPillRow(c)); });
+            bindPillDragAndDrop();
+          }
+
+          function quickTogglePillVisible(id, isVisible) {
+            var payload = { nav_pill_visible: isVisible };
+            fetch('/api/control-center/category-nav/' + id, {
+              method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+            }).then(function (res) {
+              if (!res.ok) { alert('Failed to update pill visibility'); return; }
+              return res.json();
+            }).then(function (data) {
+              var cat = CATEGORIES.filter(function (c) { return c.id === id; })[0];
+              if (cat && data && data.result) Object.assign(cat, data.result);
+              renderPillTable();
+            }).catch(function () { alert('Network error updating pill visibility'); });
+          }
+
+          var pillEditingId = null;
+          function openPillEditModal(c) {
+            pillEditingId = c.id;
+            document.getElementById('pill-cc-f-id').value = c.id;
+            document.getElementById('pill-cc-f-name').textContent = c.name;
+            document.getElementById('pill-cc-f-slug').textContent = '/shop?category=' + c.slug;
+            document.getElementById('pill-cc-f-visible').checked = c.nav_pill_visible === 1;
+            document.getElementById('pill-cc-f-order').value = c.nav_pill_order == null ? '' : c.nav_pill_order;
+            document.getElementById('pill-cc-f-label').value = c.nav_label_override || '';
+            document.getElementById('pill-cc-f-badge').value = c.nav_badge || '';
+            document.getElementById('pill-cc-form-error').classList.add('hidden');
+            document.getElementById('pill-cc-modal').classList.remove('hidden');
+          }
+          function closePillEditModal() { document.getElementById('pill-cc-modal').classList.add('hidden'); pillEditingId = null; }
+
+          if (CAN_MANAGE) {
+            document.getElementById('pill-cc-modal-close').addEventListener('click', closePillEditModal);
+            document.getElementById('pill-cc-form-cancel').addEventListener('click', closePillEditModal);
+            document.getElementById('pill-cc-form').addEventListener('submit', function (e) {
+              e.preventDefault();
+              var orderVal = document.getElementById('pill-cc-f-order').value;
+              var payload = {
+                nav_pill_visible: document.getElementById('pill-cc-f-visible').checked,
+                nav_pill_order: orderVal === '' ? null : Number(orderVal),
+                nav_label_override: document.getElementById('pill-cc-f-label').value.trim() || null,
+                nav_badge: document.getElementById('pill-cc-f-badge').value.trim() || null,
+              };
+              fetch('/api/control-center/category-nav/' + pillEditingId, {
+                method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+              }).then(function (res) {
+                if (!res.ok) { return res.json().then(function (d) { throw new Error(d.error || 'Save failed'); }); }
+                return res.json();
+              }).then(function (data) {
+                var cat = CATEGORIES.filter(function (c) { return c.id === pillEditingId; })[0];
+                if (cat && data.result) { Object.assign(cat, data.result); }
+                closePillEditModal();
+                renderPillTable();
+                renderTree(); // label/badge is shared with the mega-menu tree view
+              }).catch(function (err) {
+                var errEl = document.getElementById('pill-cc-form-error');
+                errEl.textContent = err.message;
+                errEl.classList.remove('hidden');
+              });
+            });
+          }
+
+          // ---------- Drag-and-drop reorder (pills only, mirrors hero-campaigns pattern) ----------
+          function bindPillDragAndDrop() {
+            if (!CAN_MANAGE) return;
+            var draggedRow = null;
+            var tbody = document.getElementById('pill-cc-tbody');
+            tbody.querySelectorAll('.pill-cc-row').forEach(function (row) {
+              row.addEventListener('dragstart', function () {
+                if (row.getAttribute('draggable') !== 'true') return;
+                draggedRow = row; row.classList.add('opacity-40');
+              });
+              row.addEventListener('dragend', function () { row.classList.remove('opacity-40'); draggedRow = null; });
+              row.addEventListener('dragover', function (e) { e.preventDefault(); });
+              row.addEventListener('drop', function (e) {
+                e.preventDefault();
+                if (!draggedRow || draggedRow === row || row.getAttribute('draggable') !== 'true') return;
+                var rows = Array.from(tbody.querySelectorAll('.pill-cc-row[draggable="true"]'));
+                var draggedIdx = rows.indexOf(draggedRow);
+                var targetIdx = rows.indexOf(row);
+                if (draggedIdx < targetIdx) row.after(draggedRow); else row.before(draggedRow);
+                var orderedIds = Array.from(tbody.querySelectorAll('.pill-cc-row[draggable="true"]')).map(function (r) { return Number(r.getAttribute('data-id')); });
+                fetch('/api/control-center/category-nav/reorder-pills', {
+                  method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ordered_ids: orderedIds })
+                }).then(function (res) { return res.json(); }).then(function (data) {
+                  if (!data.success) { alert(data.error || 'Failed to save new pill order'); return; }
+                  orderedIds.forEach(function (id, idx) {
+                    var cat = CATEGORIES.filter(function (c) { return c.id === id; })[0];
+                    if (cat) cat.nav_pill_order = idx;
+                  });
+                  renderPillTable();
+                }).catch(function () { alert('Network error saving pill order'); });
+              });
+            });
+          }
+
+          document.getElementById('pill-cc-search').addEventListener('input', renderPillTable);
+          document.getElementById('pill-cc-filter-dept').addEventListener('change', renderPillTable);
+          document.getElementById('pill-cc-filter-level').addEventListener('change', renderPillTable);
+          document.getElementById('pill-cc-filter-scope').addEventListener('change', renderPillTable);
+
+          // ---------- Live preview (desktop + mobile) — fetches the SAME
+          // getCategoryPillNav() the real header calls ----------
+          function openPillPreview(mode) {
+            var modal = document.getElementById('pill-cc-preview-modal');
+            var body = document.getElementById('pill-cc-preview-body');
+            document.getElementById('pill-cc-preview-title').textContent = 'Header pill preview — ' + (mode === 'mobile' ? 'Mobile' : 'Desktop');
+            body.innerHTML = '<p class="text-sm text-white/60">Loading live preview…</p>';
+            modal.classList.remove('hidden');
+            fetch('/api/control-center/category-nav/pill-preview').then(function (res) { return res.json(); }).then(function (data) {
+              var pills = data.results || [];
+              body.innerHTML = '';
+              if (pills.length === 0) {
+                body.innerHTML = '<p class="text-sm text-white/60">No pills visible — the header would show only ecosystem links right now.</p>';
+                return;
+              }
+              var strip = document.createElement('div');
+              strip.className = mode === 'mobile'
+                ? 'flex items-center gap-4 overflow-x-auto pb-2 text-[11px]'
+                : 'flex items-center gap-1 overflow-x-auto pb-2 flex-wrap';
+              pills.forEach(function (p) {
+                var a = document.createElement('div');
+                if (mode === 'mobile') {
+                  a.className = 'flex flex-col items-center gap-0.5 shrink-0 text-white/90 relative';
+                  a.innerHTML = '<span class="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center"><span class="material-symbols-outlined text-lg">' + p.icon + '</span></span>' +
+                    '<span class="whitespace-nowrap">' + p.label + '</span>' +
+                    (p.badge ? '<span class="absolute -top-1 right-1 text-[8px] bg-primary-fixed text-primary-dark font-bold rounded px-1">' + p.badge + '</span>' : '');
+                } else {
+                  a.className = 'flex items-center gap-1 shrink-0 px-2.5 py-2 rounded hover:bg-white/10 text-white/90 text-sm whitespace-nowrap';
+                  a.innerHTML = p.label + (p.badge ? ' <span class="text-[9px] bg-primary-fixed/90 text-primary-dark font-bold rounded px-1 py-0.5 ml-1">' + p.badge + '</span>' : '');
+                }
+                a.title = p.href;
+                strip.appendChild(a);
+              });
+              body.appendChild(strip);
+              var note = document.createElement('p');
+              note.className = 'text-xs text-white/50 mt-3';
+              note.textContent = pills.length + ' pill(s) — hover any pill to see its /shop?category=<slug> destination.';
+              body.appendChild(note);
+            }).catch(function () {
+              body.innerHTML = '<p class="text-sm text-red-400">Failed to load preview.</p>';
+            });
+          }
+          document.getElementById('pill-cc-preview-desktop-btn').addEventListener('click', function () { openPillPreview('desktop'); });
+          document.getElementById('pill-cc-preview-mobile-btn').addEventListener('click', function () { openPillPreview('mobile'); });
+          document.getElementById('pill-cc-preview-close').addEventListener('click', function () {
+            document.getElementById('pill-cc-preview-modal').classList.add('hidden');
+          });
+
+          renderPillTable();
         })();
         `
       }}></script>

@@ -5,6 +5,7 @@ import type { LocaleContext } from '../i18n'
 import { createTranslator, LANGUAGES, LIVE_LANGUAGES, LANG_QUERY_PARAM } from '../i18n'
 import { LanguageSelector } from './LanguageSelector'
 import { getEcosystemNavLinks, type EcosystemNavLink } from '../lib/ecosystem-nav'
+import { getCategoryPillNav, type CategoryPillLink } from '../lib/category-pill-nav'
 
 interface LayoutProps {
   title?: string
@@ -58,12 +59,30 @@ const CITIES = ['Lagos', 'Abuja', 'Port Harcourt', 'Ibadan', 'Kano', 'Enugu', 'B
  * first entry (see ecosystem-nav.ts's SHOP_PILL) — it's the core
  * marketplace this app is built around, not a togglable "vertical" row in
  * ecosystem_verticals.
+ *
+ * Checkpoint 3 (2026-09-16): a second, INDEPENDENT DB-driven nav layer —
+ * curated "Header Category Pills" (Electronics, Fashion, Phones & Tablets,
+ * Supermarket, ...) — now sits alongside the ecosystem pills in Tier 3, per
+ * Pat's explicit "BOTH, not one replacing the other" decision. Same
+ * async-Layout + useRequestContext() pattern as 2A: getCategoryPillNav(db)
+ * (src/lib/category-pill-nav.ts, its own cache-backed section under the
+ * same homepage_feed_cache table) reads categories.nav_pill_visible /
+ * nav_pill_order — columns DELIBERATELY SEPARATE from is_visible (mega-menu)
+ * and is_featured_home/homepage_priority (homepage rails), so a toggle in
+ * one admin panel never has a side effect on an unrelated surface. Pills
+ * can be ANY taxonomy depth (a level-1 department pill next to a level-2
+ * subcategory pill in the same strip) and always link to
+ * `/shop?category=<slug>` — shop.tsx already resolves that at any depth via
+ * the materialized path, so no per-pill hardcoded URL is ever needed.
  */
 
 export const Layout: FC<LayoutProps> = async ({ title, description, user, cartCount = 0, wishlistCount = 0, selectedCity = 'Lagos', locale, children }) => {
   const t = createTranslator(locale)
   const c = useRequestContext<AppEnv>()
-  const ecosystemLinks: EcosystemNavLink[] = await getEcosystemNavLinks(c.env.DB)
+  const [ecosystemLinks, categoryPills]: [EcosystemNavLink[], CategoryPillLink[]] = await Promise.all([
+    getEcosystemNavLinks(c.env.DB),
+    getCategoryPillNav(c.env.DB),
+  ])
   return (
     <html lang={locale.language} dir={locale.dir}>
       <head>
@@ -208,18 +227,47 @@ export const Layout: FC<LayoutProps> = async ({ title, description, user, cartCo
                   </div>
                   <div id="mega-menu-loading" class="p-10 text-center text-gray-400 text-sm">Loading categories…</div>
                 </div>
-                {/* Ecosystem pills — the "one super-app, not nine websites" strip */}
-                <div id="ecosystem-nav-desktop" class="flex items-center gap-1 overflow-x-auto [&::-webkit-scrollbar]:hidden">
-                  {ecosystemLinks.map((eco) => (
-                    <a href={eco.href} class="flex items-center gap-1.5 shrink-0 px-2.5 py-2.5 hover:bg-white/10 transition-colors text-white/90">
-                      <span class="material-symbols-outlined text-base">{eco.icon}</span>
-                      {eco.label.replace('Naija', '')}
-                      {!eco.live && <span class="text-[9px] bg-white/15 rounded px-1 py-0.5">Soon</span>}
-                    </a>
-                  ))}
+                {/* ---------- Checkpoint 3 + Micro-Checkpoint 2A: ONE scrollable region holding
+                    both nav layers, so adding 13 curated category pills never breaks the
+                    header (Pat's "allow horizontal overflow for additional categories/
+                    verticals" instruction) while "All Categories" stays pinned/always-visible
+                    to its left. flex-1 min-w-0 is what lets this region shrink and scroll
+                    instead of pushing the header wider than the viewport. ---------- */}
+                <div class="flex-1 min-w-0 flex items-center gap-1 overflow-x-auto [&::-webkit-scrollbar]:hidden">
+                  {/* Header Category Pills — curated navigation shortcuts (nav_pill_visible/
+                      nav_pill_order, migration 0063), DELIBERATELY INDEPENDENT of is_visible
+                      (mega-menu) and is_featured_home (homepage rails) — see
+                      category-pill-nav.ts's doc comment. Mixed depth by design (a level-1
+                      department pill can sit next to a level-2 subcategory pill). Every href
+                      is /shop?category=<slug>, resolved at any depth by shop.tsx — no
+                      hardcoded destination URLs. */}
+                  <div id="category-pill-nav-desktop" class="flex items-center gap-1 shrink-0">
+                    {categoryPills.map((cat) => (
+                      <a href={cat.href} class="flex items-center gap-1 shrink-0 px-2.5 py-2.5 hover:bg-white/10 transition-colors text-white/90 whitespace-nowrap">
+                        {cat.label}
+                        {cat.badge && <span class="text-[9px] bg-primary-fixed/90 text-primary-dark font-bold rounded px-1 py-0.5">{cat.badge}</span>}
+                      </a>
+                    ))}
+                  </div>
+                  {/* Visual grouping divider — Pat's explicit "customers must be able to
+                      clearly distinguish SHOP/CATEGORIES from NAIJADEALS ECOSYSTEM"
+                      instruction. A subtle uppercase micro-label rather than a header
+                      redesign: same divider style already used before "Deals" below. */}
+                  <span class="w-px h-4 bg-white/20 shrink-0 mx-1"></span>
+                  <span class="shrink-0 text-[9px] font-bold uppercase tracking-wide text-white/40 px-1 select-none" aria-hidden="true">Ecosystem</span>
+                  {/* Ecosystem pills — the "one super-app, not nine websites" strip */}
+                  <div id="ecosystem-nav-desktop" class="flex items-center gap-1 shrink-0">
+                    {ecosystemLinks.map((eco) => (
+                      <a href={eco.href} class="flex items-center gap-1.5 shrink-0 px-2.5 py-2.5 hover:bg-white/10 transition-colors text-white/90">
+                        <span class="material-symbols-outlined text-base">{eco.icon}</span>
+                        {eco.label.replace('Naija', '')}
+                        {!eco.live && <span class="text-[9px] bg-white/15 rounded px-1 py-0.5">Soon</span>}
+                      </a>
+                    ))}
+                  </div>
+                  <span class="w-px h-4 bg-white/20 shrink-0 mx-1"></span>
+                  <a href="/shop?deals=1" class="flex items-center gap-1 shrink-0 px-2.5 py-2.5 hover:bg-white/10 transition-colors text-primary-fixed font-semibold whitespace-nowrap">{t('nav_deals')}</a>
                 </div>
-                <span class="w-px h-4 bg-white/20 shrink-0 mx-1"></span>
-                <a href="/shop?deals=1" class="flex items-center gap-1 shrink-0 px-2.5 py-2.5 hover:bg-white/10 transition-colors text-primary-fixed font-semibold">{t('nav_deals')}</a>
               </div>
             </nav>
           </div>
@@ -267,16 +315,34 @@ export const Layout: FC<LayoutProps> = async ({ title, description, user, cartCo
                 </button>
               </form>
             </div>
-            {/* Row 3: horizontally-scrollable ecosystem nav */}
-            <div id="ecosystem-nav-mobile-scroller" class="flex items-center gap-4 px-3 pb-2.5 overflow-x-auto text-[11px]">
-              {ecosystemLinks.map((eco) => (
-                <a href={eco.href} class="flex flex-col items-center gap-0.5 shrink-0 text-white/80">
-                  <span class="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center">
-                    <span class="material-symbols-outlined text-lg">{eco.icon}</span>
-                  </span>
-                  <span class="whitespace-nowrap">{eco.label.replace('Naija', '')}</span>
-                </a>
-              ))}
+            {/* Row 3: horizontally-scrollable nav — Checkpoint 3 + Micro-Checkpoint 2A.
+                Same "categories first, then a divider, then ecosystem" ordering as
+                desktop, consuming the exact same categoryPills/ecosystemLinks arrays
+                (getCategoryPillNav()/getEcosystemNavLinks()) — no separate mobile
+                data source, per Pat's explicit instruction. */}
+            <div class="flex items-center px-3 pb-2.5 overflow-x-auto text-[11px] [&::-webkit-scrollbar]:hidden">
+              <div id="category-pill-nav-mobile-scroller" class="flex items-center gap-4 shrink-0">
+                {categoryPills.map((cat) => (
+                  <a href={cat.href} class="flex flex-col items-center gap-0.5 shrink-0 text-white/80 relative">
+                    <span class="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center">
+                      <span class="material-symbols-outlined text-lg">{cat.icon}</span>
+                    </span>
+                    <span class="whitespace-nowrap">{cat.label}</span>
+                    {cat.badge && <span class="absolute -top-1 right-1 text-[8px] bg-primary-fixed text-primary-dark font-bold rounded px-1 leading-tight">{cat.badge}</span>}
+                  </a>
+                ))}
+              </div>
+              <span class="w-px h-8 bg-white/20 shrink-0 mx-3"></span>
+              <div id="ecosystem-nav-mobile-scroller" class="flex items-center gap-4 shrink-0">
+                {ecosystemLinks.map((eco) => (
+                  <a href={eco.href} class="flex flex-col items-center gap-0.5 shrink-0 text-white/80">
+                    <span class="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center">
+                      <span class="material-symbols-outlined text-lg">{eco.icon}</span>
+                    </span>
+                    <span class="whitespace-nowrap">{eco.label.replace('Naija', '')}</span>
+                  </a>
+                ))}
+              </div>
             </div>
           </div>
         </header>
@@ -330,6 +396,23 @@ export const Layout: FC<LayoutProps> = async ({ title, description, user, cartCo
             <a href="/shop?deals=1" class="flex items-center gap-3 px-4 py-2.5 text-sm font-semibold text-primary hover:bg-gray-50 border-t border-gray-100 mt-1">
               <span class="material-symbols-outlined text-xl">bolt</span>{t('nav_deals')}
             </a>
+          </div>
+          {/* Checkpoint 3: curated category pills also surfaced in the drawer,
+              placed BEFORE the Ecosystem section — category pills are Pat's
+              "PRIMARY commerce navigation shortcuts", ecosystem links remain the
+              "PRIMARY NaijaDeals vertical navigation", so shop-first ordering
+              mirrors the desktop pill-then-ecosystem sequence. Same
+              categoryPills array as desktop/mobile-scroller — no separate
+              mobile-drawer data source. */}
+          <div id="category-pill-nav-mobile-drawer" class="py-2 border-t border-gray-100">
+            <p class="px-4 pt-1 pb-1.5 text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Categories</p>
+            {categoryPills.map((cat) => (
+              <a href={cat.href} class="flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
+                <span class="material-symbols-outlined text-xl text-gray-500">{cat.icon}</span>
+                <span class="flex-1">{cat.label}</span>
+                {cat.badge && <span class="text-[9px] bg-primary-fixed/20 text-primary-dark font-bold rounded px-1.5 py-0.5">{cat.badge}</span>}
+              </a>
+            ))}
           </div>
           <div id="ecosystem-nav-mobile-drawer" class="py-2 border-t border-gray-100">
             <p class="px-4 pt-1 pb-1.5 text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Ecosystem</p>

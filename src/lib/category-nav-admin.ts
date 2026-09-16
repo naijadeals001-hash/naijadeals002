@@ -37,6 +37,15 @@ export interface CategoryNavAdminRow extends CategoryRow {
   nav_badge: string | null
   is_featured_home: number
   homepage_priority: number | null
+  /**
+   * Checkpoint 3 — Header Category Pill Navigation (migration 0063).
+   * DELIBERATELY INDEPENDENT of is_visible/is_featured_home: a category can
+   * be in the mega-menu but not a header pill, a pill but not featured on
+   * the homepage, etc. — three separate curation lenses over the one tree,
+   * per Pat's explicit "do not reuse" instruction.
+   */
+  nav_pill_visible: number
+  nav_pill_order: number | null
   /** Live product count (any depth via materialized path) — real signal, shown in the admin table so an operator can see whether hiding/demoting a category actually affects anything. Never used to gate visibility itself. */
   product_count: number
 }
@@ -74,9 +83,14 @@ export interface CategoryNavUpdateInput {
   homepage_priority?: number | null
   nav_label_override?: string | null
   nav_badge?: string | null
+  nav_pill_visible?: boolean
+  nav_pill_order?: number | null
 }
 
-const ALLOWED_FIELDS = new Set(['is_visible', 'sort_order', 'is_featured_home', 'homepage_priority', 'nav_label_override', 'nav_badge'])
+const ALLOWED_FIELDS = new Set([
+  'is_visible', 'sort_order', 'is_featured_home', 'homepage_priority', 'nav_label_override', 'nav_badge',
+  'nav_pill_visible', 'nav_pill_order',
+])
 
 /**
  * Updates ONLY the navigation-config fields for one category. Deliberately
@@ -122,6 +136,22 @@ export async function reorderCategoryChildren(db: D1Database, parentId: number |
     parentId === null
       ? db.prepare(`UPDATE categories SET sort_order = ? WHERE id = ? AND parent_id IS NULL AND category_type = 'product'`).bind(index, id)
       : db.prepare(`UPDATE categories SET sort_order = ? WHERE id = ? AND parent_id = ? AND category_type = 'product'`).bind(index, id, parentId)
+  )
+  if (statements.length > 0) await db.batch(statements)
+}
+
+/**
+ * Checkpoint 3 — full replace of nav_pill_order across the ENTIRE curated
+ * pill set (not scoped to one parent, unlike reorderCategoryChildren above)
+ * — pills are intentionally MIXED-depth (a level-1 department can sit next
+ * to a level-2 subcategory in the same strip), so there is no single parent
+ * to scope a reorder to. Only rows already flagged nav_pill_visible=1 are
+ * ever touched by this — a category not currently a pill can never be
+ * silently reordered into pill position by this function.
+ */
+export async function reorderCategoryPills(db: D1Database, orderedIds: number[]): Promise<void> {
+  const statements = orderedIds.map((id, index) =>
+    db.prepare(`UPDATE categories SET nav_pill_order = ? WHERE id = ? AND nav_pill_visible = 1 AND category_type = 'product'`).bind(index, id)
   )
   if (statements.length > 0) await db.batch(statements)
 }
