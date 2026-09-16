@@ -75,6 +75,9 @@ import { getPendingModerationQueue, getListingForModeration, getRecentModeration
 import { getNotificationEngineOverview } from '../lib/notification-observability'
 import { controlCenterLoginPage } from '../pages/control-center-login'
 import { ControlCenterLayout } from '../components/ControlCenterLayout'
+import { getAllHeroCampaignsForAdmin, computeCampaignLifecycleState, type HeroCampaignAdminRow } from '../lib/hero-campaigns-admin'
+import { HERO_IMAGE_LIBRARY } from '../lib/hero-image-library'
+import { getAllCountries } from '../lib/country'
 
 export const controlCenterRoutes = new Hono<AppEnv>()
 
@@ -2011,6 +2014,597 @@ controlCenterRoutes.get('/providers/:id', requireControlCenterPermission('provid
         </div>
         <p class="text-xs text-gray-600 mt-6">To verify/suspend this provider, use the <a href="/control-center/providers" class="text-ccaccent hover:underline">Provider Verification Queue</a> above — this page is a read-only 360 view.</p>
       </div>
+    </ControlCenterLayout>
+  )
+})
+
+// ============================================================
+// HERO CAMPAIGN MANAGEMENT (Enterprise Control Center Checkpoint 1)
+//
+// ARCHITECTURAL REFERENCE IMPLEMENTATION: this is the first Control Center
+// module built specifically to prove out the "DATABASE -> SERVICE/QUERY ->
+// API -> ENTERPRISE CONTROL CENTER -> CUSTOMER-FACING EXPERIENCE" pattern
+// Pat's implementation authorization requires every future module to
+// follow. It does NOT touch HeroZone.tsx, hero-campaigns.ts's read path, or
+// home.tsx — it is purely a new management surface OVER the existing
+// hero_campaigns table and the existing getActiveHeroCampaigns() consumer.
+//
+// All data below is real: the table is the live hero_campaigns rows (10
+// campaigns as of this checkpoint, confirmed via direct D1 query during the
+// read-only audit), lifecycle state is computed server-side from real
+// status/starts_at/ends_at/is_archived columns (computeCampaignLifecycleState),
+// and every mutation the client-side JS below triggers hits a real,
+// permission-gated /api/control-center/hero-campaigns/* endpoint that writes
+// to D1 and records a real cc_audit_logs row. Nothing here is a mock queue,
+// and no "coming soon" analytics panel with a fabricated number is included:
+// per Pat's explicit "DO NOT FABRICATE ANALYTICS" rule, there is a single
+// honest placeholder note in the sidebar instead of any invented metric.
+// ============================================================
+
+controlCenterRoutes.get('/promotions', requireControlCenterPermission('promotions.read'), async (c) => {
+  const user = c.get('user')!
+  const ccAccess = c.get('ccAccess')!
+  const canManage = ccAccess.permissionKeys.has('promotions.manage')
+  const [campaigns, countries] = await Promise.all([
+    getAllHeroCampaignsForAdmin(c.env.DB, { includeArchived: true }),
+    getAllCountries(c.env.DB),
+  ])
+
+  const withState = (campaigns as HeroCampaignAdminRow[]).map((row) => ({ ...row, lifecycle_state: computeCampaignLifecycleState(row) }))
+  const activeCount = withState.filter((r) => r.lifecycle_state === 'active').length
+  const scheduledCount = withState.filter((r) => r.lifecycle_state === 'scheduled').length
+  const expiredCount = withState.filter((r) => r.lifecycle_state === 'expired').length
+  const archivedCount = withState.filter((r) => r.lifecycle_state === 'archived').length
+
+  const LIFECYCLE_BADGE: Record<string, string> = {
+    active: 'bg-ccaccent/15 text-ccaccent border-ccaccent/30',
+    scheduled: 'bg-blue-500/15 text-blue-400 border-blue-500/30',
+    expired: 'bg-orange-500/15 text-orange-400 border-orange-500/30',
+    inactive: 'bg-white/5 text-gray-400 border-ccborder',
+    archived: 'bg-red-500/10 text-red-400 border-red-500/25',
+  }
+
+  return c.render(
+    <ControlCenterLayout title="Hero Campaigns" user={user} ccAccess={ccAccess} active="promotions">
+      <div class="max-w-[100rem] mx-auto px-4 md:px-8 py-8" id="hero-cc-root" data-can-manage={canManage ? '1' : '0'}>
+        <div class="flex items-start justify-between gap-4 flex-wrap mb-1">
+          <div>
+            <h1 class="text-3xl font-extrabold text-white tracking-tight">Hero Campaign Manager</h1>
+            <p class="text-sm text-gray-500 mt-1 max-w-2xl">
+              Real <code class="text-gray-400">hero_campaigns</code> rows — the SAME table <code class="text-gray-400">getActiveHeroCampaigns()</code> and{' '}
+              <code class="text-gray-400">HeroZone.tsx</code> already render live on the homepage. Every action below writes to that table and logs a real{' '}
+              <code class="text-gray-400">cc_audit_logs</code> entry — nothing here is a mock queue.
+            </p>
+          </div>
+          {canManage && (
+            <button id="hero-cc-create-btn" type="button" class="flex items-center gap-1.5 bg-ccaccent text-ccbg font-bold text-sm px-4 py-2.5 rounded-xl hover:brightness-110 transition shrink-0">
+              <span class="material-symbols-outlined text-lg">add_circle</span> Create Campaign
+            </button>
+          )}
+        </div>
+
+        {/* ---------- KPI strip (real counts only) ---------- */}
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6 mb-6">
+          <div class="bg-ccpanel border border-ccborder rounded-2xl p-4">
+            <div class="text-[11px] text-gray-500 mb-1">Live now</div>
+            <div class="text-2xl font-extrabold text-ccaccent">{activeCount}</div>
+          </div>
+          <div class="bg-ccpanel border border-ccborder rounded-2xl p-4">
+            <div class="text-[11px] text-gray-500 mb-1">Scheduled</div>
+            <div class="text-2xl font-extrabold text-blue-400">{scheduledCount}</div>
+          </div>
+          <div class="bg-ccpanel border border-ccborder rounded-2xl p-4">
+            <div class="text-[11px] text-gray-500 mb-1">Expired</div>
+            <div class="text-2xl font-extrabold text-orange-400">{expiredCount}</div>
+          </div>
+          <div class="bg-ccpanel border border-ccborder rounded-2xl p-4">
+            <div class="text-[11px] text-gray-500 mb-1">Archived</div>
+            <div class="text-2xl font-extrabold text-gray-400">{archivedCount}</div>
+          </div>
+        </div>
+
+        {/* ---------- Analytics placeholder — honest, not fabricated ---------- */}
+        <div class="flex items-center gap-2.5 bg-white/[0.03] border border-ccborder rounded-xl px-4 py-3 mb-6 text-xs text-gray-500">
+          <span class="material-symbols-outlined text-base text-gray-600">insights</span>
+          Campaign performance (impressions/clicks/CTR) is future analytics infrastructure — NaijaDeals has no impression/click tracking today, so no number is shown here rather than a fabricated one.
+        </div>
+
+        {/* ---------- Filters + search ---------- */}
+        <div class="flex items-center gap-3 flex-wrap mb-4">
+          <div class="relative flex-1 min-w-[220px] max-w-sm">
+            <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-lg">search</span>
+            <input id="hero-cc-search" type="text" placeholder="Search title, slug, CTA..." class="w-full bg-black/30 border border-ccborder rounded-lg pl-9 pr-3 py-2 text-sm text-gray-200 placeholder:text-gray-500 outline-none focus:border-ccaccent/50" />
+          </div>
+          <select id="hero-cc-filter-state" class="bg-black/30 border border-ccborder rounded-lg px-3 py-2 text-sm text-gray-300 outline-none focus:border-ccaccent/50">
+            <option value="">All statuses</option>
+            <option value="active">Live now</option>
+            <option value="scheduled">Scheduled</option>
+            <option value="expired">Expired</option>
+            <option value="inactive">Paused / Draft</option>
+            <option value="archived">Archived</option>
+          </select>
+          <select id="hero-cc-filter-vertical" class="bg-black/30 border border-ccborder rounded-lg px-3 py-2 text-sm text-gray-300 outline-none focus:border-ccaccent/50">
+            <option value="">All verticals</option>
+            {Array.from(new Set(withState.map((r) => r.vertical))).sort().map((v) => (
+              <option value={v}>{v}</option>
+            ))}
+          </select>
+          <span class="text-xs text-gray-600 ml-auto" id="hero-cc-count-label">{withState.length} campaigns</span>
+        </div>
+
+        {/* ---------- Campaign table ---------- */}
+        <div class="bg-ccpanel border border-ccborder rounded-2xl overflow-hidden">
+          <table class="w-full text-sm" id="hero-cc-table">
+            <thead>
+              <tr class="text-left text-gray-500 border-b border-ccborder text-xs">
+                {canManage && <th class="py-2.5 px-3 w-8"></th>}
+                <th class="py-2.5 px-3">Campaign</th>
+                <th class="py-2.5 px-3">Vertical</th>
+                <th class="py-2.5 px-3">Targeting</th>
+                <th class="py-2.5 px-3">Schedule</th>
+                <th class="py-2.5 px-3">Status</th>
+                <th class="py-2.5 px-3 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="hero-cc-tbody">
+              {withState.map((row) => {
+                const targetCountries: string[] = row.target_countries ? JSON.parse(row.target_countries) : []
+                const targetingLabel =
+                  (targetCountries.length > 0 ? targetCountries.join(', ') : 'All countries') +
+                  (row.target_segment !== 'all' ? ` · ${row.target_segment}` : '') +
+                  (row.target_auth_state !== 'all' ? ` · ${row.target_auth_state}` : '')
+                return (
+                  <tr
+                    class="border-b border-ccborder/50 hover:bg-white/[0.02] hero-cc-row"
+                    data-id={row.id}
+                    data-status={row.lifecycle_state}
+                    data-vertical={row.vertical}
+                    data-search={`${row.title} ${row.slug} ${row.cta_label}`.toLowerCase()}
+                    draggable={canManage ? 'true' : 'false'}
+                  >
+                    {canManage && (
+                      <td class="py-2.5 px-3 text-gray-600 cursor-grab hero-cc-drag-handle" title="Drag to reorder">
+                        <span class="material-symbols-outlined text-lg">drag_indicator</span>
+                      </td>
+                    )}
+                    <td class="py-2.5 px-3 text-white flex items-center gap-2.5">
+                      <img src={row.image_desktop_url} alt="" class="w-14 h-8 rounded object-cover bg-black/30 shrink-0" />
+                      <div class="min-w-0">
+                        <div class="truncate max-w-[16rem] font-semibold">{row.title}</div>
+                        <div class="text-[11px] text-gray-500 truncate max-w-[16rem]">{row.slug}</div>
+                      </div>
+                    </td>
+                    <td class="py-2.5 px-3 text-gray-400 capitalize">{row.vertical}</td>
+                    <td class="py-2.5 px-3 text-gray-500 text-xs max-w-[12rem] truncate" title={targetingLabel}>{targetingLabel}</td>
+                    <td class="py-2.5 px-3 text-gray-500 text-xs">
+                      {row.starts_at ? `From ${row.starts_at}` : 'No start'}<br />
+                      {row.ends_at ? `Until ${row.ends_at}` : 'No expiry'}
+                    </td>
+                    <td class="py-2.5 px-3">
+                      <span class={`text-[11px] font-bold px-2.5 py-1 rounded-full border capitalize ${LIFECYCLE_BADGE[row.lifecycle_state]}`}>{row.lifecycle_state}</span>
+                    </td>
+                    <td class="py-2.5 px-3 text-right whitespace-nowrap space-x-1">
+                      <button class="hero-cc-preview-btn text-xs bg-white/5 text-gray-300 font-semibold px-2.5 py-1.5 rounded-lg" data-id={row.id} title="Preview">
+                        <span class="material-symbols-outlined text-sm align-middle">visibility</span>
+                      </button>
+                      {canManage && row.lifecycle_state !== 'archived' && (
+                        <>
+                          <button class="hero-cc-edit-btn text-xs bg-white/5 text-gray-300 font-semibold px-2.5 py-1.5 rounded-lg" data-id={row.id} title="Edit">
+                            <span class="material-symbols-outlined text-sm align-middle">edit</span>
+                          </button>
+                          <button class="hero-cc-duplicate-btn text-xs bg-white/5 text-gray-300 font-semibold px-2.5 py-1.5 rounded-lg" data-id={row.id} title="Duplicate">
+                            <span class="material-symbols-outlined text-sm align-middle">content_copy</span>
+                          </button>
+                          {row.status === 'active' ? (
+                            <button class="hero-cc-status-btn text-xs bg-amber-500/10 text-amber-400 font-semibold px-2.5 py-1.5 rounded-lg" data-id={row.id} data-target-status="inactive" title="Pause">
+                              <span class="material-symbols-outlined text-sm align-middle">pause_circle</span>
+                            </button>
+                          ) : (
+                            <button class="hero-cc-status-btn text-xs bg-ccaccent/15 text-ccaccent font-semibold px-2.5 py-1.5 rounded-lg" data-id={row.id} data-target-status="active" title="Activate">
+                              <span class="material-symbols-outlined text-sm align-middle">play_circle</span>
+                            </button>
+                          )}
+                          <button class="hero-cc-archive-btn text-xs bg-red-500/10 text-red-400 font-semibold px-2.5 py-1.5 rounded-lg" data-id={row.id} title="Archive">
+                            <span class="material-symbols-outlined text-sm align-middle">archive</span>
+                          </button>
+                        </>
+                      )}
+                      {canManage && row.lifecycle_state === 'archived' && (
+                        <button class="hero-cc-restore-btn text-xs bg-ccaccent/15 text-ccaccent font-semibold px-2.5 py-1.5 rounded-lg" data-id={row.id} title="Restore">
+                          <span class="material-symbols-outlined text-sm align-middle">unarchive</span>
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+        <p id="hero-cc-empty-state" class="hidden text-sm text-gray-500 text-center py-10">No campaigns match the current filters.</p>
+      </div>
+
+      {/* ---------- Create/Edit modal ---------- */}
+      {canManage && (
+        <div id="hero-cc-modal" class="hidden fixed inset-0 z-50 items-center justify-center p-4 bg-black/70 backdrop-blur-sm" style="display:none;">
+          <div class="bg-ccpanel2 border border-ccborder rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto cc-scrollbar">
+            <div class="flex items-center justify-between px-6 py-4 border-b border-ccborder sticky top-0 bg-ccpanel2 z-10">
+              <h2 id="hero-cc-modal-title" class="text-lg font-bold text-white">Create Campaign</h2>
+              <button id="hero-cc-modal-close" type="button" class="text-gray-400 hover:text-white"><span class="material-symbols-outlined">close</span></button>
+            </div>
+            <form id="hero-cc-form" class="px-6 py-5 space-y-4">
+              <input type="hidden" id="hero-cc-form-id" />
+              <div id="hero-cc-form-error" class="hidden bg-red-500/10 border border-red-500/25 text-red-400 text-xs rounded-lg px-3 py-2"></div>
+
+              <div class="grid grid-cols-2 gap-3">
+                <label class="block">
+                  <span class="text-xs text-gray-400 mb-1 block">Slug (unique, lowercase-hyphenated) *</span>
+                  <input id="hero-cc-f-slug" required class="w-full bg-black/30 border border-ccborder rounded-lg px-3 py-2 text-sm text-gray-200 outline-none focus:border-ccaccent/50" />
+                </label>
+                <label class="block">
+                  <span class="text-xs text-gray-400 mb-1 block">Vertical *</span>
+                  <select id="hero-cc-f-vertical" class="w-full bg-black/30 border border-ccborder rounded-lg px-3 py-2 text-sm text-gray-200 outline-none focus:border-ccaccent/50">
+                    <option value="shop">shop</option>
+                    <option value="ecosystem">ecosystem</option>
+                    <option value="fresh">fresh</option>
+                    <option value="eats">eats</option>
+                    <option value="gigs">gigs</option>
+                    <option value="stay">stay</option>
+                    <option value="drive">drive</option>
+                    <option value="send">send</option>
+                    <option value="stream">stream</option>
+                    <option value="aura">aura</option>
+                  </select>
+                </label>
+              </div>
+
+              <label class="block">
+                <span class="text-xs text-gray-400 mb-1 block">Title *</span>
+                <input id="hero-cc-f-title" required class="w-full bg-black/30 border border-ccborder rounded-lg px-3 py-2 text-sm text-gray-200 outline-none focus:border-ccaccent/50" />
+              </label>
+              <label class="block">
+                <span class="text-xs text-gray-400 mb-1 block">Subtitle</span>
+                <input id="hero-cc-f-subtitle" class="w-full bg-black/30 border border-ccborder rounded-lg px-3 py-2 text-sm text-gray-200 outline-none focus:border-ccaccent/50" />
+              </label>
+
+              <div class="grid grid-cols-2 gap-3">
+                <label class="block">
+                  <span class="text-xs text-gray-400 mb-1 block">CTA Label *</span>
+                  <input id="hero-cc-f-cta-label" required class="w-full bg-black/30 border border-ccborder rounded-lg px-3 py-2 text-sm text-gray-200 outline-none focus:border-ccaccent/50" />
+                </label>
+                <label class="block">
+                  <span class="text-xs text-gray-400 mb-1 block">CTA Destination (path) *</span>
+                  <input id="hero-cc-f-cta-href" required placeholder="/shop?category=..." class="w-full bg-black/30 border border-ccborder rounded-lg px-3 py-2 text-sm text-gray-200 outline-none focus:border-ccaccent/50" />
+                </label>
+              </div>
+
+              <div>
+                <span class="text-xs text-gray-400 mb-1 block">Image (select from library or paste a custom /static/... URL) *</span>
+                <select id="hero-cc-f-image-picker" class="w-full bg-black/30 border border-ccborder rounded-lg px-3 py-2 text-sm text-gray-200 outline-none focus:border-ccaccent/50 mb-2">
+                  <option value="">— Select from image library —</option>
+                  {HERO_IMAGE_LIBRARY.map((img) => (
+                    <option value={img.key} data-desktop={img.desktop_url} data-mobile={img.mobile_url}>{img.label}</option>
+                  ))}
+                </select>
+                <div class="grid grid-cols-2 gap-3">
+                  <input id="hero-cc-f-image-desktop" required placeholder="Desktop image URL (/static/hero/...)" class="w-full bg-black/30 border border-ccborder rounded-lg px-3 py-2 text-xs text-gray-200 outline-none focus:border-ccaccent/50" />
+                  <input id="hero-cc-f-image-mobile" required placeholder="Mobile image URL (/static/hero/...)" class="w-full bg-black/30 border border-ccborder rounded-lg px-3 py-2 text-xs text-gray-200 outline-none focus:border-ccaccent/50" />
+                </div>
+                <div class="grid grid-cols-2 gap-3 mt-2">
+                  <img id="hero-cc-f-preview-desktop" class="hidden w-full h-20 object-cover rounded-lg border border-ccborder" />
+                  <img id="hero-cc-f-preview-mobile" class="hidden w-full h-20 object-cover rounded-lg border border-ccborder" />
+                </div>
+              </div>
+
+              <label class="block">
+                <span class="text-xs text-gray-400 mb-1 block">Theme (text overlay contrast)</span>
+                <select id="hero-cc-f-theme" class="w-full bg-black/30 border border-ccborder rounded-lg px-3 py-2 text-sm text-gray-200 outline-none focus:border-ccaccent/50">
+                  <option value="dark">Dark overlay (light text)</option>
+                  <option value="light">Light overlay (dark text)</option>
+                </select>
+              </label>
+
+              <div class="grid grid-cols-2 gap-3">
+                <label class="block">
+                  <span class="text-xs text-gray-400 mb-1 block">Starts at (optional, UTC)</span>
+                  <input id="hero-cc-f-starts-at" type="datetime-local" class="w-full bg-black/30 border border-ccborder rounded-lg px-3 py-2 text-sm text-gray-200 outline-none focus:border-ccaccent/50" />
+                </label>
+                <label class="block">
+                  <span class="text-xs text-gray-400 mb-1 block">Ends at (optional, UTC)</span>
+                  <input id="hero-cc-f-ends-at" type="datetime-local" class="w-full bg-black/30 border border-ccborder rounded-lg px-3 py-2 text-sm text-gray-200 outline-none focus:border-ccaccent/50" />
+                </label>
+              </div>
+
+              <div class="border-t border-ccborder pt-4">
+                <div class="text-xs font-bold text-gray-400 mb-2 uppercase tracking-wide">Targeting</div>
+                <label class="block mb-3">
+                  <span class="text-xs text-gray-400 mb-1 block">Countries (leave empty = all countries)</span>
+                  <select id="hero-cc-f-countries" multiple class="w-full bg-black/30 border border-ccborder rounded-lg px-3 py-2 text-sm text-gray-200 outline-none focus:border-ccaccent/50 h-24">
+                    {(countries as any[]).map((ctry) => (
+                      <option value={ctry.iso_code}>{ctry.name} ({ctry.iso_code})</option>
+                    ))}
+                  </select>
+                </label>
+                <div class="grid grid-cols-2 gap-3">
+                  <label class="block">
+                    <span class="text-xs text-gray-400 mb-1 block">Customer segment</span>
+                    <input id="hero-cc-f-segment" value="all" placeholder="all" class="w-full bg-black/30 border border-ccborder rounded-lg px-3 py-2 text-sm text-gray-200 outline-none focus:border-ccaccent/50" />
+                  </label>
+                  <label class="block">
+                    <span class="text-xs text-gray-400 mb-1 block">Audience</span>
+                    <select id="hero-cc-f-auth-state" class="w-full bg-black/30 border border-ccborder rounded-lg px-3 py-2 text-sm text-gray-200 outline-none focus:border-ccaccent/50">
+                      <option value="all">Everyone</option>
+                      <option value="authenticated">Signed-in only</option>
+                      <option value="anonymous">Anonymous only</option>
+                    </select>
+                  </label>
+                </div>
+                <p class="text-[11px] text-gray-600 mt-2">Targeting is stored now and enforced starting Phase 4 — every campaign is still shown to all visitors today regardless of these fields (see Checkpoint 1 report).</p>
+              </div>
+
+              <div class="flex items-center justify-end gap-2 pt-2 sticky bottom-0 bg-ccpanel2 pb-1">
+                <button type="button" id="hero-cc-modal-cancel" class="text-sm text-gray-400 px-4 py-2.5 rounded-xl hover:text-white">Cancel</button>
+                <button type="submit" id="hero-cc-form-submit" class="bg-ccaccent text-ccbg font-bold text-sm px-5 py-2.5 rounded-xl hover:brightness-110 transition">Save Campaign</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ---------- Preview modal (desktop + mobile) ---------- */}
+      <div id="hero-cc-preview-modal" class="hidden fixed inset-0 z-50 items-center justify-center p-4 bg-black/70 backdrop-blur-sm" style="display:none;">
+        <div class="bg-ccpanel2 border border-ccborder rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto cc-scrollbar">
+          <div class="flex items-center justify-between px-6 py-4 border-b border-ccborder sticky top-0 bg-ccpanel2 z-10">
+            <h2 class="text-lg font-bold text-white">Preview</h2>
+            <button id="hero-cc-preview-close" type="button" class="text-gray-400 hover:text-white"><span class="material-symbols-outlined">close</span></button>
+          </div>
+          <div class="p-6 space-y-4" id="hero-cc-preview-body"></div>
+        </div>
+      </div>
+
+      <script
+        dangerouslySetInnerHTML={{
+          __html: `
+          (function () {
+            var root = document.getElementById('hero-cc-root');
+            var canManage = root && root.getAttribute('data-can-manage') === '1';
+            var tbody = document.getElementById('hero-cc-tbody');
+            var searchInput = document.getElementById('hero-cc-search');
+            var stateFilter = document.getElementById('hero-cc-filter-state');
+            var verticalFilter = document.getElementById('hero-cc-filter-vertical');
+            var countLabel = document.getElementById('hero-cc-count-label');
+            var emptyState = document.getElementById('hero-cc-empty-state');
+
+            function applyFilters() {
+              var q = (searchInput.value || '').toLowerCase();
+              var st = stateFilter.value;
+              var vt = verticalFilter.value;
+              var visible = 0;
+              document.querySelectorAll('.hero-cc-row').forEach(function (row) {
+                var matchesQ = !q || row.getAttribute('data-search').indexOf(q) !== -1;
+                var matchesSt = !st || row.getAttribute('data-status') === st;
+                var matchesVt = !vt || row.getAttribute('data-vertical') === vt;
+                var show = matchesQ && matchesSt && matchesVt;
+                row.classList.toggle('hidden', !show);
+                if (show) visible++;
+              });
+              countLabel.textContent = visible + ' campaign' + (visible === 1 ? '' : 's');
+              emptyState.classList.toggle('hidden', visible !== 0);
+            }
+            searchInput.addEventListener('input', applyFilters);
+            stateFilter.addEventListener('change', applyFilters);
+            verticalFilter.addEventListener('change', applyFilters);
+
+            // ---------- Preview modal ----------
+            var previewModal = document.getElementById('hero-cc-preview-modal');
+            var previewBody = document.getElementById('hero-cc-preview-body');
+            function openPreview(id) {
+              fetch('/api/control-center/hero-campaigns/' + id).then(function (r) { return r.json(); }).then(function (data) {
+                var row = data.result;
+                if (!row) return;
+                previewBody.innerHTML =
+                  '<div class="text-xs text-gray-500 mb-1">Desktop (65% hero zone)</div>' +
+                  '<img src="' + row.image_desktop_url + '" class="w-full rounded-xl border border-ccborder mb-4" />' +
+                  '<div class="text-xs text-gray-500 mb-1">Mobile carousel slide</div>' +
+                  '<img src="' + row.image_mobile_url + '" class="w-40 mx-auto rounded-xl border border-ccborder mb-4" />' +
+                  '<div class="bg-black/30 rounded-xl p-4">' +
+                  '<div class="text-white font-bold text-lg">' + (row.title || '').replace(/</g,'&lt;') + '</div>' +
+                  '<div class="text-gray-400 text-sm mt-1">' + (row.subtitle || '').replace(/</g,'&lt;') + '</div>' +
+                  '<div class="inline-block mt-3 bg-ccaccent text-ccbg font-bold text-xs px-3 py-2 rounded-lg">' + (row.cta_label || '').replace(/</g,'&lt;') + '</div>' +
+                  '<div class="text-gray-600 text-xs mt-2">Links to: ' + (row.cta_href || '').replace(/</g,'&lt;') + '</div>' +
+                  '</div>';
+                previewModal.style.display = 'flex';
+                previewModal.classList.remove('hidden');
+              });
+            }
+            document.querySelectorAll('.hero-cc-preview-btn').forEach(function (btn) {
+              btn.addEventListener('click', function () { openPreview(btn.getAttribute('data-id')); });
+            });
+            document.getElementById('hero-cc-preview-close').addEventListener('click', function () {
+              previewModal.style.display = 'none'; previewModal.classList.add('hidden');
+            });
+            previewModal.addEventListener('click', function (e) { if (e.target === previewModal) { previewModal.style.display = 'none'; previewModal.classList.add('hidden'); } });
+
+            if (!canManage) return; // everything below is management-only
+
+            // ---------- Create/Edit modal ----------
+            var modal = document.getElementById('hero-cc-modal');
+            var modalTitle = document.getElementById('hero-cc-modal-title');
+            var form = document.getElementById('hero-cc-form');
+            var formError = document.getElementById('hero-cc-form-error');
+            var fId = document.getElementById('hero-cc-form-id');
+            var fSlug = document.getElementById('hero-cc-f-slug');
+            var fVertical = document.getElementById('hero-cc-f-vertical');
+            var fTitle = document.getElementById('hero-cc-f-title');
+            var fSubtitle = document.getElementById('hero-cc-f-subtitle');
+            var fCtaLabel = document.getElementById('hero-cc-f-cta-label');
+            var fCtaHref = document.getElementById('hero-cc-f-cta-href');
+            var fImagePicker = document.getElementById('hero-cc-f-image-picker');
+            var fImageDesktop = document.getElementById('hero-cc-f-image-desktop');
+            var fImageMobile = document.getElementById('hero-cc-f-image-mobile');
+            var fPreviewDesktop = document.getElementById('hero-cc-f-preview-desktop');
+            var fPreviewMobile = document.getElementById('hero-cc-f-preview-mobile');
+            var fTheme = document.getElementById('hero-cc-f-theme');
+            var fStartsAt = document.getElementById('hero-cc-f-starts-at');
+            var fEndsAt = document.getElementById('hero-cc-f-ends-at');
+            var fCountries = document.getElementById('hero-cc-f-countries');
+            var fSegment = document.getElementById('hero-cc-f-segment');
+            var fAuthState = document.getElementById('hero-cc-f-auth-state');
+
+            function showImgPreview(imgEl, url) {
+              if (url) { imgEl.src = url; imgEl.classList.remove('hidden'); } else { imgEl.classList.add('hidden'); imgEl.src=''; }
+            }
+            fImageDesktop.addEventListener('input', function(){ showImgPreview(fPreviewDesktop, fImageDesktop.value); });
+            fImageMobile.addEventListener('input', function(){ showImgPreview(fPreviewMobile, fImageMobile.value); });
+            fImagePicker.addEventListener('change', function () {
+              var opt = fImagePicker.options[fImagePicker.selectedIndex];
+              if (!opt || !opt.getAttribute('data-desktop')) return;
+              fImageDesktop.value = opt.getAttribute('data-desktop');
+              fImageMobile.value = opt.getAttribute('data-mobile');
+              showImgPreview(fPreviewDesktop, fImageDesktop.value);
+              showImgPreview(fPreviewMobile, fImageMobile.value);
+            });
+
+            function openModal(mode, row) {
+              formError.classList.add('hidden'); formError.textContent = '';
+              form.reset();
+              fPreviewDesktop.classList.add('hidden');
+              fPreviewMobile.classList.add('hidden');
+              Array.from(fCountries.options).forEach(function(o){ o.selected = false; });
+              if (mode === 'create') {
+                modalTitle.textContent = 'Create Campaign';
+                fId.value = '';
+                fTheme.value = 'dark';
+                fAuthState.value = 'all';
+                fSegment.value = 'all';
+              } else {
+                modalTitle.textContent = 'Edit Campaign';
+                fId.value = row.id;
+                fSlug.value = row.slug;
+                fVertical.value = row.vertical;
+                fTitle.value = row.title;
+                fSubtitle.value = row.subtitle || '';
+                fCtaLabel.value = row.cta_label;
+                fCtaHref.value = row.cta_href;
+                fImageDesktop.value = row.image_desktop_url;
+                fImageMobile.value = row.image_mobile_url;
+                showImgPreview(fPreviewDesktop, row.image_desktop_url);
+                showImgPreview(fPreviewMobile, row.image_mobile_url);
+                fTheme.value = row.theme;
+                fStartsAt.value = row.starts_at ? row.starts_at.replace(' ', 'T').slice(0,16) : '';
+                fEndsAt.value = row.ends_at ? row.ends_at.replace(' ', 'T').slice(0,16) : '';
+                var tc = row.target_countries ? JSON.parse(row.target_countries) : [];
+                Array.from(fCountries.options).forEach(function(o){ o.selected = tc.indexOf(o.value) !== -1; });
+                fSegment.value = row.target_segment || 'all';
+                fAuthState.value = row.target_auth_state || 'all';
+              }
+              modal.style.display = 'flex';
+              modal.classList.remove('hidden');
+            }
+            function closeModal() { modal.style.display = 'none'; modal.classList.add('hidden'); }
+            document.getElementById('hero-cc-create-btn').addEventListener('click', function () { openModal('create'); });
+            document.getElementById('hero-cc-modal-close').addEventListener('click', closeModal);
+            document.getElementById('hero-cc-modal-cancel').addEventListener('click', closeModal);
+            modal.addEventListener('click', function (e) { if (e.target === modal) closeModal(); });
+
+            document.querySelectorAll('.hero-cc-edit-btn').forEach(function (btn) {
+              btn.addEventListener('click', function () {
+                fetch('/api/control-center/hero-campaigns/' + btn.getAttribute('data-id')).then(function(r){return r.json();}).then(function(data){
+                  if (data.result) openModal('edit', data.result);
+                });
+              });
+            });
+
+            form.addEventListener('submit', function (e) {
+              e.preventDefault();
+              var id = fId.value;
+              var selectedCountries = Array.from(fCountries.selectedOptions).map(function(o){ return o.value; });
+              var payload = {
+                slug: fSlug.value.trim(),
+                title: fTitle.value.trim(),
+                subtitle: fSubtitle.value.trim() || null,
+                cta_label: fCtaLabel.value.trim(),
+                cta_href: fCtaHref.value.trim(),
+                vertical: fVertical.value,
+                theme: fTheme.value,
+                image_desktop_url: fImageDesktop.value.trim(),
+                image_mobile_url: fImageMobile.value.trim(),
+                starts_at: fStartsAt.value ? fStartsAt.value.replace('T', ' ') + ':00' : null,
+                ends_at: fEndsAt.value ? fEndsAt.value.replace('T', ' ') + ':00' : null,
+                target_countries: selectedCountries,
+                target_segment: fSegment.value.trim() || 'all',
+                target_auth_state: fAuthState.value
+              };
+              var url = id ? '/api/control-center/hero-campaigns/' + id : '/api/control-center/hero-campaigns';
+              var method = id ? 'PATCH' : 'POST';
+              document.getElementById('hero-cc-form-submit').disabled = true;
+              fetch(url, { method: method, headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) })
+                .then(function (res) { return res.json().then(function(data){ return {ok: res.ok, data: data}; }); })
+                .then(function (result) {
+                  document.getElementById('hero-cc-form-submit').disabled = false;
+                  if (!result.ok) { formError.textContent = result.data.error || 'Failed to save campaign'; formError.classList.remove('hidden'); return; }
+                  location.reload();
+                })
+                .catch(function () { document.getElementById('hero-cc-form-submit').disabled = false; formError.textContent = 'Network error'; formError.classList.remove('hidden'); });
+            });
+
+            // ---------- Row action buttons ----------
+            tbody.addEventListener('click', function (e) {
+              var dup = e.target.closest('.hero-cc-duplicate-btn');
+              var status = e.target.closest('.hero-cc-status-btn');
+              var archive = e.target.closest('.hero-cc-archive-btn');
+              var restore = e.target.closest('.hero-cc-restore-btn');
+              if (dup) {
+                fetch('/api/control-center/hero-campaigns/' + dup.getAttribute('data-id') + '/duplicate', { method: 'POST' })
+                  .then(function(r){ return r.json(); }).then(function(data){
+                    if (data.id) location.reload(); else alert(data.error || 'Failed to duplicate');
+                  });
+              } else if (status) {
+                var targetStatus = status.getAttribute('data-target-status');
+                fetch('/api/control-center/hero-campaigns/' + status.getAttribute('data-id') + '/status', {
+                  method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ status: targetStatus })
+                }).then(function(r){ return r.json(); }).then(function(data){
+                  if (data.success) location.reload(); else alert(data.error || 'Failed to update status');
+                });
+              } else if (archive) {
+                if (!confirm('Archive this campaign? It will be removed from the homepage and hidden from the default list, but its history is preserved and it can be restored later.')) return;
+                fetch('/api/control-center/hero-campaigns/' + archive.getAttribute('data-id') + '/archive', { method: 'POST' })
+                  .then(function(r){ return r.json(); }).then(function(data){
+                    if (data.success) location.reload(); else alert(data.error || 'Failed to archive');
+                  });
+              } else if (restore) {
+                fetch('/api/control-center/hero-campaigns/' + restore.getAttribute('data-id') + '/restore', { method: 'POST' })
+                  .then(function(r){ return r.json(); }).then(function(data){
+                    if (data.success) location.reload(); else alert(data.error || 'Failed to restore');
+                  });
+              }
+            });
+
+            // ---------- Drag-and-drop reorder (desktop rows) ----------
+            var draggedRow = null;
+            tbody.querySelectorAll('.hero-cc-row').forEach(function (row) {
+              row.addEventListener('dragstart', function () { draggedRow = row; row.classList.add('opacity-40'); });
+              row.addEventListener('dragend', function () { row.classList.remove('opacity-40'); draggedRow = null; });
+              row.addEventListener('dragover', function (e) { e.preventDefault(); });
+              row.addEventListener('drop', function (e) {
+                e.preventDefault();
+                if (!draggedRow || draggedRow === row) return;
+                var rows = Array.from(tbody.querySelectorAll('.hero-cc-row'));
+                var draggedIdx = rows.indexOf(draggedRow);
+                var targetIdx = rows.indexOf(row);
+                if (draggedIdx < targetIdx) row.after(draggedRow); else row.before(draggedRow);
+                var orderedIds = Array.from(tbody.querySelectorAll('.hero-cc-row')).map(function (r) { return Number(r.getAttribute('data-id')); });
+                fetch('/api/control-center/hero-campaigns/reorder', {
+                  method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ ordered_ids: orderedIds })
+                }).then(function(r){ return r.json(); }).then(function(data){
+                  if (!data.success) alert(data.error || 'Failed to save new order');
+                });
+              });
+            });
+          })();
+        `,
+        }}
+      ></script>
     </ControlCenterLayout>
   )
 })

@@ -22,7 +22,8 @@ import {
   getPopularVendors,
   getLimitedTimeDeals,
   getPopularCategories,
-  getFeaturedHomeCategories
+  getFeaturedHomeCategories,
+  getShopByInterest
 } from './catalog'
 import { getActiveHeroCampaigns } from './hero-campaigns'
 
@@ -48,7 +49,8 @@ const SECTION_LOADERS: Record<string, (db: D1Database) => Promise<any>> = {
   top_brands: (db) => getTopBrands(db, 12),
   shop_by_category: (db) => getFeaturedHomeCategories(db, 12),
   popular_categories: (db) => getPopularCategories(db, 15),
-  popular_vendors: (db) => getPopularVendors(db, 8)
+  popular_vendors: (db) => getPopularVendors(db, 8),
+  shop_by_interest: (db) => getShopByInterest(db, 9)
 }
 
 async function getCachedSection<T>(db: D1Database, key: string): Promise<T | null> {
@@ -70,6 +72,21 @@ async function setCachedSection(db: D1Database, key: string, data: any) {
     )
     .bind(key, JSON.stringify(data))
     .run()
+}
+
+/**
+ * Force-expires one cached section immediately — the NEXT homepage request
+ * recomputes it fresh instead of waiting out the TTL_SECONDS window. Enterprise
+ * Control Center mutation routes (e.g. api-control-center.ts's hero campaign
+ * create/update/status/archive/reorder endpoints) MUST call this after every write
+ * that changes what a cached section's query would return, so "Activate" or
+ * "Delete" is reflected on the live homepage within one request, not up to 120s
+ * later. Implemented as a DELETE (not an UPDATE) so a section with zero cached
+ * row is a well-defined, identical state to "just invalidated" — getSection()'s
+ * getCachedSection() already treats "no row" the same as "stale row".
+ */
+export async function invalidateHomepageFeedSection(db: D1Database, key: string): Promise<void> {
+  await db.prepare('DELETE FROM homepage_feed_cache WHERE section_key = ?').bind(key).run()
 }
 
 /** Fetches one homepage section, using the cache if fresh, else recomputing + refreshing it. */
@@ -102,5 +119,6 @@ export async function getHomepageFeed(db: D1Database) {
     shop_by_category: any[]
     popular_categories: any[]
     popular_vendors: any[]
+    shop_by_interest: any[]
   }
 }

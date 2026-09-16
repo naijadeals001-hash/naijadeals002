@@ -13,7 +13,17 @@ import type { HeroCampaignRow } from '../types'
  * This function is intentionally NOT called directly from home.tsx per-request.
  * It is registered as a section loader in homepage-feed.ts's SECTION_LOADERS map,
  * so it inherits that module's TTL cache (one D1 query per cache window, not one
- * per visitor) automatically — see homepage-feed.ts for the cache mechanics.
+ * per visitor) automatically — see homepage-feed.ts for the cache mechanics. Any
+ * write via src/lib/hero-campaigns-admin.ts's create/update/status/archive/reorder
+ * functions must be paired with homepage-feed.ts's invalidateSection('hero_campaigns')
+ * at the route layer so a just-published/paused campaign reflects immediately
+ * instead of waiting out the TTL.
+ *
+ * `is_archived = 0` (migration 0061, Enterprise Control Center Checkpoint 1) is a
+ * deliberate belt-and-suspenders clause: the admin's archive action already forces
+ * status='inactive' at the same time, so this condition should never independently
+ * matter — but the public homepage query must never depend on the admin write path
+ * having been implemented perfectly.
  */
 export async function getActiveHeroCampaigns(db: D1Database, limit = 12): Promise<HeroCampaignRow[]> {
   const { results } = await db
@@ -22,6 +32,7 @@ export async function getActiveHeroCampaigns(db: D1Database, limit = 12): Promis
               cta_label, cta_href, vertical, theme, display_order
        FROM hero_campaigns
        WHERE status = 'active'
+         AND is_archived = 0
          AND (starts_at IS NULL OR starts_at <= datetime('now'))
          AND (ends_at IS NULL OR ends_at > datetime('now'))
        ORDER BY display_order ASC, id ASC

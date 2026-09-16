@@ -44,6 +44,21 @@ import {
 import { applyModerationDecision, getListingForModeration, getPendingModerationQueue, type ModerationDecision } from '../lib/moderation'
 import { applyUserStatusDecision, isValidAccountStatus, UserNotFoundError, InvalidStatusError } from '../lib/user-lifecycle'
 import {
+  getAllHeroCampaignsForAdmin,
+  getHeroCampaignById,
+  createHeroCampaign,
+  updateHeroCampaign,
+  setHeroCampaignStatus,
+  duplicateHeroCampaign,
+  archiveHeroCampaign,
+  restoreHeroCampaign,
+  reorderHeroCampaigns,
+  computeCampaignLifecycleState,
+  type HeroCampaignInput,
+} from '../lib/hero-campaigns-admin'
+import { invalidateHomepageFeedSection } from '../lib/homepage-feed'
+import { HERO_IMAGE_LIBRARY } from '../lib/hero-image-library'
+import {
   createCollection,
   updateCollection,
   setCollectionActive,
@@ -591,4 +606,220 @@ apiControlCenterRoutes.get('/notifications/overview', requireControlCenterPermis
   const { getNotificationEngineOverview } = await import('../lib/notification-observability')
   const overview = await getNotificationEngineOverview(c.env.DB)
   return c.json(overview)
+})
+
+// ============================================================
+// HERO CAMPAIGN MANAGEMENT (Enterprise Control Center Checkpoint 1)
+//
+// The FIRST write path this codebase has ever had for hero_campaigns — the
+// read-only forensic audit confirmed zero INSERT/UPDATE/DELETE against this
+// table anywhere prior to this checkpoint. Gated by the EXISTING
+// promotions.read / promotions.manage permission keys (migration 0050) —
+// their own descriptions already named "hero campaigns" explicitly, so no
+// new permission migration was needed for this checkpoint. Every mutation
+// is delegated to src/lib/hero-campaigns-admin.ts (this file contains no
+// business logic, exactly this file's own established thin-controller
+// convention) and paired with a real cc_audit_logs row via
+// recordControlCenterAction, plus a homepage_feed_cache invalidation so a
+// just-published/paused/archived campaign reflects on the live homepage
+// within one request instead of waiting out homepage-feed.ts's 120s TTL.
+// ============================================================
+
+apiControlCenterRoutes.get('/hero-campaigns', requireControlCenterPermission('promotions.read'), async (c) => {
+  const includeArchived = c.req.query('include_archived') === '1'
+  const results = await getAllHeroCampaignsForAdmin(c.env.DB, { includeArchived })
+  const withState = results.map((row) => ({ ...row, lifecycle_state: computeCampaignLifecycleState(row) }))
+  return c.json({ results: withState })
+})
+
+apiControlCenterRoutes.get('/hero-campaigns/image-library', requireControlCenterPermission('promotions.read'), async (c) => {
+  return c.json({ results: HERO_IMAGE_LIBRARY })
+})
+
+apiControlCenterRoutes.get('/hero-campaigns/:id', requireControlCenterPermission('promotions.read'), async (c) => {
+  const id = Number(c.req.param('id'))
+  if (!Number.isInteger(id) || id <= 0) return c.json({ error: 'Invalid campaign id' }, 400)
+  const row = await getHeroCampaignById(c.env.DB, id)
+  if (!row) return c.json({ error: 'Campaign not found' }, 404)
+  return c.json({ result: { ...row, lifecycle_state: computeCampaignLifecycleState(row) } })
+})
+
+apiControlCenterRoutes.post('/hero-campaigns', requireControlCenterPermission('promotions.manage'), async (c) => {
+  const admin = c.get('user')!
+  const body = await c.req.json<HeroCampaignInput>().catch(() => null)
+  if (!body) return c.json({ error: 'Invalid request body' }, 400)
+
+  try {
+    const id = await createHeroCampaign(c.env.DB, admin.id, body)
+    await recordControlCenterAction(c.env.DB, {
+      actorUserId: admin.id,
+      actorName: admin.name,
+      action: 'hero_campaign_created',
+      entityType: 'hero_campaign',
+      entityId: String(id),
+      afterState: { slug: body.slug, title: body.title, vertical: body.vertical, status: 'inactive' },
+      context: { permission_used: 'promotions.manage' },
+      success: true,
+      ipAddress: getClientIp(c.req.header('cf-connecting-ip') ?? null),
+    })
+    return c.json({ id }, 201)
+  } catch (err: any) {
+    return c.json({ error: err.message ?? 'Failed to create campaign' }, 400)
+  }
+})
+
+apiControlCenterRoutes.patch('/hero-campaigns/:id', requireControlCenterPermission('promotions.manage'), async (c) => {
+  const admin = c.get('user')!
+  const id = Number(c.req.param('id'))
+  if (!Number.isInteger(id) || id <= 0) return c.json({ error: 'Invalid campaign id' }, 400)
+
+  const before = await getHeroCampaignById(c.env.DB, id)
+  if (!before) return c.json({ error: 'Campaign not found' }, 404)
+
+  const body = await c.req.json<Partial<HeroCampaignInput>>().catch(() => null)
+  if (!body) return c.json({ error: 'Invalid request body' }, 400)
+
+  try {
+    const ok = await updateHeroCampaign(c.env.DB, id, admin.id, body)
+    if (!ok) return c.json({ error: 'Campaign not found' }, 404)
+    await invalidateHomepageFeedSection(c.env.DB, 'hero_campaigns')
+    await recordControlCenterAction(c.env.DB, {
+      actorUserId: admin.id,
+      actorName: admin.name,
+      action: 'hero_campaign_updated',
+      entityType: 'hero_campaign',
+      entityId: String(id),
+      beforeState: { title: before.title, cta_href: before.cta_href, status: before.status },
+      afterState: body as Record<string, unknown>,
+      context: { permission_used: 'promotions.manage' },
+      success: true,
+      ipAddress: getClientIp(c.req.header('cf-connecting-ip') ?? null),
+    })
+    return c.json({ success: true })
+  } catch (err: any) {
+    return c.json({ error: err.message ?? 'Failed to update campaign' }, 400)
+  }
+})
+
+apiControlCenterRoutes.post('/hero-campaigns/:id/status', requireControlCenterPermission('promotions.manage'), async (c) => {
+  const admin = c.get('user')!
+  const id = Number(c.req.param('id'))
+  if (!Number.isInteger(id) || id <= 0) return c.json({ error: 'Invalid campaign id' }, 400)
+
+  const body = await c.req.json<{ status?: string }>().catch(() => null)
+  if (!body || (body.status !== 'active' && body.status !== 'inactive')) {
+    return c.json({ error: 'status must be "active" or "inactive"' }, 400)
+  }
+
+  const before = await getHeroCampaignById(c.env.DB, id)
+  if (!before) return c.json({ error: 'Campaign not found' }, 404)
+
+  const ok = await setHeroCampaignStatus(c.env.DB, id, admin.id, body.status)
+  if (!ok) return c.json({ error: 'Campaign not found or is archived' }, 404)
+  await invalidateHomepageFeedSection(c.env.DB, 'hero_campaigns')
+  await recordControlCenterAction(c.env.DB, {
+    actorUserId: admin.id,
+    actorName: admin.name,
+    action: body.status === 'active' ? 'hero_campaign_activated' : 'hero_campaign_paused',
+    entityType: 'hero_campaign',
+    entityId: String(id),
+    beforeState: { status: before.status },
+    afterState: { status: body.status },
+    context: { permission_used: 'promotions.manage' },
+    success: true,
+    ipAddress: getClientIp(c.req.header('cf-connecting-ip') ?? null),
+  })
+  return c.json({ success: true })
+})
+
+apiControlCenterRoutes.post('/hero-campaigns/:id/duplicate', requireControlCenterPermission('promotions.manage'), async (c) => {
+  const admin = c.get('user')!
+  const id = Number(c.req.param('id'))
+  if (!Number.isInteger(id) || id <= 0) return c.json({ error: 'Invalid campaign id' }, 400)
+
+  try {
+    const newId = await duplicateHeroCampaign(c.env.DB, id, admin.id)
+    await recordControlCenterAction(c.env.DB, {
+      actorUserId: admin.id,
+      actorName: admin.name,
+      action: 'hero_campaign_duplicated',
+      entityType: 'hero_campaign',
+      entityId: String(newId),
+      context: { duplicated_from_id: id, permission_used: 'promotions.manage' },
+      success: true,
+      ipAddress: getClientIp(c.req.header('cf-connecting-ip') ?? null),
+    })
+    return c.json({ id: newId }, 201)
+  } catch (err: any) {
+    return c.json({ error: err.message ?? 'Failed to duplicate campaign' }, 400)
+  }
+})
+
+apiControlCenterRoutes.post('/hero-campaigns/:id/archive', requireControlCenterPermission('promotions.manage'), async (c) => {
+  const admin = c.get('user')!
+  const id = Number(c.req.param('id'))
+  if (!Number.isInteger(id) || id <= 0) return c.json({ error: 'Invalid campaign id' }, 400)
+
+  const before = await getHeroCampaignById(c.env.DB, id)
+  if (!before) return c.json({ error: 'Campaign not found' }, 404)
+
+  const ok = await archiveHeroCampaign(c.env.DB, id, admin.id)
+  if (!ok) return c.json({ error: 'Campaign not found' }, 404)
+  await invalidateHomepageFeedSection(c.env.DB, 'hero_campaigns')
+  await recordControlCenterAction(c.env.DB, {
+    actorUserId: admin.id,
+    actorName: admin.name,
+    action: 'hero_campaign_archived',
+    entityType: 'hero_campaign',
+    entityId: String(id),
+    beforeState: { status: before.status, is_archived: before.is_archived },
+    afterState: { status: 'inactive', is_archived: 1 },
+    context: { permission_used: 'promotions.manage' },
+    success: true,
+    ipAddress: getClientIp(c.req.header('cf-connecting-ip') ?? null),
+  })
+  return c.json({ success: true })
+})
+
+apiControlCenterRoutes.post('/hero-campaigns/:id/restore', requireControlCenterPermission('promotions.manage'), async (c) => {
+  const admin = c.get('user')!
+  const id = Number(c.req.param('id'))
+  if (!Number.isInteger(id) || id <= 0) return c.json({ error: 'Invalid campaign id' }, 400)
+
+  const ok = await restoreHeroCampaign(c.env.DB, id, admin.id)
+  if (!ok) return c.json({ error: 'Campaign not found' }, 404)
+  await recordControlCenterAction(c.env.DB, {
+    actorUserId: admin.id,
+    actorName: admin.name,
+    action: 'hero_campaign_restored',
+    entityType: 'hero_campaign',
+    entityId: String(id),
+    afterState: { is_archived: 0 },
+    context: { permission_used: 'promotions.manage' },
+    success: true,
+    ipAddress: getClientIp(c.req.header('cf-connecting-ip') ?? null),
+  })
+  return c.json({ success: true })
+})
+
+apiControlCenterRoutes.post('/hero-campaigns/reorder', requireControlCenterPermission('promotions.manage'), async (c) => {
+  const admin = c.get('user')!
+  const body = await c.req.json<{ ordered_ids?: number[] }>().catch(() => null)
+  if (!body || !Array.isArray(body.ordered_ids) || body.ordered_ids.length === 0) {
+    return c.json({ error: 'ordered_ids array is required' }, 400)
+  }
+  await reorderHeroCampaigns(c.env.DB, admin.id, body.ordered_ids)
+  await invalidateHomepageFeedSection(c.env.DB, 'hero_campaigns')
+  await recordControlCenterAction(c.env.DB, {
+    actorUserId: admin.id,
+    actorName: admin.name,
+    action: 'hero_campaign_reordered',
+    entityType: 'hero_campaign',
+    entityId: null,
+    afterState: { ordered_ids: body.ordered_ids },
+    context: { permission_used: 'promotions.manage' },
+    success: true,
+    ipAddress: getClientIp(c.req.header('cf-connecting-ip') ?? null),
+  })
+  return c.json({ success: true })
 })
