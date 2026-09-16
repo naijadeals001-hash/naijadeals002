@@ -2,7 +2,8 @@ import type { Context } from 'hono'
 import { getCookie } from 'hono/cookie'
 import { Layout } from '../components/Layout'
 import { ProductCarousel } from '../components/ProductCard'
-import { HeroCarousel } from '../components/HeroCarousel'
+import { HeroZone } from '../components/HeroZone'
+import { EcosystemWaitlistModal } from '../components/EcosystemWaitlistModal'
 import {
   getTopLevelCategories,
   getDealsNearYou
@@ -10,6 +11,7 @@ import {
 import { getHomepageFeed } from '../lib/homepage-feed'
 import { getAllVerticals } from '../lib/ecosystem-verticals'
 import { getDiscoverableCountries } from '../lib/country'
+import { getPersonalizationSnapshot } from '../lib/personalization'
 import type { AppEnv, VendorRow } from '../types'
 
 /**
@@ -26,12 +28,19 @@ export async function homePage(c: Context<AppEnv>) {
   const locale = c.get('locale')
   const selectedCity = getCookie(c, 'nd_city') || 'Lagos'
 
-  const [categories, feed, dealsNearYou, verticals, discoverableCountries] = await Promise.all([
+  const [categories, feed, dealsNearYou, verticals, discoverableCountries, personalization] = await Promise.all([
     getTopLevelCategories(db),
     getHomepageFeed(db),
     getDealsNearYou(db, selectedCity, 10),
     getAllVerticals(db),
-    getDiscoverableCountries(db, 54)
+    getDiscoverableCountries(db, 54),
+    // Checkpoint A (hero rebuild): real account data for the hero's Zone 3
+    // personalization card — reuses the SAME wallet/wishlist/orders
+    // primitives every other authenticated page already reads (see
+    // src/lib/personalization.ts). Logged-out visitors get null (HeroZone
+    // renders the non-personalized "Join NaijaDeals" card instead) — never
+    // a guessed/fabricated snapshot.
+    user ? getPersonalizationSnapshot(db, user.id) : Promise.resolve(null)
   ])
 
   // Ecosystem Spotlight (section 17 below) is now ARCHITECTED for the full ecosystem,
@@ -56,21 +65,28 @@ export async function homePage(c: Context<AppEnv>) {
 
   return c.render(
     <Layout title="Home" user={user} selectedCity={selectedCity} locale={locale}>
-      {/* ============ 1. HERO — DB-driven 5-panel campaign mosaic (desktop) / carousel (mobile) ============
-          <HeroCarousel> renders feed.hero_campaigns (hero_campaigns table via getActiveHeroCampaigns(),
-          cached by homepage-feed.ts's SECTION_LOADERS — this data was already being fetched every
-          request). Fully DB-driven: no campaign content is hardcoded here. This is the ONE authoritative
-          hero — no competing static grid, no second carousel, no second hero table. Desktop shows all 5
-          seeded campaigns simultaneously as 1 primary + 4 supporting panels (the original hero's
-          visually-rich 5-image composition); mobile falls back to a single-campaign swipeable carousel.
-          See src/components/HeroCarousel.tsx for the full rationale. */}
+      {/* ============ 1. HERO — 3-ZONE COMPOSITION (Checkpoint A rebuild) ============
+          <HeroZone> replaces the old 5-panel HeroCarousel grid. Structural fix per Pat's
+          "APPROVED DIRECTION" directive: primary rotating campaign (~65%) + static app-promo
+          panel (~20%) + real-data personalization card (~15%), matching the reference's
+          3-zone hero instead of a flat N-panel mosaic. Same feed.hero_campaigns DB-driven
+          data (10+ campaigns rotate through the ONE primary slot — never padded to N panels).
+          Mobile falls back to the same single-campaign swipeable carousel as before, plus a
+          compact 2-up app/personalization strip so those zones aren't simply absent on mobile.
+          <EcosystemWaitlistModal> is mounted once here so the hero's "Join the waitlist" CTA
+          is a real, functional trigger — not a decorative dead link. */}
       <section class="bg-white border-b border-gray-100">
         <div class="max-w-[100rem] mx-auto px-3 md:px-6 lg:px-8 py-3 md:py-5">
-          <HeroCarousel campaigns={feed.hero_campaigns} />
+          <HeroZone campaigns={feed.hero_campaigns} user={user} personalization={personalization} />
         </div>
       </section>
+      <EcosystemWaitlistModal />
 
-      {/* ============ 2. SHOP BY CATEGORY ============ */}
+      {/* ============ 2. SHOP BY CATEGORY (icon grid — TEMPORARY, Checkpoint B replaces
+          this with a MerchandisingRail of real category photography per Pat's directive.
+          Left in place unchanged for Checkpoint A so category navigation is never simply
+          removed mid-rebuild — "missing asset != remove section" applies to structural
+          work-in-progress too, not just missing images.) ============ */}
       <section class="py-6 md:py-8 border-t border-gray-100">
         <div class="max-w-[100rem] mx-auto px-4 md:px-6 lg:px-8">
           <h2 class="text-lg md:text-xl font-bold text-gray-900 mb-4">Shop by Category</h2>
