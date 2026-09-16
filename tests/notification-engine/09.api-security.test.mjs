@@ -19,6 +19,36 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { registerUser, promoteToAdmin, queryOneD1, execD1, ApiClient } from './helpers/client.mjs'
 
+/**
+ * ADR-001 Step 2 regression-suite maintenance (2026-09-16): the 5
+ * '/api/admin/notifications/*' references below were split by that step —
+ * GET /notifications/overview was re-homed to
+ * /api/control-center/notifications/overview and DELETED from
+ * api-admin.ts (commit d2655b4); POST /notifications/process-outbox and
+ * POST /notifications/retry-failed are Step-3-territory routes and were
+ * DELIBERATELY LEFT UNCHANGED at their original /api/admin/* paths (still
+ * gated by the legacy requirePlatformRole('admin') / promoteToAdmin()).
+ * Only the /overview references are updated here; process-outbox and
+ * retry-failed paths are untouched, per the Step-3 scope boundary.
+ *
+ * The overview route's authorization model is NOT `users.role='admin'` —
+ * it requires a separate cc_user_roles grant (independently proven by
+ * control-center/01.authentication.test.mjs's AUTH-DENY-5: "a
+ * platform-level admin STILL cannot access the Control Center without an
+ * explicit cc_user_roles grant"). This local helper grants 'platform_admin'
+ * (the same universal positive fixture used by the Step 2 authz suite —
+ * holds notifications.read via migration 0050's blanket rule) directly via
+ * D1, mirroring tests/control-center/helpers/client.mjs's own
+ * grantControlCenterRole() exactly. Test-only, never a production code path.
+ */
+async function grantPlatformAdminCcRole(userId) {
+  const roleRow = await queryOneD1(`SELECT id FROM cc_roles WHERE key = 'platform_admin'`)
+  assert.ok(roleRow, `grantPlatformAdminCcRole: 'platform_admin' not found in cc_roles — check migration 0050's seed data`)
+  await execD1(
+    `INSERT INTO cc_user_roles (user_id, role_id, assigned_by_user_id) VALUES (${Number(userId)}, ${roleRow.id}, ${Number(userId)})`
+  )
+}
+
 // ---------- Notification list / mark-read ownership ----------
 
 test('security: unauthenticated GET /api/notifications is rejected 401', async () => {
@@ -83,13 +113,13 @@ test('security: mark-read with a non-numeric/garbage id is rejected 400, never a
 
 test('security: unauthenticated request to admin notifications overview is rejected 401', async () => {
   const bare = new ApiClient()
-  const res = await bare.get('/api/admin/notifications/overview')
+  const res = await bare.get('/api/control-center/notifications/overview')
   assert.equal(res.status, 401)
 })
 
 test('security: an ORDINARY authenticated (non-admin) user is rejected 403 from the admin notifications overview', async () => {
   const { client } = await registerUser('sec_admin_denied')
-  const res = await client.get('/api/admin/notifications/overview')
+  const res = await client.get('/api/control-center/notifications/overview')
   assert.equal(res.status, 403)
 })
 
@@ -107,10 +137,14 @@ test('security: an ORDINARY authenticated (non-admin) user is rejected 403 from 
 
 test('security: after promotion, the SAME user genuinely gains admin access (positive control proving the 403s above are role-based, not broken auth)', async () => {
   const { client, userId } = await registerUser('sec_admin_promoted')
-  const before = await client.get('/api/admin/notifications/overview')
+  const before = await client.get('/api/control-center/notifications/overview')
   assert.equal(before.status, 403)
+  // promoteToAdmin() (legacy users.role='admin') is retained here to prove
+  // it is NOT sufficient on its own for Control Center access — the real
+  // grant is the cc_user_roles row below (see header comment).
   await promoteToAdmin(userId)
-  const after = await client.get('/api/admin/notifications/overview')
+  await grantPlatformAdminCcRole(userId)
+  const after = await client.get('/api/control-center/notifications/overview')
   assert.equal(after.status, 200)
 })
 
@@ -119,7 +153,8 @@ test('security: after promotion, the SAME user genuinely gains admin access (pos
 test('security: admin observability overview NEVER includes config_json, credentials, or per-recipient notification content', async () => {
   const { client, userId } = await registerUser('sec_observability_leak')
   await promoteToAdmin(userId)
-  const res = await client.get('/api/admin/notifications/overview')
+  await grantPlatformAdminCcRole(userId)
+  const res = await client.get('/api/control-center/notifications/overview')
   assert.equal(res.status, 200)
   const raw = JSON.stringify(res.body)
   assert.ok(!/config_json/i.test(raw), 'response must never include the raw config_json key name')
