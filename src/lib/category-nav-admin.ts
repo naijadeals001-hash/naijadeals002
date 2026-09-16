@@ -127,12 +127,14 @@ export async function reorderCategoryChildren(db: D1Database, parentId: number |
 }
 
 /**
- * Ecosystem vertical navigation config — SCHEMA-ONLY FOUNDATION per
- * migration 0062's header comment. Reads/writes ecosystem_verticals'
- * existing columns (status, display_order, icon, name, route) plus the
- * new nav_visible column. Layout.tsx's header strip does NOT consume this
- * yet (honestly reported as remaining work) — this service layer exists
- * so the Control Center UI + API are real and ready for that follow-up.
+ * Ecosystem vertical navigation config — Micro-Checkpoint 2A: FULLY WIRED
+ * to the customer-facing header. Reads/writes ecosystem_verticals' existing
+ * columns (status, display_order, icon, name, route) plus the nav_visible
+ * column added in migration 0062. Layout.tsx (now an async component) calls
+ * getEcosystemNavLinks() (src/lib/ecosystem-nav.ts) on every request, which
+ * reads these exact same columns — so an admin toggle made through this
+ * module's updateEcosystemNavConfig() is what a customer's browser actually
+ * renders, not a parallel/disconnected configuration surface.
  */
 export interface EcosystemNavAdminRow {
   id: number

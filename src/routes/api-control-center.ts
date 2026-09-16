@@ -78,6 +78,7 @@ import {
   getEcosystemNavConfigForAdmin,
   updateEcosystemNavConfig,
 } from '../lib/category-nav-admin'
+import { invalidateEcosystemNavCache } from '../lib/ecosystem-nav'
 
 export const apiControlCenterRoutes = new Hono<AppEnv>()
 
@@ -920,7 +921,9 @@ apiControlCenterRoutes.get('/category-nav/preview', requireControlCenterPermissi
   return c.json({ results: tree })
 })
 
-// ---------- Ecosystem navigation config (schema-only foundation — see migration 0062) ----------
+// ---------- Ecosystem navigation config (Micro-Checkpoint 2A: fully wired to the
+// customer-facing header via src/lib/ecosystem-nav.ts's cached getEcosystemNavLinks(),
+// consumed by the now-async Layout.tsx component — see migrations 0010/0062) ----------
 
 apiControlCenterRoutes.get('/ecosystem-nav', requireControlCenterPermission('catalog.read'), async (c) => {
   const results = await getEcosystemNavConfigForAdmin(c.env.DB)
@@ -939,6 +942,13 @@ apiControlCenterRoutes.patch('/ecosystem-nav/:id', requireControlCenterPermissio
   const ok = await updateEcosystemNavConfig(c.env.DB, verticalId, input)
   if (!ok) return c.json({ error: 'Vertical not found' }, 404)
 
+  // Micro-Checkpoint 2A: this is the line that closes the architectural loop —
+  // without it, a customer's already-cached header (up to TTL_SECONDS=120s old,
+  // see ecosystem-nav.ts) would keep showing the PRE-toggle state even though
+  // the DB write above already succeeded. Mirrors invalidateHomepageFeedSection's
+  // exact contract/rationale in homepage-feed.ts.
+  await invalidateEcosystemNavCache(c.env.DB)
+
   await recordControlCenterAction(c.env.DB, {
     actorUserId: admin.id,
     actorName: admin.name,
@@ -948,7 +958,7 @@ apiControlCenterRoutes.patch('/ecosystem-nav/:id', requireControlCenterPermissio
     afterState: input,
     context: {
       permission_used: 'catalog.manage',
-      note: 'Schema-only foundation (migration 0062) — Layout.tsx header nav does not yet consume this field. See Checkpoint 2 report Section 7.',
+      note: 'Wired to the customer-facing header (Micro-Checkpoint 2A) — Layout.tsx consumes this via getEcosystemNavLinks(), cache invalidated on this write.',
     },
     success: true,
     ipAddress: getClientIp(c.req.header('cf-connecting-ip') ?? null),

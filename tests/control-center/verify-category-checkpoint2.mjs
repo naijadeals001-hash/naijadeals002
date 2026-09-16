@@ -217,7 +217,7 @@ async function main() {
   const ecoListRes = await admin.client.get('/api/control-center/ecosystem-nav')
   assert.equal(ecoListRes.status, 200)
   assert.equal(ecoListRes.body.results.length, 8, `expected 8 ecosystem verticals, got ${ecoListRes.body.results.length}`)
-  console.log('PASS: GET /ecosystem-nav -> 200, 8 verticals (schema foundation confirmed live)')
+  console.log('PASS: GET /ecosystem-nav -> 200, 8 verticals (now fully wired to the customer header as of Micro-Checkpoint 2A — see verify-ecosystem-nav-2a.mjs for the dedicated live-toggle proof)')
 
   const freshVertical = ecoListRes.body.results[0]
   const originalNavVisible = freshVertical.nav_visible

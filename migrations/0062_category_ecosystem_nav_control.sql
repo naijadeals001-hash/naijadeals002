@@ -66,16 +66,21 @@ CREATE INDEX IF NOT EXISTS idx_categories_nav_visible ON categories(is_visible);
 --
 -- Defaults to 1 for all 8 existing rows — zero behavior change on apply.
 --
--- IMPORTANT — HONESTLY SCOPED: this migration does NOT wire Layout.tsx's
--- hardcoded ECOSYSTEM_LINKS array to read from this table. That requires
--- either (a) making Layout.tsx's header ecosystem strip fetch client-side
--- lazily (mirroring the mega-menu's own proven pattern) or (b) threading
--- vertical data through all 21 page handlers that render <Layout> today.
--- Both are real, non-trivial changes touching the header on every single
--- page — out of the safe scope of a single checkpoint that also delivers
--- the full Category Manager. See Checkpoint 2 report Section 7 for the
--- explicit "what remains" statement. This column and its service/API
--- layer (getEcosystemNavLinks(), GET /api/catalog/ecosystem-nav) are real,
--- live, and ready for that follow-up wiring — but the customer-facing
--- header remains on ECOSYSTEM_LINKS until that follow-up is authorized.
+-- SCOPED AT THE TIME OF THIS MIGRATION (Checkpoint 2): this migration did
+-- NOT yet wire Layout.tsx's header to read this column — that follow-up was
+-- deliberately deferred and honestly reported as remaining work (Checkpoint
+-- 2 report, Section 7), rather than threading vertical data through the ~21
+-- page handlers that render <Layout>, or silently declaring it "done" when
+-- it wasn't.
+--
+-- UPDATE — Micro-Checkpoint 2A (2026-09-16, same day): that follow-up is
+-- now complete. Layout.tsx was made an ASYNC component that reads
+-- useRequestContext() and calls getEcosystemNavLinks() (src/lib/
+-- ecosystem-nav.ts, cached via the existing homepage_feed_cache table) —
+-- avoiding the "thread through 21 page handlers" cost entirely. The
+-- hardcoded ECOSYSTEM_LINKS array has been deleted from Layout.tsx. This
+-- nav_visible column now genuinely controls the live customer-facing header
+-- (desktop pill strip, mobile scroller, mobile drawer) — verified with a
+-- real hide/restore toggle test against the running app. See the
+-- Micro-Checkpoint 2A report for full verification detail.
 ALTER TABLE ecosystem_verticals ADD COLUMN nav_visible INTEGER NOT NULL DEFAULT 1;

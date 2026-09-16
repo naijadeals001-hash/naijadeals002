@@ -1,8 +1,10 @@
 import type { FC } from 'hono/jsx'
-import type { AuthUser } from '../types'
+import { useRequestContext } from 'hono/jsx-renderer'
+import type { AuthUser, AppEnv } from '../types'
 import type { LocaleContext } from '../i18n'
 import { createTranslator, LANGUAGES, LIVE_LANGUAGES, LANG_QUERY_PARAM } from '../i18n'
 import { LanguageSelector } from './LanguageSelector'
+import { getEcosystemNavLinks, type EcosystemNavLink } from '../lib/ecosystem-nav'
 
 interface LayoutProps {
   title?: string
@@ -28,34 +30,40 @@ interface LayoutProps {
 
 const CITIES = ['Lagos', 'Abuja', 'Port Harcourt', 'Ibadan', 'Kano', 'Enugu', 'Benin City', 'Kaduna', 'Owerri', 'Uyo', 'Aba', 'Jos']
 
-const ECOSYSTEM_LINKS = [
-  { href: '/shop', label: 'NaijaShop', icon: 'storefront', live: true },
-  { href: '/fresh', label: 'NaijaFresh', icon: 'nutrition', live: false },
-  { href: '/eats', label: 'NaijaEats', icon: 'restaurant', live: false },
-  { href: '/gigs', label: 'NaijaGigs', icon: 'design_services', live: false },
-  { href: '/stay', label: 'NaijaStay', icon: 'bed', live: false },
-  { href: '/drive', label: 'NaijaDrive', icon: 'directions_car', live: false },
-  { href: '/send', label: 'NaijaSend', icon: 'local_shipping', live: false },
-  { href: '/stream', label: 'NaijaStream', icon: 'play_circle', live: false },
-  { href: '/aura', label: 'Aura AI', icon: 'auto_awesome', live: false }
-]
-
 /**
- * Phase 1b: the old hardcoded slug list above (removed) drifted out of sync
- * with the real taxonomy the moment migration 0053's seed landed (e.g.
- * `home-kitchen`/`groceries` never matched the real `home-and-kitchen`/
- * `grocery-and-food` slugs) — every link 404'd-to-empty via shop.tsx's
- * honest-zero-results fallback. The header's category surface is now 100%
- * DB-driven: the "All Categories" mega-menu (built client-side in app.js's
- * initMegaMenu() from GET /api/catalog/categories/tree — see
- * src/lib/mega-menu.ts) is the ONLY way to browse categories from the
- * header. No per-page server prop threading needed since it's fetched once,
- * lazily, on first open, same pattern as the existing wallet-balance/
- * wishlist-ids header badges below.
+ * Phase 1b: the old hardcoded category slug list (removed) drifted out of
+ * sync with the real taxonomy the moment migration 0053's seed landed —
+ * every link 404'd-to-empty via shop.tsx's honest-zero-results fallback. The
+ * header's CATEGORY surface is 100% DB-driven: the "All Categories"
+ * mega-menu (built client-side in app.js's initMegaMenu() from GET
+ * /api/catalog/categories/tree — see src/lib/mega-menu.ts) is the ONLY way
+ * to browse categories from the header. No per-page server prop threading
+ * needed since it's fetched once, lazily, client-side on first open, same
+ * pattern as the existing wallet-balance/wishlist-ids header badges below.
+ *
+ * Micro-Checkpoint 2A (2026-09-16): the ECOSYSTEM pill strip (NaijaFresh,
+ * NaijaEats, ...) used to be a hardcoded ECOSYSTEM_LINKS array right here —
+ * meaning the Enterprise Control Center's ecosystem_verticals.nav_visible
+ * toggle (Checkpoint 2's schema-only foundation) had ZERO effect on what a
+ * customer actually saw. That gap is now closed: Layout is an ASYNC
+ * component that reads useRequestContext() to call getEcosystemNavLinks(db)
+ * (src/lib/ecosystem-nav.ts, cache-backed via the existing
+ * homepage_feed_cache table) SERVER-SIDE, on every render, for all three
+ * customer-facing surfaces (desktop pill strip, mobile horizontal scroller,
+ * mobile drawer accordion) below. This is deliberately NOT client-side
+ * fetched like the mega-menu — the ecosystem pills are simple text/icon
+ * links (no deep nested tree to lazy-load), so a direct SSR read keeps the
+ * page from needing an extra client-side network round-trip + layout shift
+ * just to know 8 short strings. NaijaShop stays a pinned, non-DB-driven
+ * first entry (see ecosystem-nav.ts's SHOP_PILL) — it's the core
+ * marketplace this app is built around, not a togglable "vertical" row in
+ * ecosystem_verticals.
  */
 
-export const Layout: FC<LayoutProps> = ({ title, description, user, cartCount = 0, wishlistCount = 0, selectedCity = 'Lagos', locale, children }) => {
+export const Layout: FC<LayoutProps> = async ({ title, description, user, cartCount = 0, wishlistCount = 0, selectedCity = 'Lagos', locale, children }) => {
   const t = createTranslator(locale)
+  const c = useRequestContext<AppEnv>()
+  const ecosystemLinks: EcosystemNavLink[] = await getEcosystemNavLinks(c.env.DB)
   return (
     <html lang={locale.language} dir={locale.dir}>
       <head>
@@ -201,8 +209,8 @@ export const Layout: FC<LayoutProps> = ({ title, description, user, cartCount = 
                   <div id="mega-menu-loading" class="p-10 text-center text-gray-400 text-sm">Loading categories…</div>
                 </div>
                 {/* Ecosystem pills — the "one super-app, not nine websites" strip */}
-                <div class="flex items-center gap-1 overflow-x-auto [&::-webkit-scrollbar]:hidden">
-                  {ECOSYSTEM_LINKS.map((eco) => (
+                <div id="ecosystem-nav-desktop" class="flex items-center gap-1 overflow-x-auto [&::-webkit-scrollbar]:hidden">
+                  {ecosystemLinks.map((eco) => (
                     <a href={eco.href} class="flex items-center gap-1.5 shrink-0 px-2.5 py-2.5 hover:bg-white/10 transition-colors text-white/90">
                       <span class="material-symbols-outlined text-base">{eco.icon}</span>
                       {eco.label.replace('Naija', '')}
@@ -260,8 +268,8 @@ export const Layout: FC<LayoutProps> = ({ title, description, user, cartCount = 
               </form>
             </div>
             {/* Row 3: horizontally-scrollable ecosystem nav */}
-            <div class="flex items-center gap-4 px-3 pb-2.5 overflow-x-auto text-[11px]">
-              {ECOSYSTEM_LINKS.map((eco) => (
+            <div id="ecosystem-nav-mobile-scroller" class="flex items-center gap-4 px-3 pb-2.5 overflow-x-auto text-[11px]">
+              {ecosystemLinks.map((eco) => (
                 <a href={eco.href} class="flex flex-col items-center gap-0.5 shrink-0 text-white/80">
                   <span class="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center">
                     <span class="material-symbols-outlined text-lg">{eco.icon}</span>
@@ -323,9 +331,9 @@ export const Layout: FC<LayoutProps> = ({ title, description, user, cartCount = 
               <span class="material-symbols-outlined text-xl">bolt</span>{t('nav_deals')}
             </a>
           </div>
-          <div class="py-2 border-t border-gray-100">
+          <div id="ecosystem-nav-mobile-drawer" class="py-2 border-t border-gray-100">
             <p class="px-4 pt-1 pb-1.5 text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Ecosystem</p>
-            {ECOSYSTEM_LINKS.map((eco) => (
+            {ecosystemLinks.map((eco) => (
               <a href={eco.href} class="flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
                 <span class="material-symbols-outlined text-xl text-gray-500">{eco.icon}</span>
                 <span class="flex-1">{eco.label}</span>
@@ -352,7 +360,13 @@ export const Layout: FC<LayoutProps> = ({ title, description, user, cartCount = 
           </div>
         </nav>
 
-        <main class="flex-1">{children}</main>
+        {/* pb-14 reserves space for the sticky mobile bottom nav (h-~56px) so it never
+            visually/interactively overlaps the last section of page content on short
+            pages — bug found via Pat's mandatory mobile swipe test: a touch aimed at the
+            Ecosystem rail (which sits near the bottom of a short above-the-fold view)
+            was landing on the bottom nav's /login link instead, because `sticky bottom-0`
+            reaches into the content's own space once the page is short enough. */}
+        <main class="flex-1 pb-14 md:pb-0">{children}</main>
 
         {/* ===== MEGA FOOTER ===== */}
         <footer class="bg-primary-dark text-white mt-8">
@@ -393,16 +407,17 @@ export const Layout: FC<LayoutProps> = ({ title, description, user, cartCount = 
                 <a href="/help" class="block text-white/70 hover:text-white py-1">Delivery Options</a>
                 <a href="/help" class="block text-white/70 hover:text-white py-1">Buyer Protection</a>
               </div>
-              <div>
+              <div id="ecosystem-nav-footer">
                 <h4 class="font-semibold mb-3">{t('footer_ecosystem')}</h4>
-                <a href="/fresh" class="block text-white/70 hover:text-white py-1">NaijaFresh</a>
-                <a href="/eats" class="block text-white/70 hover:text-white py-1">NaijaEats</a>
-                <a href="/gigs" class="block text-white/70 hover:text-white py-1">NaijaGigs</a>
-                <a href="/stay" class="block text-white/70 hover:text-white py-1">NaijaStay</a>
-                <a href="/drive" class="block text-white/70 hover:text-white py-1">NaijaDrive</a>
-                <a href="/send" class="block text-white/70 hover:text-white py-1">NaijaSend</a>
-                <a href="/stream" class="block text-white/70 hover:text-white py-1">NaijaStream</a>
-                <a href="/aura" class="block text-white/70 hover:text-white py-1">Aura AI</a>
+                {/* Micro-Checkpoint 2A: this footer column was found to be a 4th
+                    hardcoded copy of the ecosystem list (undetected until the live
+                    hide/restore test caught it) — now DB-driven from the exact same
+                    ecosystemLinks the header uses, so hiding a vertical removes it
+                    here too. NaijaShop is excluded (it has its own dedicated footer
+                    column above, not part of the "Ecosystem" list). */}
+                {ecosystemLinks.filter((eco) => eco.href !== '/shop').map((eco) => (
+                  <a href={eco.href} class="block text-white/70 hover:text-white py-1">{eco.label}</a>
+                ))}
               </div>
               <div>
                 <h4 class="font-semibold mb-3">{t('footer_policies')}</h4>

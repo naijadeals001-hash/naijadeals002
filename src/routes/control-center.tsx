@@ -2752,19 +2752,19 @@ controlCenterRoutes.get('/categories', requireControlCenterPermission('catalog.r
           <div id="cat-cc-empty" class="hidden px-4 py-10 text-center text-sm text-gray-500">No categories match these filters.</div>
         </div>
 
-        {/* Ecosystem navigation — schema-only foundation panel */}
+        {/* Ecosystem navigation — LIVE, wired to the customer-facing header (Micro-Checkpoint 2A) */}
         <div class="mt-10">
           <div class="flex items-center gap-2 mb-2">
             <h2 class="text-lg font-bold text-white">Ecosystem Navigation</h2>
-            <span class="text-[10px] font-bold uppercase tracking-wide bg-amber-500/10 border border-amber-500/25 text-amber-400 rounded-full px-2 py-0.5">Schema foundation only</span>
+            <span class="text-[10px] font-bold uppercase tracking-wide bg-ccaccent/15 border border-ccaccent/30 text-ccaccent rounded-full px-2 py-0.5">Live — controls customer header</span>
           </div>
           <p class="text-sm text-gray-500 max-w-3xl mb-4">
-            Honest scope note: the header/footer ecosystem nav strip (NaijaShop, NaijaFresh, NaijaEats, etc.) is
-            still hardcoded in <code class="text-gray-400">Layout.tsx</code>'s <code class="text-gray-400">ECOSYSTEM_LINKS</code> array today.
-            This table shows and lets you edit the real underlying <code class="text-gray-400">ecosystem_verticals</code> configuration
-            (status, display order, and the new <code class="text-gray-400">nav_visible</code> column) — changes here persist to the
-            database and are ready for the header to consume once that follow-up wiring is authorized, but
-            <strong class="text-gray-300"> the customer-facing header does not read this yet.</strong> Not presented as complete.
+            The header ecosystem pill strip (NaijaShop, NaijaFresh, NaijaEats, etc.) reads this table's
+            <code class="text-gray-400"> nav_visible</code> and <code class="text-gray-400">display_order</code> columns directly via
+            <code class="text-gray-400"> getEcosystemNavLinks()</code> — toggling visibility here removes/restores the corresponding
+            pill on the real customer-facing site (desktop + mobile) within one cache TTL window (≤120s, or immediately once the
+            cache is invalidated on save). <strong class="text-gray-300">NaijaShop is not listed below</strong> — it is the core
+            marketplace, pinned as the header's permanent first entry, not a togglable vertical.
           </p>
           <div class="bg-ccpanel border border-ccborder rounded-xl overflow-hidden">
             <div class="grid grid-cols-[1fr_120px_100px_120px_140px] gap-2 px-4 py-2.5 border-b border-ccborder text-[11px] font-bold text-gray-500 uppercase tracking-wide">
@@ -2787,7 +2787,7 @@ controlCenterRoutes.get('/categories', requireControlCenterPermission('catalog.r
                 <div class="text-center">
                   <input type="checkbox" class="eco-nav-visible-toggle w-4 h-4 accent-ccaccent" data-id={v.id} checked={v.nav_visible === 1} disabled={!canManage} />
                 </div>
-                <div class="text-right text-xs text-gray-600 font-medium">No (hardcoded)</div>
+                <div class="text-right text-xs text-ccaccent font-medium">Yes (live)</div>
               </div>
             ))}
           </div>
