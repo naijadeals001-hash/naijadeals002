@@ -1,0 +1,50 @@
+[
+  {
+    "label": "Ecosystem",
+    "status": "TESTED",
+    "before": 16,
+    "canScroll": true,
+    "after": 240,
+    "moved": true
+  },
+  {
+    "label": "Shop by Category",
+    "status": "TESTED",
+    "before": 16,
+    "canScroll": true,
+    "after": 166,
+    "moved": true
+  },
+  {
+    "label": "Popular Categories",
+    "status": "TESTED",
+    "before": 16,
+    "canScroll": true,
+    "after": 166,
+    "moved": true
+  },
+  {
+    "label": "Today's Deals",
+    "status": "TESTED",
+    "before": 16,
+    "canScroll": true,
+    "after": 174,
+    "moved": true
+  },
+  {
+    "label": "Recommended for You",
+    "status": "TESTED",
+    "before": 16,
+    "canScroll": true,
+    "after": 174,
+    "moved": true
+  },
+  {
+    "label": "Limited-Time Deals",
+    "status": "TESTED",
+    "before": 16,
+    "canScroll": true,
+    "after": 174,
+    "moved": true
+  }
+]

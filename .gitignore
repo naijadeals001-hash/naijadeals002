@@ -38,3 +38,4 @@ lerna-debug.log*
 prod_screenshots/
 prod_verify_results.json
 worker-configuration.d.ts
+core

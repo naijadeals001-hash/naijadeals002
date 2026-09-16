@@ -1,0 +1,42 @@
+[
+  {
+    "path": "/",
+    "name": "homepage",
+    "status": 200,
+    "maxWidthClasses": [
+      "80rem"
+    ]
+  },
+  {
+    "path": "/shop",
+    "name": "shop",
+    "status": 200,
+    "maxWidthClasses": [
+      "80rem"
+    ]
+  },
+  {
+    "path": "/seller",
+    "name": "seller-gateway",
+    "status": 200,
+    "maxWidthClasses": [
+      "80rem"
+    ]
+  },
+  {
+    "path": "/ecosystem",
+    "name": "ecosystem",
+    "status": 200,
+    "maxWidthClasses": [
+      "80rem"
+    ]
+  },
+  {
+    "path": "/categories",
+    "name": "categories",
+    "status": 200,
+    "maxWidthClasses": [
+      "80rem"
+    ]
+  }
+]

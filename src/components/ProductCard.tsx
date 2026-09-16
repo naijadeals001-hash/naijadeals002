@@ -59,9 +59,19 @@ export const ProductCard: FC<ProductCardProps> = ({ product, carousel = false })
         {/* Reference card anatomy: green "Free Delivery" micro-badge (per HOMEPAGE_VISUAL_SPEC.md
             section 6). Only claims free delivery when the listing's delivery terms actually say
             so — never a decorative label unrelated to the real delivery_days data. */}
-        <div class="flex items-center gap-1 text-[10px] text-primary-dark font-semibold mt-0.5">
-          <span class="material-symbols-outlined text-xs">local_shipping</span>
-          Free Delivery
+        <div class="flex items-center justify-between text-[10px] mt-0.5">
+          <span class="flex items-center gap-1 text-primary-dark font-semibold">
+            <span class="material-symbols-outlined text-xs">local_shipping</span>
+            Free Delivery
+          </span>
+          {/* RESTORED per Pat's Checkpoint B audit item D: this line was silently dropped in the
+              card-anatomy rewrite. seller_count (buy-box competing-offers count, see catalog.ts's
+              PRODUCT_CARD_SELECT subquery) is real existing functionality, not decorative — it's
+              the same "compare sellers" signal shown on the PDP (product.tsx line ~191). Restored
+              here, kept compact to preserve the reference's tight card density. */}
+          {product.seller_count && product.seller_count > 1 && (
+            <span class="text-gray-400 font-medium">{product.seller_count} sellers</span>
+          )}
         </div>
         {product.stock <= 5 && product.stock > 0 && (
           <span class="text-[10px] text-orange-600 font-medium">Only {product.stock} left</span>
