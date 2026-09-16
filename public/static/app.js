@@ -1155,7 +1155,8 @@
 
   // ---------- Recently Viewed: track visited PDPs in localStorage + hydrate homepage section ----------
   (function trackRecentlyViewed() {
-    var pid = document.body.getAttribute('data-product-id');
+    var pdpRoot = document.getElementById('pdp-root');
+    var pid = pdpRoot && pdpRoot.getAttribute('data-product-id');
     if (!pid) return;
     try {
       var KEY = 'nd_recently_viewed';
@@ -1166,29 +1167,33 @@
   })();
 
   (function hydrateRecentlyViewed() {
-    var section = document.getElementById('recently-viewed-section');
-    if (!section) return;
-    var currentPid = Number(document.body.getAttribute('data-product-id') || '0');
+    // Targets the "Recently Viewed" SIDEBAR card (home.tsx's PairedRailSection
+    // next to "Recommended for You"). The card itself is ALWAYS visible (never
+    // hidden/removed — required so it never disappears on desktop or mobile);
+    // it shows a real, honest empty state by default and swaps to the actual
+    // track only once localStorage + the by-ids API resolve real products.
+    var card = document.getElementById('continue-shopping-card');
+    if (!card) return;
+    var emptyState = document.getElementById('recently-viewed-empty');
+    var track = document.getElementById('continue-shopping-track');
+    if (!track) return;
+    var pdpRoot = document.getElementById('pdp-root');
+    var currentPid = Number((pdpRoot && pdpRoot.getAttribute('data-product-id')) || '0');
     try {
       var ids = JSON.parse(localStorage.getItem('nd_recently_viewed') || '[]').filter(function (id) { return id !== currentPid; });
-      if (ids.length === 0) { section.remove(); return; }
-      api('/api/catalog/products/by-ids?ids=' + ids.slice(0, 12).join(',')).then(function (res) {
-        if (!res.ok || !res.data || !res.data.products || res.data.products.length === 0) { section.remove(); return; }
-        var track = section.querySelector('.rv-track');
-        if (!track) { section.remove(); return; }
+      if (ids.length === 0) return; // stays on the empty state — nothing to show yet
+      api('/api/catalog/products/by-ids?ids=' + ids.slice(0, 6).join(',')).then(function (res) {
+        if (!res.ok || !res.data || !res.data.products || res.data.products.length === 0) return; // stays on empty state
         track.innerHTML = res.data.products.map(function (p) {
-          var discountBadge = (p.compare_at_price_kobo && p.compare_at_price_kobo > p.price_kobo)
-            ? '<span class="absolute top-2 left-2 bg-red-600 text-white text-xs font-bold px-1.5 py-0.5 rounded">-' + Math.round((p.compare_at_price_kobo - p.price_kobo) / p.compare_at_price_kobo * 100) + '%</span>'
-            : '';
-          var compareHtml = p.compare_at_price_kobo ? '<span class="text-xs text-gray-400 line-through">' + formatNaira(p.compare_at_price_kobo) + '</span>' : '';
-          return '<a href="/shop/' + p.slug + '" class="group flex flex-col bg-white rounded-lg border border-gray-200 overflow-hidden hover:shadow-md transition-shadow w-[42vw] sm:w-44 md:w-52 lg:w-56 shrink-0 snap-start">' +
-            '<div class="relative aspect-square bg-gray-100 overflow-hidden"><img src="' + p.image_url + '" alt="' + p.title.replace(/"/g, '&quot;') + '" loading="lazy" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300">' + discountBadge + '</div>' +
-            '<div class="p-3 flex flex-col gap-1 flex-1"><h3 class="text-sm text-gray-800 line-clamp-2 min-h-[2.5rem]">' + p.title + '</h3>' +
-            '<div class="flex items-baseline gap-2 mt-1"><span class="text-base font-bold text-gray-900">' + formatNaira(p.price_kobo) + '</span>' + compareHtml + '</div></div></a>';
+          return '<a href="/shop/' + p.slug + '" class="group flex items-center gap-2 hover:bg-gray-50 rounded-lg p-1 -m-1 transition-colors">' +
+            '<div class="w-12 h-12 rounded-lg bg-gray-100 overflow-hidden shrink-0"><img src="' + p.image_url + '" alt="' + p.title.replace(/"/g, '&quot;') + '" loading="lazy" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"></div>' +
+            '<div class="min-w-0 flex-1"><p class="text-xs text-gray-700 line-clamp-2 leading-tight">' + p.title + '</p>' +
+            '<p class="text-xs font-bold text-gray-900 mt-0.5">' + formatNaira(p.price_kobo) + '</p></div></a>';
         }).join('');
-        section.classList.remove('hidden');
-      }).catch(function () { section.remove(); });
-    } catch (e) { section.remove(); }
+        if (emptyState) emptyState.classList.add('hidden');
+        track.classList.remove('hidden');
+      }).catch(function () { /* stays on the honest empty state on failure — no fabricated fallback */ });
+    } catch (e) { /* localStorage unavailable — card stays hidden */ }
   })();
 
   // ---------- City selector: persist choice to a cookie, then reload so the server can re-render "Deals Near You" ----------

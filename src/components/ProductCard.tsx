@@ -102,6 +102,13 @@ export const ProductCard: FC<ProductCardProps> = ({ product, carousel = false })
  * would silently truncate an 8-12 item carousel to whatever fits one row — this uses a scroll
  * track with snap points and desktop-only prev/next buttons instead, so every product passed in
  * is actually reachable, on every viewport, exactly as Pat specified.
+ *
+ * `embedded`: when true, skips this component's own <section>/max-w container so the caller can
+ * place it inside a custom grid column — needed for the reference's paired layouts (a carousel
+ * sharing a row with a sidebar widget, e.g. "Recommended for You" + "Recently Viewed", "Today's
+ * Deals" + a promo banner) instead of every rail always spanning the full page width. See
+ * home.tsx's PairedRailSection wrapper, which supplies the outer <section>/container/border in
+ * embedded mode.
  */
 export const ProductCarousel: FC<{
   title: string
@@ -110,12 +117,12 @@ export const ProductCarousel: FC<{
   viewAllHref?: string
   icon?: string
   id?: string
-}> = ({ title, subtitle, products, viewAllHref, icon, id }) => {
+  embedded?: boolean
+}> = ({ title, subtitle, products, viewAllHref, icon, id, embedded = false }) => {
   if (products.length === 0) return null
   const trackId = id ? `carousel-track-${id}` : undefined
-  return (
-    <section class="py-4 md:py-5 border-t border-gray-100">
-      <div class="max-w-[80rem] mx-auto px-4 md:px-6 lg:px-8">
+  const inner = (
+    <>
         <div class="flex items-center justify-between mb-3">
           <div>
             <h2 class="text-lg md:text-xl font-bold text-gray-900 flex items-center gap-2">
@@ -160,6 +167,13 @@ export const ProductCarousel: FC<{
         >
           {products.map((p) => <ProductCard product={p} carousel />)}
         </div>
+    </>
+  )
+  if (embedded) return inner
+  return (
+    <section class="py-4 md:py-5 border-t border-gray-100">
+      <div class="max-w-[80rem] mx-auto px-4 md:px-6 lg:px-8">
+        {inner}
       </div>
     </section>
   )

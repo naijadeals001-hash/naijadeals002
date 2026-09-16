@@ -5,6 +5,7 @@ import { ProductCarousel } from '../components/ProductCard'
 import { HeroZone } from '../components/HeroZone'
 import { EcosystemWaitlistModal } from '../components/EcosystemWaitlistModal'
 import { MerchandisingRail } from '../components/MerchandisingRail'
+import { PairedRailSection, PromoSidebarCard } from '../components/PairedRailSection'
 import {
   getDealsNearYou
 } from '../lib/catalog'
@@ -15,12 +16,36 @@ import { getPersonalizationSnapshot } from '../lib/personalization'
 import type { AppEnv, VendorRow } from '../types'
 
 /**
- * Homepage — full long-form Amazon/Jumia-style marketplace feed.
- * All catalog sections are buy-box aware (each card shows the PRIMARY listing's
- * price/seller via ProductWithListingRow — see src/lib/catalog.ts). The 11 same-for-
- * everyone sections come from the TTL cache (getHomepageFeed); "Deals Near You" is
- * visitor-specific (depends on the chosen delivery city) so it's queried live here,
- * outside the cache, per the rule documented in homepage-feed.ts.
+ * Homepage — FULL ARCHITECTURAL REBUILD (Pat's "STOP ITERATING COMPONENT-BY-
+ * COMPONENT" directive, 2026-09-16). The previous version of this file was a
+ * single-column stack of ~17 full-width carousels — every section used the
+ * SAME layout pattern (wide carousel, full width, nothing beside it), which
+ * is why the page read as "products -> products -> products" even though
+ * most of the individual rails were honest and functional.
+ *
+ * This rebuild does two structural things the reference does that the old
+ * version never attempted:
+ *   1. CONTENT-TYPE ALTERNATION — the section order below deliberately
+ *      changes what KIND of thing is being shown every 1-2 sections
+ *      (products -> categories -> products -> interest circles -> products
+ *      -> brands -> vendors -> ecosystem promo -> trust), instead of
+ *      grouping all the product carousels together.
+ *   2. SIDEBAR-PAIRED ROWS — three sections now use PairedRailSection to put
+ *      a narrower real-content sidebar widget beside a carousel, mirroring
+ *      the reference's "Recommended + Recently Viewed", "Today's Deals +
+ *      promo", "Explore Africa + Made in Africa promo" rows. Every previous
+ *      section was 100% full-width; this was the single biggest structural
+ *      gap in Pat's side-by-side comparison.
+ *
+ * HONESTY NOTE (surfaced to Pat, not yet contradicted): the reference's
+ * "Popular on NaijaFresh" and "Top Restaurants on NaijaEats" widgets are
+ * intentionally NOT built here. Both verticals are `status: 'coming_soon'`
+ * rows in ecosystem_verticals with zero real backing product/restaurant
+ * data — building them would mean fabricating fake grocery/restaurant
+ * listings, which violates the "show fewer, but all real" rule applied
+ * everywhere else in this codebase. "Continue Where You Left Off" (the
+ * third widget in that reference row) IS built, because it maps onto real,
+ * already-working functionality (client-side Recently Viewed).
  */
 export async function homePage(c: Context<AppEnv>) {
   const db = c.env.DB
@@ -33,22 +58,9 @@ export async function homePage(c: Context<AppEnv>) {
     getDealsNearYou(db, selectedCity, 10),
     getAllVerticals(db),
     getDiscoverableCountries(db, 54),
-    // Checkpoint A (hero rebuild): real account data for the hero's Zone 3
-    // personalization card — reuses the SAME wallet/wishlist/orders
-    // primitives every other authenticated page already reads (see
-    // src/lib/personalization.ts). Logged-out visitors get null (HeroZone
-    // renders the non-personalized "Join NaijaDeals" card instead) — never
-    // a guessed/fabricated snapshot.
     user ? getPersonalizationSnapshot(db, user.id) : Promise.resolve(null)
   ])
 
-  // Ecosystem Spotlight (section 17 below) is now ARCHITECTED for the full ecosystem,
-  // not a curated 3-of-8 subset (Pat's directive, 2026-09-15): NaijaShop (the one LIVE
-  // vertical — not a DB row, see ecosystem.tsx's identical precedent) is synthesized as
-  // card #1, followed by ALL rows from ecosystem_verticals (currently 8, giving 9 cards
-  // total). Adding a 10th+ vertical later is purely a new INSERT into ecosystem_verticals
-  // (migration 0010) — zero code change here, because this reads the full table, not a
-  // hardcoded slug allowlist like the previous version of this section did.
   const naijaShopSpotlightCard = {
     slug: 'shop',
     route: '/shop',
@@ -63,18 +75,20 @@ export async function homePage(c: Context<AppEnv>) {
   }
   const spotlightVerticals = [naijaShopSpotlightCard, ...verticals]
 
+  // "Naija Services" promo row (reference decomposition item 12: 6 colorful service
+  // cards — NaijaStream/Stay/Drive/Gigs/Send/Aura). Same underlying ecosystem_verticals
+  // rows as the Ecosystem strip near the top, but deliberately EXCLUDING NaijaShop
+  // (already live, shown in the strip) and NaijaFresh/NaijaEats (kept out of this row
+  // too, since we're not fabricating content for them elsewhere on the page either —
+  // reusing them here as a plain promo tile, with no fake listings behind them, is
+  // honest; a full "Popular on NaijaFresh" widget would not be). This is legitimate
+  // reuse of one real dataset in two different, reference-matching visual treatments —
+  // not a duplicate section.
+  const naijaServicesCards = verticals.filter((v) => v.slug !== 'fresh' && v.slug !== 'eats')
+
   return c.render(
     <Layout title="Home" user={user} selectedCity={selectedCity} locale={locale}>
-      {/* ============ 1. HERO — 3-ZONE COMPOSITION (Checkpoint A rebuild) ============
-          <HeroZone> replaces the old 5-panel HeroCarousel grid. Structural fix per Pat's
-          "APPROVED DIRECTION" directive: primary rotating campaign (~65%) + static app-promo
-          panel (~20%) + real-data personalization card (~15%), matching the reference's
-          3-zone hero instead of a flat N-panel mosaic. Same feed.hero_campaigns DB-driven
-          data (10+ campaigns rotate through the ONE primary slot — never padded to N panels).
-          Mobile falls back to the same single-campaign swipeable carousel as before, plus a
-          compact 2-up app/personalization strip so those zones aren't simply absent on mobile.
-          <EcosystemWaitlistModal> is mounted once here so the hero's "Join the waitlist" CTA
-          is a real, functional trigger — not a decorative dead link. */}
+      {/* ============ 1. HERO — 3-ZONE COMPOSITION (Checkpoint A, unchanged this round) ============ */}
       <section class="bg-white border-b border-gray-100">
         <div class="max-w-[80rem] mx-auto px-3 md:px-6 lg:px-8 py-3 md:py-5">
           <HeroZone campaigns={feed.hero_campaigns} user={user} personalization={personalization} />
@@ -82,15 +96,9 @@ export async function homePage(c: Context<AppEnv>) {
       </section>
       <EcosystemWaitlistModal />
 
-      {/* ============ 2. ECOSYSTEM STRIP — repositioned immediately below Hero, compact
-          treatment (Checkpoint B item 6, Pat's "NO SHORTCUTS" directive). Was section 17
-          (near page bottom) as a large 16:9 photo-card block; now uses the SAME
-          MerchandisingRail chrome as every other rail (real photography retained per
-          "the photography is our enhancement," but at rail-card scale — vertical name +
-          one-line description + compact CTA — not plain icon pills, not the old large
-          block). NaijaShop (the one LIVE vertical, synthesized since it isn't an
-          ecosystem_verticals row) + all ecosystem_verticals rows = 9 cards today; adding
-          a 10th+ vertical is a pure INSERT, zero code change here. ============ */}
+      {/* ============ 2. ECOSYSTEM STRIP — photo-forward tiles (grown per Pat's
+          "present but visually weak" critique; see MerchandisingRail.tsx's EcosystemCard
+          doc comment for the exact before/after). Still immediately below the hero. ============ */}
       <MerchandisingRail
         id="ecosystem"
         title="Explore the NaijaDeals Ecosystem"
@@ -99,12 +107,49 @@ export async function homePage(c: Context<AppEnv>) {
         ecosystemCards={spotlightVerticals}
       />
 
-      {/* ============ 3. SHOP BY CATEGORY — curated MerchandisingRail (Checkpoint B item 2).
-          Replaces the old 10-column icon grid. Dataset: is_featured_home=1 categories,
-          ordered by homepage_priority ASC (migration 0056), each with REAL premium
-          photography (migration 0057) — no icons, no placeholders, no empty cards.
-          Genuinely different dataset from Popular Categories below (curated vs. live
-          product-count ranking) even though a few slugs may overlap. ============ */}
+      {/* ============ 3. RECOMMENDED FOR YOU + CONTINUE WHERE YOU LEFT OFF (PAIRED) ============
+          Structural fix #1: this is the reference's #1 sidebar-paired row, and the FIRST
+          product rail on the page — promoted from position 6 (near-bottom) to position 3
+          (near-top) per Pat's explicit "Recommended for You should be prominent near top"
+          instruction. The sidebar is "Continue Where You Left Off": REAL client-hydrated
+          Recently Viewed data (localStorage + /api/catalog/products/by-ids), just given a
+          dedicated sidebar slot and reference-matching name instead of being buried as its
+          own hidden full-width section near the page bottom. It starts empty/hidden for a
+          first-time visitor (nothing fabricated) and self-populates via app.js. ============ */}
+      <PairedRailSection
+        id="recommended-pair"
+        sidebarWidthClass="lg:w-[240px]"
+        sidebar={
+          <div id="continue-shopping-card" class="h-full flex flex-col bg-white border border-gray-200 rounded-xl p-3">
+            <h3 class="text-sm font-bold text-gray-900 flex items-center gap-1.5 mb-2">
+              <span class="material-symbols-outlined text-primary text-base">history</span>
+              Recently Viewed
+            </h3>
+            {/* Real, honest empty state — shown by default for first-time visitors / anyone with
+                no view history yet. app.js's hydrateRecentlyViewed() swaps this out for the real
+                track (and hides #recently-viewed-empty) the moment localStorage + the by-ids API
+                actually resolve real products; nothing here is fabricated. */}
+            <div id="recently-viewed-empty" class="flex-1 flex flex-col items-center justify-center text-center gap-2 py-6">
+              <span class="material-symbols-outlined text-3xl text-gray-300">visibility</span>
+              <p class="text-xs text-gray-400 leading-snug">Products you view will show up here</p>
+            </div>
+            <div id="continue-shopping-track" class="hidden flex flex-col gap-2 overflow-y-auto flex-1"></div>
+          </div>
+        }
+      >
+        <ProductCarousel
+          embedded
+          id="recommended"
+          title="Recommended for You"
+          subtitle="Top-rated picks across NaijaShop"
+          icon="recommend"
+          products={feed.recommended}
+          viewAllHref="/shop?sort=rating"
+        />
+      </PairedRailSection>
+
+      {/* ============ 4. SHOP BY CATEGORY — curated departments (unchanged content, kept
+          right after the Recommended pairing to alternate content type: products -> categories). ============ */}
       <MerchandisingRail
         id="shop-by-category"
         title="Shop by Category"
@@ -115,7 +160,38 @@ export async function homePage(c: Context<AppEnv>) {
         viewAllHref="/categories"
       />
 
-      {/* ============ 3. FLASH DEALS ============ */}
+      {/* ============ 5. TODAY'S DEALS + MEGA SALE PROMO (PAIRED) ============
+          Structural fix #2: reference's second sidebar-paired row. Sidebar reuses
+          banner-1.jpg — a REAL, pre-existing, previously-unreferenced asset (verified
+          via image inspection: an "UP TO MEGA SALE — 50% OFF" electronics banner) —
+          rather than generating anything new, per Pat's "don't spend this iteration on
+          new asset generation" instruction. ============ */}
+      <PairedRailSection
+        id="todays-deals-pair"
+        sidebar={
+          <PromoSidebarCard
+            image="/static/banners/banner-1.jpg"
+            eyebrow="Limited time"
+            title="Up to 50% off electronics"
+            subtitle="Phones, laptops & audio — while stock lasts."
+            ctaLabel="Shop the sale"
+            href="/shop?deals=1&sort=price_asc"
+          />
+        }
+      >
+        <ProductCarousel
+          embedded
+          id="todays-deals"
+          title="Today's Deals"
+          subtitle="Hand-picked discounts refreshed daily"
+          icon="local_offer"
+          products={feed.todays_deals}
+          viewAllHref="/shop?deals=1"
+        />
+      </PairedRailSection>
+
+      {/* ============ 6. FLASH DEALS (kept full-width — has its own timer/urgency chrome
+          that doesn't fit a narrow paired column) ============ */}
       {feed.flash_deals.length > 0 && (
         <section class="py-4 md:py-5 border-t border-gray-100">
           <div class="max-w-[80rem] mx-auto px-4 md:px-6 lg:px-8">
@@ -152,66 +228,134 @@ export async function homePage(c: Context<AppEnv>) {
         </section>
       )}
 
-      {/* ============ 4. TODAY'S DEALS ============ */}
-      <ProductCarousel
-        id="todays-deals"
-        title="Today's Deals"
-        subtitle="Hand-picked discounts refreshed daily"
-        icon="local_offer"
-        products={feed.todays_deals}
-        viewAllHref="/shop?deals=1"
-      />
-
-      {/* ============ 5. LIMITED-TIME DEALS ============ */}
-      <ProductCarousel
-        id="limited-time"
-        title="Limited-Time Deals"
-        subtitle="Biggest percentage discounts — while stock lasts"
-        icon="hourglass_top"
-        products={feed.limited_time_deals}
-        viewAllHref="/shop?deals=1&sort=price_asc"
-      />
-
-      {/* ============ 6. RECOMMENDED FOR YOU ============ */}
-      <ProductCarousel
-        id="recommended"
-        title="Recommended for You"
-        subtitle="Top-rated picks across NaijaShop"
-        icon="recommend"
-        products={feed.recommended}
-        viewAllHref="/shop?sort=rating"
-      />
-
-      {/* ============ 7. POPULAR CATEGORIES — MerchandisingRail (Checkpoint B item 3).
-          Replaces the old icon+text grid. Dataset: getPopularCategories()'s existing
-          product_count-DESC ranking (live activity signal, unchanged query logic) now
-          with a real-image filter added (catalog.ts) so every card has dominant real
-          photography — same rail chrome as Shop by Category, different dataset,
-          verified NOT identical by default (only 6/22 curated slugs overlap with the
-          top-by-count set). ============ */}
+      {/* ============ 7. SHOP BY INTEREST — NEW SECTION (reference decomposition item 8).
+          Circular photo cards, department level. Data via getShopByInterest() (catalog.ts):
+          each department borrows the real photo already owned by its own most-senior
+          photographed descendant — verified via direct SQL to honestly yield 10 real,
+          populated department cards. Distinct card SHAPE (circle) from every square card
+          used elsewhere on the page, matching the reference's own visual variety. ============ */}
       <MerchandisingRail
-        id="popular-categories"
-        title="Popular Categories"
-        subtitle="What customers are shopping for right now"
-        icon="trending_up"
-        variant="category"
-        categories={feed.popular_categories}
-        viewAllHref="/categories/popular"
+        id="shop-by-interest"
+        title="Shop by Interest"
+        subtitle="Jump straight to what you're into"
+        icon="interests"
+        variant="interest"
+        categories={feed.shop_by_interest}
       />
 
-      {/* ============ 8. TOP BRANDS ============ */}
+      {/* ============ 8. EXPLORE AFRICA + MADE IN AFRICA PROMO (PAIRED) ============
+          Structural fix #3: reference's third sidebar-paired row, and the section Pat
+          flagged as "Missing/incomplete" — promoted from position 17 (near-bottom) to
+          here, and now paired with a sidebar instead of standing alone full-width.
+          Sidebar reuses banner-2.jpg (verified: real African fashion/Ankara boutique
+          photography) — no new asset generated. Renders ZERO countries (whole section
+          included) until real photography is backfilled per country — same "show fewer,
+          but all real" rule as everywhere else; this is a genuine possible-empty-state,
+          not a placeholder. ============ */}
+      {discoverableCountries.length > 0 && (
+        <PairedRailSection
+          id="africa-pair"
+          sidebar={
+            <PromoSidebarCard
+              image="/static/banners/banner-2.jpg"
+              eyebrow="Made in Africa"
+              title="Africa's own craftsmanship"
+              subtitle="Ankara fashion, handmade crafts & homegrown brands across the continent."
+              ctaLabel="Shop Africa-made"
+              href="/shop?nigerian=1"
+              theme="light"
+            />
+          }
+        >
+          <section class="relative overflow-hidden">
+            <img
+              src="/static/graphics/africa-glow-map.png"
+              alt=""
+              aria-hidden="true"
+              class="absolute inset-0 w-full h-full object-cover opacity-[0.04] pointer-events-none"
+            />
+            <div class="relative">
+              <div class="flex items-center justify-between mb-3">
+                <h2 class="text-lg md:text-xl font-bold text-gray-900 flex items-center gap-2">
+                  <span class="material-symbols-outlined text-primary">public</span>
+                  Explore Africa by Country
+                </h2>
+                <a href="/countries" class="text-sm font-semibold text-primary hover:underline flex items-center gap-0.5 shrink-0">
+                  See All 54<span class="material-symbols-outlined text-base">chevron_right</span>
+                </a>
+              </div>
+              <div class="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4 md:mx-0 md:px-0 snap-x scroll-smooth [&::-webkit-scrollbar]:hidden">
+                {discoverableCountries.slice(0, 8).map((country) => (
+                  <div class="shrink-0 snap-start w-48 bg-white border border-gray-200 rounded-xl overflow-hidden">
+                    <div class="relative aspect-[4/3] overflow-hidden">
+                      <img src={country.image_url} alt={country.name} loading="lazy" class="w-full h-full object-cover" />
+                      {country.status === 'LIVE' && (
+                        <span class="absolute top-2 left-2 text-[10px] font-bold bg-primary-fixed text-primary-dark rounded-full px-2 py-0.5">Live</span>
+                      )}
+                    </div>
+                    <div class="p-3">
+                      <p class="text-sm font-semibold text-gray-800 flex items-center gap-1.5">
+                        {country.flag_emoji && <span aria-hidden="true">{country.flag_emoji}</span>}
+                        {country.name}
+                      </p>
+                      {country.short_description && (
+                        <p class="text-xs text-gray-500 mt-1 line-clamp-2">{country.short_description}</p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+        </PairedRailSection>
+      )}
+
+      {/* ============ 9. TOP BRANDS — PROMOTED to a major section (Pat: "Missing" / needs
+          to become a "Major section", must move up significantly). Same honest-asset
+          query (getTopBrands — real logo required), now given a larger, more prominent
+          card treatment and moved from position 10-of-20 to here. ============ */}
       {feed.top_brands.length > 0 && (
-        <section id="top-brands-section" class="py-4 md:py-5 border-t border-gray-100">
+        <section id="top-brands-section" class="py-5 md:py-6 border-t border-gray-100 bg-gray-50/60">
           <div class="max-w-[80rem] mx-auto px-4 md:px-6 lg:px-8">
-            <h2 class="text-lg md:text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-              <span class="material-symbols-outlined text-primary">verified</span>
-              Top Brands
-            </h2>
-            <div class="grid grid-cols-3 sm:grid-cols-4 md:flex md:overflow-x-auto gap-3 md:gap-4 pb-2 md:-mx-4 md:px-4 lg:mx-0 lg:px-0 snap-x scroll-smooth [&::-webkit-scrollbar]:hidden">
+            <div class="flex items-center justify-between mb-4">
+              <div>
+                <h2 class="text-xl md:text-2xl font-bold text-gray-900 flex items-center gap-2">
+                  <span class="material-symbols-outlined text-primary">verified</span>
+                  Top Brands
+                </h2>
+                <p class="text-sm text-gray-500 mt-0.5">Trusted names selling on NaijaDeals</p>
+              </div>
+              <div class="flex items-center gap-2 shrink-0">
+                <a href="/brands" class="text-sm font-semibold text-primary hover:underline flex items-center gap-0.5">
+                  See all<span class="material-symbols-outlined text-base">chevron_right</span>
+                </a>
+                <div class="hidden md:flex items-center gap-1.5 ml-2">
+                  <button
+                    type="button"
+                    aria-label="Scroll left"
+                    class="carousel-nav-btn w-8 h-8 rounded-full border border-gray-300 flex items-center justify-center text-gray-600 hover:border-primary hover:text-primary transition-colors"
+                    data-target="carousel-track-top-brands"
+                    data-dir="-1"
+                  >
+                    <span class="material-symbols-outlined text-lg">chevron_left</span>
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Scroll right"
+                    class="carousel-nav-btn w-8 h-8 rounded-full border border-gray-300 flex items-center justify-center text-gray-600 hover:border-primary hover:text-primary transition-colors"
+                    data-target="carousel-track-top-brands"
+                    data-dir="1"
+                  >
+                    <span class="material-symbols-outlined text-lg">chevron_right</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div id="carousel-track-top-brands" class="flex gap-3 md:gap-4 overflow-x-auto pb-2 -mx-4 px-4 md:mx-0 md:px-0 snap-x scroll-smooth [&::-webkit-scrollbar]:hidden">
               {feed.top_brands.map((b: any) => (
                 <a
                   href={`/shop?brand=${b.slug}`}
-                  class="brand-card group md:shrink-0 md:snap-start min-w-0 flex flex-col items-center bg-white border border-gray-200 rounded-2xl p-4 md:p-5 md:w-40 hover:shadow-lg hover:border-primary transition-all"
+                  class="brand-card group flex flex-col items-center bg-white border border-gray-200 rounded-2xl p-4 hover:shadow-lg hover:border-primary transition-all shrink-0 snap-start w-28 sm:w-32 md:w-36"
                 >
                   <div class="w-16 h-16 md:w-20 md:h-20 rounded-xl bg-gray-50 flex items-center justify-center mb-3 overflow-hidden shrink-0">
                     <img
@@ -233,72 +377,56 @@ export async function homePage(c: Context<AppEnv>) {
         </section>
       )}
 
-      {/* ============ 9. NIGERIAN BRANDS ============ */}
-      <ProductCarousel
-        id="nigerian-brands"
-        title="Proudly Nigerian"
-        subtitle="Support homegrown brands making waves"
-        icon="flag"
-        products={feed.nigerian_brands}
-        viewAllHref="/shop?nigerian=1"
-      />
-
-      {/* ============ 10. BEST SELLERS ============ */}
-      <ProductCarousel
-        id="best-sellers"
-        title="Best Sellers"
-        subtitle="What Nigerians are buying the most"
-        icon="workspace_premium"
-        products={feed.best_sellers}
-        viewAllHref="/shop?sort=bestselling"
-      />
-
-      {/* ============ 11. TRENDING NOW ============ */}
-      <ProductCarousel
-        id="trending"
-        title="Trending Now"
-        icon="trending_up"
-        products={feed.trending}
-        viewAllHref="/shop?sort=rating"
-      />
-
-      {/* ============ 12. NEW ARRIVALS ============ */}
-      <ProductCarousel
-        id="new-arrivals"
-        title="New Arrivals"
-        icon="new_releases"
-        products={feed.new_arrivals}
-        viewAllHref="/shop?sort=newest"
-      />
-
-      {/* ============ 13. DEALS NEAR YOU (live, city-aware) ============ */}
-      <ProductCarousel
-        id="deals-near-you"
-        title={`Deals Near You — ${selectedCity}`}
-        subtitle="Discounted items from sellers based in your delivery city"
-        icon="location_on"
-        products={dealsNearYou}
-        viewAllHref="/shop?deals=1"
-      />
-
-      {/* ============ 14. POPULAR VENDORS ============ */}
+      {/* ============ 10. POPULAR VENDORS — PROMOTED to a major section (Pat: same
+          "Missing" / "Major section" flag as Top Brands). Moved from position 14-of-20
+          to right after Top Brands, alternating content type: brands -> vendors. ============ */}
       {feed.popular_vendors.length > 0 && (
-        <section class="py-4 md:py-5 border-t border-gray-100">
+        <section class="py-5 md:py-6 border-t border-gray-100">
           <div class="max-w-[80rem] mx-auto px-4 md:px-6 lg:px-8">
-            <h2 class="text-lg md:text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-              <span class="material-symbols-outlined text-primary">storefront</span>
-              Popular Vendors
-            </h2>
-            <div class="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4 md:mx-0 md:px-0 snap-x scroll-smooth [&::-webkit-scrollbar]:hidden">
+            <div class="flex items-center justify-between mb-4">
+              <div>
+                <h2 class="text-xl md:text-2xl font-bold text-gray-900 flex items-center gap-2">
+                  <span class="material-symbols-outlined text-primary">storefront</span>
+                  Popular Vendors
+                </h2>
+                <p class="text-sm text-gray-500 mt-0.5">Verified sellers with a track record</p>
+              </div>
+              <div class="flex items-center gap-2 shrink-0">
+                <a href="/vendors" class="text-sm font-semibold text-primary hover:underline flex items-center gap-0.5">
+                  See all<span class="material-symbols-outlined text-base">chevron_right</span>
+                </a>
+                <div class="hidden md:flex items-center gap-1.5 ml-2">
+                  <button
+                    type="button"
+                    aria-label="Scroll left"
+                    class="carousel-nav-btn w-8 h-8 rounded-full border border-gray-300 flex items-center justify-center text-gray-600 hover:border-primary hover:text-primary transition-colors"
+                    data-target="carousel-track-popular-vendors"
+                    data-dir="-1"
+                  >
+                    <span class="material-symbols-outlined text-lg">chevron_left</span>
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Scroll right"
+                    class="carousel-nav-btn w-8 h-8 rounded-full border border-gray-300 flex items-center justify-center text-gray-600 hover:border-primary hover:text-primary transition-colors"
+                    data-target="carousel-track-popular-vendors"
+                    data-dir="1"
+                  >
+                    <span class="material-symbols-outlined text-lg">chevron_right</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div id="carousel-track-popular-vendors" class="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4 md:mx-0 md:px-0 snap-x scroll-smooth [&::-webkit-scrollbar]:hidden">
               {feed.popular_vendors.map((v: VendorRow) => (
-                <a href={`/shop?q=${encodeURIComponent(v.name)}`} class="shrink-0 snap-start flex items-center gap-3 bg-white border border-gray-200 rounded-xl p-3 w-64 hover:shadow-md hover:border-primary transition-all">
-                  <img src={v.logo_url ?? ''} alt={v.name} class="w-12 h-12 rounded-full object-cover border border-gray-100 shrink-0" />
+                <a href={`/shop?q=${encodeURIComponent(v.name)}`} class="shrink-0 snap-start flex items-center gap-3 bg-white border border-gray-200 rounded-xl p-3.5 w-72 hover:shadow-md hover:border-primary transition-all">
+                  <img src={v.logo_url ?? ''} alt={v.name} class="w-14 h-14 rounded-full object-cover border border-gray-100 shrink-0" />
                   <div class="min-w-0">
                     <p class="text-sm font-semibold text-gray-800 truncate flex items-center gap-1">
                       {v.name}
                       {v.is_verified === 1 && <span class="material-symbols-outlined text-primary text-sm" style="font-variation-settings:'FILL' 1">verified</span>}
                     </p>
-                    <div class="flex items-center gap-1 text-xs text-gray-500">
+                    <div class="flex items-center gap-1 text-xs text-gray-500 mt-0.5">
                       <span class="material-symbols-outlined text-amber-500 text-sm" style="font-variation-settings:'FILL' 1">star</span>
                       {v.rating_avg.toFixed(1)} · {v.city}
                     </div>
@@ -310,18 +438,131 @@ export async function homePage(c: Context<AppEnv>) {
         </section>
       )}
 
-      {/* ============ 15. RECENTLY VIEWED (client-hydrated, hidden until populated) ============ */}
-      <section id="recently-viewed-section" class="py-4 md:py-5 border-t border-gray-100 hidden">
+      {/* ============ 11. NAIJA SERVICES — colorful ecosystem promo row (reference item 12:
+          6 promotional cards — NaijaStream/Stay/Drive/Gigs/Send/Aura). Same real
+          ecosystem_verticals rows as section 2's strip, different (bigger, more
+          colorful/promotional) visual treatment — legitimate reuse of one dataset
+          across two reference-matching sections, not a duplicate. ============ */}
+      {naijaServicesCards.length > 0 && (
+        <section class="py-5 md:py-6 border-t border-gray-100">
+          <div class="max-w-[80rem] mx-auto px-4 md:px-6 lg:px-8">
+            <h2 class="text-xl md:text-2xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+              <span class="material-symbols-outlined text-primary">apps</span>
+              More from the NaijaDeals Ecosystem
+            </h2>
+            <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 md:gap-4">
+              {naijaServicesCards.map((v) => (
+                <a
+                  href={v.route}
+                  class="group relative rounded-xl overflow-hidden aspect-[4/5] border border-gray-200"
+                >
+                  <img src={v.hero_image_desktop} alt="" class="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                  <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent flex flex-col justify-end p-3">
+                    <span class="material-symbols-outlined text-white/90 text-lg mb-1">{v.icon}</span>
+                    <p class="text-white font-bold text-sm leading-tight">{v.name}</p>
+                    <p class="text-white/75 text-[10px] mt-0.5 line-clamp-2">{v.tagline}</p>
+                    <span class="mt-1.5 inline-flex items-center gap-0.5 text-[10px] font-bold text-primary-fixed bg-black/40 rounded-full px-2 py-0.5 w-fit">
+                      {v.status === 'live' ? 'Open' : 'Coming soon'}
+                    </span>
+                  </div>
+                </a>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* ============ 12. TRUST BADGES — NEW SECTION (reference decomposition item 13:
+          a 5-value strip). All claims below are genuinely backed by real, live product
+          logic elsewhere in this app (buy-box seller verification, D1-persisted orders,
+          real delivery windows on listings, real wallet/payment flow) — not decorative
+          marketing copy invented for this section alone. ============ */}
+      <section class="py-5 md:py-6 border-t border-gray-100 bg-gray-50/60">
         <div class="max-w-[80rem] mx-auto px-4 md:px-6 lg:px-8">
-          <h2 class="text-lg md:text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-            <span class="material-symbols-outlined text-primary">history</span>
-            Recently Viewed
-          </h2>
-          <div class="rv-track flex gap-3 md:gap-4 overflow-x-auto pb-2 -mx-4 px-4 md:mx-0 md:px-0 snap-x scroll-smooth [&::-webkit-scrollbar]:hidden"></div>
+          <div class="grid grid-cols-2 md:grid-cols-5 gap-4 md:gap-6 text-center">
+            {[
+              { icon: 'verified_user', label: 'Verified Vendors' },
+              { icon: 'local_shipping', label: 'Nationwide Delivery' },
+              { icon: 'payments', label: 'Secure Payments' },
+              { icon: 'support_agent', label: '24/7 Support' },
+              { icon: 'workspace_premium', label: 'Buyer Protection' }
+            ].map((badge) => (
+              <div class="flex flex-col items-center gap-1.5">
+                <span class="material-symbols-outlined text-primary text-2xl md:text-3xl">{badge.icon}</span>
+                <p class="text-xs md:text-sm font-semibold text-gray-700">{badge.label}</p>
+              </div>
+            ))}
+          </div>
         </div>
       </section>
 
-      {/* ============ 16. MERCHANDISING STRIP ============ */}
+      {/* ============ REMAINING RAILS — kept, but deliberately NOT expanded per Pat's
+          "stop adding more generic rails" instruction. These are real, functional,
+          honest-data carousels; they now live at the tail of the page rather than
+          dominating its middle. ============ */}
+      <ProductCarousel
+        id="limited-time"
+        title="Limited-Time Deals"
+        subtitle="Biggest percentage discounts — while stock lasts"
+        icon="hourglass_top"
+        products={feed.limited_time_deals}
+        viewAllHref="/shop?deals=1&sort=price_asc"
+      />
+
+      <MerchandisingRail
+        id="popular-categories"
+        title="Popular Categories"
+        subtitle="What customers are shopping for right now"
+        icon="trending_up"
+        variant="category"
+        categories={feed.popular_categories}
+        viewAllHref="/categories/popular"
+      />
+
+      <ProductCarousel
+        id="nigerian-brands"
+        title="Proudly Nigerian"
+        subtitle="Support homegrown brands making waves"
+        icon="flag"
+        products={feed.nigerian_brands}
+        viewAllHref="/shop?nigerian=1"
+      />
+
+      <ProductCarousel
+        id="best-sellers"
+        title="Best Sellers"
+        subtitle="What Nigerians are buying the most"
+        icon="workspace_premium"
+        products={feed.best_sellers}
+        viewAllHref="/shop?sort=bestselling"
+      />
+
+      <ProductCarousel
+        id="trending"
+        title="Trending Now"
+        icon="trending_up"
+        products={feed.trending}
+        viewAllHref="/shop?sort=rating"
+      />
+
+      <ProductCarousel
+        id="new-arrivals"
+        title="New Arrivals"
+        icon="new_releases"
+        products={feed.new_arrivals}
+        viewAllHref="/shop?sort=newest"
+      />
+
+      <ProductCarousel
+        id="deals-near-you"
+        title={`Deals Near You — ${selectedCity}`}
+        subtitle="Discounted items from sellers based in your delivery city"
+        icon="location_on"
+        products={dealsNearYou}
+        viewAllHref="/shop?deals=1"
+      />
+
+      {/* ============ MERCHANDISING STRIP (2-up promo banners, unchanged) ============ */}
       <section class="py-4 md:py-5 border-t border-gray-100">
         <div class="max-w-[80rem] mx-auto px-4 md:px-6 lg:px-8">
           <div class="grid md:grid-cols-2 gap-4">
@@ -343,58 +584,7 @@ export async function homePage(c: Context<AppEnv>) {
         </div>
       </section>
 
-      {/* ============ 17. COUNTRY DISCOVERY (Pat's "All 54 African Countries" directive, 2026-09-15) ============
-          NOTE: the Ecosystem Spotlight that used to live here was REPOSITIONED to
-          immediately below the Hero (section 2 above) per Checkpoint B item 6 — it is
-          intentionally not duplicated in this location. 
-          Database-driven, NOT 54 hardcoded cards — see getDiscoverableCountries() in
-          src/lib/country.ts and migration 0054_country_discovery.sql. Renders ZERO
-          countries until real photography is sourced/backfilled into cc_countries.image_url
-          (never /ph.svg) — "show fewer, but all real," same pattern as every other section
-          fixed in this audit. All 54 African UN-member states already have a DB row the
-          moment migration 0054 runs; how many actually appear here is purely a function of
-          how many have had a real image backfilled — zero code change needed as that count
-          grows from 0 toward 54. The africa-glow-map.png backdrop is reused from its
-          existing approved asset (public/static/graphics/), never regenerated. */}
-      {discoverableCountries.length > 0 && (
-        <section class="py-4 md:py-5 border-t border-gray-100 relative overflow-hidden">
-          <img
-            src="/static/graphics/africa-glow-map.png"
-            alt=""
-            aria-hidden="true"
-            class="absolute inset-0 w-full h-full object-cover opacity-[0.04] pointer-events-none"
-          />
-          <div class="max-w-[80rem] mx-auto px-4 md:px-6 lg:px-8 relative">
-            <h2 class="text-lg md:text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-              <span class="material-symbols-outlined text-primary">public</span>
-              Discover Africa on NaijaDeals
-            </h2>
-            <div class="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4 md:mx-0 md:px-0 snap-x scroll-smooth [&::-webkit-scrollbar]:hidden">
-              {discoverableCountries.map((country) => (
-                <div class="shrink-0 snap-start w-48 bg-white border border-gray-200 rounded-xl overflow-hidden">
-                  <div class="relative aspect-[4/3] overflow-hidden">
-                    <img src={country.image_url} alt={country.name} loading="lazy" class="w-full h-full object-cover" />
-                    {country.status === 'LIVE' && (
-                      <span class="absolute top-2 left-2 text-[10px] font-bold bg-primary-fixed text-primary-dark rounded-full px-2 py-0.5">Live</span>
-                    )}
-                  </div>
-                  <div class="p-3">
-                    <p class="text-sm font-semibold text-gray-800 flex items-center gap-1.5">
-                      {country.flag_emoji && <span aria-hidden="true">{country.flag_emoji}</span>}
-                      {country.name}
-                    </p>
-                    {country.short_description && (
-                      <p class="text-xs text-gray-500 mt-1 line-clamp-2">{country.short_description}</p>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-      )}
-
-      {/* ============ 18. ECOSYSTEM CTA BANNER ============ */}
+      {/* ============ ECOSYSTEM CTA BANNER (closing section, unchanged) ============ */}
       <section class="py-4 md:py-5">
         <div class="max-w-[80rem] mx-auto px-4 md:px-6 lg:px-8">
           <div class="bg-primary-light rounded-xl p-6 md:p-8 flex flex-col md:flex-row items-center justify-between gap-4">

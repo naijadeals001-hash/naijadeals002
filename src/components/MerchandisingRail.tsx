@@ -60,7 +60,7 @@ interface CategoryWithCount extends CategoryRow {
   product_count?: number
 }
 
-type RailVariant = 'product' | 'category' | 'ecosystem'
+type RailVariant = 'product' | 'category' | 'ecosystem' | 'interest'
 
 interface MerchandisingRailProps {
   title: string
@@ -72,6 +72,10 @@ interface MerchandisingRailProps {
   products?: ProductWithListingRow[]
   categories?: CategoryWithCount[]
   ecosystemCards?: EcosystemSpotlightCard[]
+  /** Skips the outer <section>/container so a caller can place this rail inside its own
+   * paired-layout grid column (see home.tsx's PairedRailSection) — same pattern as
+   * ProductCarousel's `embedded` prop in ProductCard.tsx. */
+  embedded?: boolean
 }
 
 /**
@@ -101,38 +105,72 @@ const CategoryCard: FC<{ category: CategoryWithCount }> = ({ category }) => (
 )
 
 /**
- * Compact Ecosystem "pill" card (Checkpoint B, reference re-measurement:
- * reference cards are ~115x80px tinted pills — icon + 2-line stacked text,
- * NOT the large 16:9 photo-card block we had before, and NOT bare icon pills
- * either since Pat also requires real photography kept). This card threads
- * both requirements: a small real-photo roundel (keeps the "photography is
- * our enhancement" rule) inside a tinted pill sized/proportioned to the
- * reference (fixed ~104px width, ~84px height, rounded-xl), using the REAL
- * per-vertical accent_color from ecosystem_verticals (migration 0010) for
- * the tint — never an invented color.
+ * Ecosystem tile card (Checkpoint B round 2, Pat's "present but visually
+ * weak - reference shows 9 STRONG branded vertical tiles" critique). Grown
+ * from the previous ~104x84px pill to a card where the real per-vertical
+ * photo (hero_image_desktop, migration 0010) is the dominant visual element
+ * (a genuine photo panel, not a 28px roundel with an icon glued on top),
+ * while staying far short of the old full 16:9 block that overpowered the
+ * hero. The tinted accent now lives in the name/status footer strip only,
+ * so the card reads as "photo-forward branded tile", matching the
+ * reference's visual weight without regressing to the pre-Checkpoint-B
+ * bulk. Still uses the REAL accent_color from ecosystem_verticals - never
+ * an invented color.
  */
 const EcosystemCard: FC<{ card: EcosystemSpotlightCard }> = ({ card }) => {
   const accent = (card.accent_color && ACCENT_CLASSES[card.accent_color]) || DEFAULT_ACCENT
   return (
     <a
       href={card.route}
-      class={`group flex flex-col items-center justify-center gap-1 w-[104px] h-[84px] shrink-0 snap-start rounded-xl ${accent.bg} hover:brightness-95 transition-all px-1.5 py-2 text-center`}
+      class="group flex flex-col w-[132px] md:w-[148px] h-[128px] md:h-[140px] shrink-0 snap-start rounded-xl overflow-hidden border border-gray-200 bg-white hover:shadow-md hover:-translate-y-0.5 transition-all"
     >
-      <div class={`relative w-7 h-7 rounded-full overflow-hidden ${accent.iconBg} flex items-center justify-center shrink-0`}>
+      <div class="relative flex-1 overflow-hidden bg-gray-100">
         <img
           src={card.hero_image_desktop}
           alt=""
           aria-hidden="true"
           loading="lazy"
-          class="w-full h-full object-cover opacity-90"
+          class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
         />
-        <span class={`material-symbols-outlined absolute text-[13px] ${accent.text} drop-shadow-[0_1px_1px_rgba(255,255,255,0.9)]`}>{card.icon}</span>
+        <span class={`absolute top-1.5 left-1.5 w-6 h-6 rounded-full ${accent.iconBg} flex items-center justify-center`}>
+          <span class={`material-symbols-outlined text-[13px] ${accent.text}`}>{card.icon}</span>
+        </span>
+        {card.status !== 'live' && (
+          <span class="absolute top-1.5 right-1.5 text-[8px] font-bold bg-black/55 text-white rounded-full px-1.5 py-0.5">Soon</span>
+        )}
       </div>
-      <span class={`text-[11px] font-bold ${accent.text} leading-tight line-clamp-1 w-full`}>{card.name}</span>
-      <span class="text-[9px] text-gray-500 leading-none line-clamp-1 w-full">{card.status === 'live' ? card.cta_label : 'Coming soon'}</span>
+      <div class={`px-2 py-1.5 ${accent.bg}`}>
+        <p class={`text-[11px] font-bold ${accent.text} leading-tight line-clamp-1`}>{card.name}</p>
+        <p class="text-[9px] text-gray-500 leading-tight line-clamp-1">{card.status === 'live' ? card.cta_label : 'Coming soon'}</p>
+      </div>
     </a>
   )
 }
+
+/**
+ * "Shop by Interest" circular photo card - reference decomposition item 8:
+ * a row of department-level circular photo crops with the name beneath.
+ * Distinct card SHAPE (circle) from every other category rail on this page
+ * (square crops elsewhere), matching the reference's own visual variety
+ * rule: content type and card geometry both change as you scroll, not just
+ * the data underneath a repeated square card.
+ */
+const InterestCard: FC<{ category: CategoryWithCount }> = ({ category }) => (
+  <a
+    href={`/shop?category=${category.slug}`}
+    class="group flex flex-col items-center gap-2 w-[84px] md:w-[96px] shrink-0 snap-start text-center"
+  >
+    <div class="relative w-[76px] h-[76px] md:w-[88px] md:h-[88px] rounded-full overflow-hidden border-2 border-gray-100 bg-gray-100 group-hover:border-primary transition-colors">
+      <img
+        src={category.image_url ?? undefined}
+        alt={category.name}
+        loading="lazy"
+        class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+      />
+    </div>
+    <h3 class="text-[12px] font-semibold text-gray-800 line-clamp-2 leading-tight">{category.name}</h3>
+  </a>
+)
 
 export const MerchandisingRail: FC<MerchandisingRailProps> = ({
   title,
@@ -143,63 +181,71 @@ export const MerchandisingRail: FC<MerchandisingRailProps> = ({
   variant,
   products = [],
   categories = [],
-  ecosystemCards = []
+  ecosystemCards = [],
+  embedded = false
 }) => {
-  const items = variant === 'product' ? products : variant === 'category' ? categories : ecosystemCards
+  const items = variant === 'product' ? products : variant === 'ecosystem' ? ecosystemCards : categories
   if (items.length === 0) return null
   const trackId = `carousel-track-${id}`
-  // Ecosystem strip is a slim ~80px row in the reference (Row 3 of the section inventory) —
-  // no full rail heading, just a small label + the pill track, much tighter than every other
-  // rail's py-4/mb-3 chrome. This is the one variant that departs from the shared header size,
-  // not the shared header STRUCTURE (still title-left, controls-right).
+  // Ecosystem strip keeps a slightly tighter heading than a full product rail (Row 3 of the
+  // reference's section inventory reads as a secondary discovery row, not a headline rail),
+  // but no longer needs the ultra-slim treatment now that its cards carry real photo weight.
   const isEcosystem = variant === 'ecosystem'
+  const isInterest = variant === 'interest'
+  const inner = (
+    <>
+      <div class={`flex items-center justify-between ${isEcosystem ? 'mb-2.5' : 'mb-3'}`}>
+        <div>
+          <h2 class={isEcosystem ? 'text-base md:text-lg font-bold text-gray-800 flex items-center gap-1.5' : 'text-lg md:text-xl font-bold text-gray-900 flex items-center gap-2'}>
+            {icon && <span class={`material-symbols-outlined text-primary ${isEcosystem ? 'text-lg' : ''}`}>{icon}</span>}
+            {title}
+          </h2>
+          {subtitle && <p class="text-sm text-gray-500 mt-0.5">{subtitle}</p>}
+        </div>
+        <div class="flex items-center gap-2 shrink-0">
+          {viewAllHref && (
+            <a href={viewAllHref} class="text-sm font-semibold text-primary hover:underline flex items-center gap-0.5">
+              See all<span class="material-symbols-outlined text-base">chevron_right</span>
+            </a>
+          )}
+          <div class="hidden md:flex items-center gap-1.5 ml-2">
+            <button
+              type="button"
+              aria-label="Scroll left"
+              class="carousel-nav-btn w-8 h-8 rounded-full border border-gray-300 flex items-center justify-center text-gray-600 hover:border-primary hover:text-primary transition-colors"
+              data-target={trackId}
+              data-dir="-1"
+            >
+              <span class="material-symbols-outlined text-lg">chevron_left</span>
+            </button>
+            <button
+              type="button"
+              aria-label="Scroll right"
+              class="carousel-nav-btn w-8 h-8 rounded-full border border-gray-300 flex items-center justify-center text-gray-600 hover:border-primary hover:text-primary transition-colors"
+              data-target={trackId}
+              data-dir="1"
+            >
+              <span class="material-symbols-outlined text-lg">chevron_right</span>
+            </button>
+          </div>
+        </div>
+      </div>
+      <div
+        id={trackId}
+        class={`flex overflow-x-auto pb-2 -mx-4 px-4 md:mx-0 md:px-0 snap-x scroll-smooth [&::-webkit-scrollbar]:hidden ${isInterest ? 'gap-3 md:gap-4' : 'gap-2.5 md:gap-3'}`}
+      >
+        {variant === 'product' && products.map((p) => <ProductCard product={p} carousel />)}
+        {variant === 'category' && categories.map((c) => <CategoryCard category={c} />)}
+        {variant === 'interest' && categories.map((c) => <InterestCard category={c} />)}
+        {variant === 'ecosystem' && ecosystemCards.map((card) => <EcosystemCard card={card} />)}
+      </div>
+    </>
+  )
+  if (embedded) return inner
   return (
-    <section class={isEcosystem ? 'pt-2 pb-3' : 'py-4 md:py-5 border-t border-gray-100'}>
+    <section class="py-4 md:py-5 border-t border-gray-100">
       <div class="max-w-[80rem] mx-auto px-4 md:px-6 lg:px-8">
-        <div class={`flex items-center justify-between ${isEcosystem ? 'mb-2' : 'mb-3'}`}>
-          <div>
-            <h2 class={isEcosystem ? 'text-sm font-bold text-gray-700 flex items-center gap-1.5' : 'text-lg md:text-xl font-bold text-gray-900 flex items-center gap-2'}>
-              {icon && <span class={`material-symbols-outlined text-primary ${isEcosystem ? 'text-base' : ''}`}>{icon}</span>}
-              {title}
-            </h2>
-            {subtitle && <p class="text-sm text-gray-500 mt-0.5">{subtitle}</p>}
-          </div>
-          <div class="flex items-center gap-2 shrink-0">
-            {viewAllHref && (
-              <a href={viewAllHref} class="text-sm font-semibold text-primary hover:underline flex items-center gap-0.5">
-                See all<span class="material-symbols-outlined text-base">chevron_right</span>
-              </a>
-            )}
-            <div class="hidden md:flex items-center gap-1.5 ml-2">
-              <button
-                type="button"
-                aria-label="Scroll left"
-                class="carousel-nav-btn w-8 h-8 rounded-full border border-gray-300 flex items-center justify-center text-gray-600 hover:border-primary hover:text-primary transition-colors"
-                data-target={trackId}
-                data-dir="-1"
-              >
-                <span class="material-symbols-outlined text-lg">chevron_left</span>
-              </button>
-              <button
-                type="button"
-                aria-label="Scroll right"
-                class="carousel-nav-btn w-8 h-8 rounded-full border border-gray-300 flex items-center justify-center text-gray-600 hover:border-primary hover:text-primary transition-colors"
-                data-target={trackId}
-                data-dir="1"
-              >
-                <span class="material-symbols-outlined text-lg">chevron_right</span>
-              </button>
-            </div>
-          </div>
-        </div>
-        <div
-          id={trackId}
-          class={`flex overflow-x-auto pb-2 -mx-4 px-4 md:mx-0 md:px-0 snap-x scroll-smooth [&::-webkit-scrollbar]:hidden ${isEcosystem ? 'gap-2' : 'gap-2.5 md:gap-3'}`}
-        >
-          {variant === 'product' && products.map((p) => <ProductCard product={p} carousel />)}
-          {variant === 'category' && categories.map((c) => <CategoryCard category={c} />)}
-          {variant === 'ecosystem' && ecosystemCards.map((card) => <EcosystemCard card={card} />)}
-        </div>
+        {inner}
       </div>
     </section>
   )

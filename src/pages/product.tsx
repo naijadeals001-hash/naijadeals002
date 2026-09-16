@@ -135,7 +135,7 @@ export async function productPage(c: Context<AppEnv>) {
 
   return c.render(
     <Layout title={product.title} user={user} locale={locale}>
-      <div class="max-w-7xl mx-auto px-4 md:px-6 lg:px-8 py-6" data-product-id={product.id}>
+      <div id="pdp-root" class="max-w-7xl mx-auto px-4 md:px-6 lg:px-8 py-6" data-product-id={product.id}>
         {/* ============ Breadcrumb ============ */}
         <nav class="text-xs text-gray-500 mb-4 flex items-center gap-1.5 flex-wrap">
           <a href="/" class="hover:text-primary">Home</a>

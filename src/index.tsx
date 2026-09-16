@@ -36,6 +36,9 @@ import { apiControlCenterRoutes } from './routes/api-control-center'
 import { homePage } from './pages/home'
 import { shopPage } from './pages/shop'
 import { categoriesPage, popularCategoriesPage } from './pages/categories'
+import { countriesPage } from './pages/countries'
+import { vendorsPage } from './pages/vendors'
+import { brandsPage } from './pages/brands'
 import { productPage } from './pages/product'
 import { cartPage } from './pages/cart'
 import { checkoutPage, checkoutCallbackPage } from './pages/checkout'
@@ -122,6 +125,7 @@ app.route('/api/notifications', notificationsApi)
 // mounted here.
 app.route('/api/control-center', apiControlCenterRoutes)
 
+
 // ---------- SSR pages ----------
 app.get('/', homePage)
 app.get('/shop', shopPage)
@@ -135,6 +139,9 @@ app.get('/shop', shopPage)
 // but Hono matches most-specific-first regardless.
 app.get('/categories', categoriesPage)
 app.get('/categories/popular', popularCategoriesPage)
+app.get('/countries', countriesPage)
+app.get('/vendors', vendorsPage)
+app.get('/brands', brandsPage)
 app.get('/shop/:slug', productPage)
 app.get('/cart', cartPage)
 app.get('/checkout/callback', checkoutCallbackPage)

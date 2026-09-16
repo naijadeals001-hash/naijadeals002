@@ -290,6 +290,65 @@ export async function getPopularCategories(db: D1Database, limit = 15) {
 }
 
 /**
+ * "Shop by Interest" — reference section (HOMEPAGE_VISUAL_SPEC.md, reference
+ * decomposition item 8): a row of DEPARTMENT-level (level=1) photo circles
+ * ("Electronics", "Fashion", "Home & Kitchen", ...). Departments themselves
+ * have image_url = NULL in this schema (only subcategories/leaves ever got
+ * real photography — migrations 0056/0057's 23 images). Per Pat's explicit
+ * "do not spend this iteration generating more category images" instruction,
+ * this does NOT fabricate a new department-level photo set. Instead each
+ * department BORROWS the real photo already owned by its own most-senior
+ * descendant that has one (e.g. Electronics -> its "Smartphones" subcategory
+ * photo) — genuinely real photography of a real product in that department,
+ * just reused one level up the tree, not a fake/generic stock image. A
+ * department with zero photographed descendants is honestly excluded, same
+ * "show fewer, but all real" rule as every other section in this file.
+ */
+export async function getShopByInterest(db: D1Database, limit = 8): Promise<Array<CategoryRow & { product_count: number }>> {
+  // RUNTIME BUG FIX #1 (found via mandatory PM2/curl verification, not caught by the
+  // wrangler CLI d1 execute check earlier): D1's SQLite rejects a HAVING clause on
+  // a query with no GROUP BY ("HAVING clause on a non-aggregate query"), even though
+  // it's syntactically valid enough for the wrangler CLI's own execution path to not
+  // surface it the same way. Wrapped as a subquery + outer WHERE instead.
+  //
+  // RUNTIME BUG FIX #2 (found via live-D1-binding debug route, Pat's Phase 1/2 mandate,
+  // 2026-09-16): the fix above still used `SELECT d.*` (categories' own native
+  // `image_url` column, which is NULL for every department-level row) alongside an
+  // ALIASED SUBQUERY also named `image_url`, wrapped in an outer `WHERE image_url IS
+  // NOT NULL`. `wrangler d1 execute` / raw `sqlite3` CLI resolve the ambiguous name to
+  // the LATEST (subquery) column and return the correct 10 rows — but the LIVE D1
+  // binding used by the running Worker resolves it to the FIRST (native, NULL) column
+  // instead, so the outer filter always evaluated `NULL IS NOT NULL` = false and
+  // silently returned 0 rows in production while `d1 execute` reported success. Proven
+  // via a controlled A/B debug-route test (explicit columns => 10 rows live; `d.*` =>
+  // 0 rows live, same DB file). Fix: never re-emit `d.*` next to an aliased column of
+  // the same name — select explicit, non-colliding columns instead.
+  const { results } = await db
+    .prepare(
+      `SELECT * FROM (
+         SELECT d.id, d.slug, d.name, d.icon, d.sort_order, d.parent_id,
+                d.category_type, d.level, d.path, d.country_iso,
+                (SELECT c2.image_url FROM categories c2
+                   WHERE (c2.id = d.id OR c2.path LIKE d.id || '/%')
+                     AND c2.image_url IS NOT NULL AND c2.image_url NOT LIKE '/ph.svg%'
+                   ORDER BY c2.level ASC LIMIT 1) as image_url,
+                (SELECT COUNT(*) FROM products p
+                   WHERE p.is_active = 1 AND (p.category_id = d.id OR p.category_id IN (
+                     SELECT id FROM categories WHERE path LIKE d.id || '/%'
+                   ))) as product_count
+         FROM categories d
+         WHERE d.parent_id IS NULL AND d.category_type = 'product'
+       )
+       WHERE image_url IS NOT NULL AND product_count > 0
+       ORDER BY product_count DESC, sort_order ASC
+       LIMIT ?`
+    )
+    .bind(limit)
+    .all<CategoryRow & { product_count: number }>()
+  return results
+}
+
+/**
  * Full category DIRECTORY — every department (level=1) with its direct
  * children (level=2 groups) nested underneath. This is the data source for
  * the genuine `/categories` browse-all-categories page (Checkpoint B "IS NOT
