@@ -71,6 +71,13 @@ import {
 import { getOpenDisputesForAdmin, resolveDispute, createAndExecuteRefund, RefundError } from '../lib/refunds'
 import { createCategoryAttribute, updateCategoryAttribute, deleteCategoryAttribute, getAttributesForCategory } from '../lib/attributes'
 import { getAllCountries } from '../lib/country'
+import {
+  getCategoryNavTreeForAdmin,
+  updateCategoryNavConfig,
+  reorderCategoryChildren,
+  getEcosystemNavConfigForAdmin,
+  updateEcosystemNavConfig,
+} from '../lib/category-nav-admin'
 
 export const apiControlCenterRoutes = new Hono<AppEnv>()
 
@@ -818,6 +825,131 @@ apiControlCenterRoutes.post('/hero-campaigns/reorder', requireControlCenterPermi
     entityId: null,
     afterState: { ordered_ids: body.ordered_ids },
     context: { permission_used: 'promotions.manage' },
+    success: true,
+    ipAddress: getClientIp(c.req.header('cf-connecting-ip') ?? null),
+  })
+  return c.json({ success: true })
+})
+
+// ============================================================
+// CATEGORY / MEGA-MENU NAVIGATION MANAGEMENT (Checkpoint 2, Pat's Phase 2
+// directive, 2026-09-16). Gated by the EXISTING catalog.read / catalog.manage
+// permissions (migration 0052 — no new RBAC migration needed, same
+// scope-simplification discovered in Checkpoint 1). Every mutation is
+// audit-logged via recordControlCenterAction. DOES NOT touch getMegaMenuTree's
+// call sites, the public /api/catalog/categories/tree route, or any
+// customer-facing rendering — this file only exposes the admin read/write
+// surface; src/lib/mega-menu.ts (modified separately, additively) is what
+// the customer-facing mega-menu actually consumes.
+// ============================================================
+
+apiControlCenterRoutes.get('/category-nav', requireControlCenterPermission('catalog.read'), async (c) => {
+  const results = await getCategoryNavTreeForAdmin(c.env.DB)
+  return c.json({ results })
+})
+
+apiControlCenterRoutes.patch('/category-nav/:id', requireControlCenterPermission('catalog.manage'), async (c) => {
+  const admin = c.get('user')!
+  const categoryId = Number(c.req.param('id'))
+  const body = await c.req.json().catch(() => ({}))
+
+  const allowedKeys = ['is_visible', 'sort_order', 'is_featured_home', 'homepage_priority', 'nav_label_override', 'nav_badge']
+  const input: Record<string, unknown> = {}
+  for (const key of allowedKeys) {
+    if (body[key] !== undefined) input[key] = body[key]
+  }
+  if (Object.keys(input).length === 0) return c.json({ error: 'No valid fields provided' }, 400)
+
+  const before = (await getCategoryNavTreeForAdmin(c.env.DB)).find((r) => r.id === categoryId)
+  if (!before) return c.json({ error: 'Category not found' }, 404)
+
+  const updated = await updateCategoryNavConfig(c.env.DB, categoryId, input)
+  if (!updated) return c.json({ error: 'Category not found' }, 404)
+
+  // Invalidate the cached homepage "Shop by Category" section whenever a
+  // field it depends on (is_featured_home / homepage_priority) changes —
+  // same cache-staleness fix pattern established in Checkpoint 1 for hero
+  // campaigns (invalidateHomepageFeedSection). Without this, a Featured
+  // toggle here would silently sit stale for up to 120s (the homepage
+  // feed's TTL) before a customer would ever see it reflected.
+  if ('is_featured_home' in input || 'homepage_priority' in input) {
+    await invalidateHomepageFeedSection(c.env.DB, 'shop_by_category')
+  }
+
+  await recordControlCenterAction(c.env.DB, {
+    actorUserId: admin.id,
+    actorName: admin.name,
+    action: 'category_nav_updated',
+    entityType: 'category',
+    entityId: String(categoryId),
+    beforeState: Object.fromEntries(Object.keys(input).map((k) => [k, (before as any)[k]])),
+    afterState: input,
+    context: { permission_used: 'catalog.manage', category_slug: before.slug },
+    success: true,
+    ipAddress: getClientIp(c.req.header('cf-connecting-ip') ?? null),
+  })
+  return c.json({ result: updated })
+})
+
+apiControlCenterRoutes.post('/category-nav/reorder', requireControlCenterPermission('catalog.manage'), async (c) => {
+  const admin = c.get('user')!
+  const body = await c.req.json<{ parent_id?: number | null; ordered_ids?: number[] }>().catch(() => null)
+  if (!body || !Array.isArray(body.ordered_ids) || body.ordered_ids.length === 0) {
+    return c.json({ error: 'ordered_ids array is required' }, 400)
+  }
+  const parentId = body.parent_id ?? null
+  await reorderCategoryChildren(c.env.DB, parentId, body.ordered_ids)
+  await recordControlCenterAction(c.env.DB, {
+    actorUserId: admin.id,
+    actorName: admin.name,
+    action: 'category_nav_reordered',
+    entityType: 'category',
+    entityId: parentId !== null ? String(parentId) : null,
+    afterState: { parent_id: parentId, ordered_ids: body.ordered_ids },
+    context: { permission_used: 'catalog.manage' },
+    success: true,
+    ipAddress: getClientIp(c.req.header('cf-connecting-ip') ?? null),
+  })
+  return c.json({ success: true })
+})
+
+/** Live preview — returns the EXACT same tree shape the customer-facing mega-menu consumes (getMegaMenuTree, via the public tree route's own module), so "what an admin sees in Preview" and "what a customer actually gets" can never structurally diverge. Deliberately re-imports getMegaMenuTree rather than re-deriving a parallel tree here. */
+apiControlCenterRoutes.get('/category-nav/preview', requireControlCenterPermission('catalog.read'), async (c) => {
+  const { getMegaMenuTree } = await import('../lib/mega-menu')
+  const tree = await getMegaMenuTree(c.env.DB)
+  return c.json({ results: tree })
+})
+
+// ---------- Ecosystem navigation config (schema-only foundation — see migration 0062) ----------
+
+apiControlCenterRoutes.get('/ecosystem-nav', requireControlCenterPermission('catalog.read'), async (c) => {
+  const results = await getEcosystemNavConfigForAdmin(c.env.DB)
+  return c.json({ results })
+})
+
+apiControlCenterRoutes.patch('/ecosystem-nav/:id', requireControlCenterPermission('catalog.manage'), async (c) => {
+  const admin = c.get('user')!
+  const verticalId = Number(c.req.param('id'))
+  const body = await c.req.json().catch(() => ({}))
+  const input: { nav_visible?: boolean; display_order?: number } = {}
+  if (body.nav_visible !== undefined) input.nav_visible = Boolean(body.nav_visible)
+  if (body.display_order !== undefined) input.display_order = Number(body.display_order)
+  if (Object.keys(input).length === 0) return c.json({ error: 'No valid fields provided' }, 400)
+
+  const ok = await updateEcosystemNavConfig(c.env.DB, verticalId, input)
+  if (!ok) return c.json({ error: 'Vertical not found' }, 404)
+
+  await recordControlCenterAction(c.env.DB, {
+    actorUserId: admin.id,
+    actorName: admin.name,
+    action: 'ecosystem_nav_updated',
+    entityType: 'ecosystem_vertical',
+    entityId: String(verticalId),
+    afterState: input,
+    context: {
+      permission_used: 'catalog.manage',
+      note: 'Schema-only foundation (migration 0062) — Layout.tsx header nav does not yet consume this field. See Checkpoint 2 report Section 7.',
+    },
     success: true,
     ipAddress: getClientIp(c.req.header('cf-connecting-ip') ?? null),
   })

@@ -78,6 +78,7 @@ import { ControlCenterLayout } from '../components/ControlCenterLayout'
 import { getAllHeroCampaignsForAdmin, computeCampaignLifecycleState, type HeroCampaignAdminRow } from '../lib/hero-campaigns-admin'
 import { HERO_IMAGE_LIBRARY } from '../lib/hero-image-library'
 import { getAllCountries } from '../lib/country'
+import { getCategoryNavTreeForAdmin, getEcosystemNavConfigForAdmin, type CategoryNavAdminRow } from '../lib/category-nav-admin'
 
 export const controlCenterRoutes = new Hono<AppEnv>()
 
@@ -2605,6 +2606,549 @@ controlCenterRoutes.get('/promotions', requireControlCenterPermission('promotion
         `,
         }}
       ></script>
+    </ControlCenterLayout>
+  )
+})
+
+// ============================================================
+// CATEGORY / MEGA-MENU NAVIGATION MANAGER (Checkpoint 2, Pat's Phase 2
+// directive, 2026-09-16). This page manages the SAME `categories` table
+// the existing mega-menu already reads (via getMegaMenuTree) — it does
+// NOT rebuild the mega-menu, does NOT replace getMegaMenuTree, and does
+// NOT alter the taxonomy structure. It exposes admin control over 5
+// navigation-config fields: is_visible, sort_order (nav order, reused),
+// is_featured_home + homepage_priority (reused), nav_label_override,
+// nav_badge. The Preview panel calls the SAME getMegaMenuTree function
+// the real customer-facing menu uses (via /api/control-center/category-nav/preview),
+// so "what the admin previews" and "what a customer actually sees" can
+// never structurally diverge.
+// ============================================================
+controlCenterRoutes.get('/categories', requireControlCenterPermission('catalog.read'), async (c) => {
+  const user = c.get('user')!
+  const ccAccess = c.get('ccAccess')!
+  const canManage = ccAccess.permissionKeys.has('catalog.manage')
+
+  const [categories, ecosystemVerticals] = await Promise.all([
+    getCategoryNavTreeForAdmin(c.env.DB),
+    getEcosystemNavConfigForAdmin(c.env.DB),
+  ])
+
+  const departments = categories.filter((cat) => cat.level === 1)
+  const countries = Array.from(new Set(categories.map((cat) => cat.country_iso).filter((v): v is string => !!v))).sort()
+  const totalVisible = categories.filter((cat) => cat.is_visible === 1).length
+  const totalHidden = categories.length - totalVisible
+  const totalFeatured = categories.filter((cat) => cat.is_featured_home === 1).length
+
+  // Build parent->children index client-side won't need to re-derive hierarchy —
+  // send the flat list (already ordered level ASC, sort_order ASC) plus parent_id,
+  // and let the browser build the indent/tree view. This mirrors exactly how
+  // getMegaMenuTree/getCategoryDirectory already treat this same flat-row shape.
+  const categoriesJson = JSON.stringify(categories.map((cat) => ({
+    id: cat.id,
+    slug: cat.slug,
+    name: cat.name,
+    parent_id: cat.parent_id,
+    level: cat.level,
+    sort_order: cat.sort_order,
+    country_iso: cat.country_iso,
+    is_visible: cat.is_visible,
+    is_featured_home: cat.is_featured_home,
+    homepage_priority: cat.homepage_priority,
+    nav_label_override: cat.nav_label_override,
+    nav_badge: cat.nav_badge,
+    product_count: cat.product_count,
+  })))
+
+  return c.render(
+    <ControlCenterLayout title="Category Manager" user={user} ccAccess={ccAccess} active="categories">
+      <div class="max-w-[110rem] mx-auto px-4 md:px-8 py-8">
+        <div class="flex items-start justify-between gap-4 mb-1 flex-wrap">
+          <div>
+            <h1 class="text-3xl font-extrabold text-white tracking-tight">Category &amp; Mega-Menu Manager</h1>
+            <p class="text-sm text-gray-500 mt-1 max-w-2xl">
+              Controls what customers see in the "All Categories" mega-menu and homepage merchandising —
+              the real, live taxonomy (189 product categories, 22 departments). This does not rebuild the
+              taxonomy; it manages visibility, navigation order, featured status and label/badge overrides
+              on top of it.
+            </p>
+          </div>
+          {!canManage && (
+            <span class="shrink-0 flex items-center gap-1.5 bg-amber-500/10 border border-amber-500/25 rounded-full px-3 py-1.5 text-xs font-bold text-amber-400">
+              <span class="material-symbols-outlined text-sm">visibility</span> Read-only (catalog.manage not granted)
+            </span>
+          )}
+        </div>
+
+        {/* KPI strip — real counts only, derived from the same rows rendered below */}
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6 mb-6">
+          <div class="bg-ccpanel border border-ccborder rounded-xl p-4">
+            <div class="text-[11px] text-gray-500 uppercase tracking-wide">Total categories</div>
+            <div class="text-2xl font-extrabold text-white mt-1">{categories.length}</div>
+          </div>
+          <div class="bg-ccpanel border border-ccborder rounded-xl p-4">
+            <div class="text-[11px] text-gray-500 uppercase tracking-wide">Visible in nav</div>
+            <div class="text-2xl font-extrabold text-ccaccent mt-1">{totalVisible}</div>
+          </div>
+          <div class="bg-ccpanel border border-ccborder rounded-xl p-4">
+            <div class="text-[11px] text-gray-500 uppercase tracking-wide">Hidden</div>
+            <div class="text-2xl font-extrabold text-gray-400 mt-1">{totalHidden}</div>
+          </div>
+          <div class="bg-ccpanel border border-ccborder rounded-xl p-4">
+            <div class="text-[11px] text-gray-500 uppercase tracking-wide">Featured (homepage)</div>
+            <div class="text-2xl font-extrabold text-amber-400 mt-1">{totalFeatured}</div>
+          </div>
+        </div>
+
+        {/* Search / filters */}
+        <div class="flex flex-wrap items-center gap-2 mb-4">
+          <div class="relative flex-1 min-w-[220px]">
+            <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-lg">search</span>
+            <input id="cat-cc-search" type="text" placeholder="Search categories by name or slug…" class="w-full bg-black/30 border border-ccborder rounded-lg pl-9 pr-3 py-2 text-sm text-gray-200 outline-none focus:border-ccaccent/50" />
+          </div>
+          <select id="cat-cc-filter-dept" class="bg-black/30 border border-ccborder rounded-lg px-3 py-2 text-sm text-gray-300 outline-none focus:border-ccaccent/50">
+            <option value="">All departments</option>
+            {departments.map((d) => <option value={String(d.id)}>{d.name}</option>)}
+          </select>
+          <select id="cat-cc-filter-level" class="bg-black/30 border border-ccborder rounded-lg px-3 py-2 text-sm text-gray-300 outline-none focus:border-ccaccent/50">
+            <option value="">All levels</option>
+            <option value="1">Level 1 — Department</option>
+            <option value="2">Level 2 — Group</option>
+            <option value="3">Level 3 — Subcategory</option>
+            <option value="4">Level 4 — Leaf</option>
+            <option value="5">Level 5 — Leaf</option>
+          </select>
+          <select id="cat-cc-filter-country" class="bg-black/30 border border-ccborder rounded-lg px-3 py-2 text-sm text-gray-300 outline-none focus:border-ccaccent/50">
+            <option value="">All countries</option>
+            <option value="__global__">Global (no country)</option>
+            {countries.map((iso) => <option value={iso}>{iso}</option>)}
+          </select>
+          <select id="cat-cc-filter-visibility" class="bg-black/30 border border-ccborder rounded-lg px-3 py-2 text-sm text-gray-300 outline-none focus:border-ccaccent/50">
+            <option value="">Visible + hidden</option>
+            <option value="visible">Visible only</option>
+            <option value="hidden">Hidden only</option>
+            <option value="featured">Featured only</option>
+          </select>
+          <button id="cat-cc-expand-all" type="button" class="text-sm font-semibold text-gray-400 hover:text-white px-3 py-2 rounded-lg border border-ccborder">Expand all</button>
+          <button id="cat-cc-collapse-all" type="button" class="text-sm font-semibold text-gray-400 hover:text-white px-3 py-2 rounded-lg border border-ccborder">Collapse all</button>
+          <button id="cat-cc-preview-btn" type="button" class="flex items-center gap-1.5 bg-ccaccent/10 border border-ccaccent/30 text-ccaccent font-bold text-sm px-4 py-2 rounded-lg hover:bg-ccaccent/20 transition-colors">
+            <span class="material-symbols-outlined text-base">visibility</span> Preview mega-menu
+          </button>
+        </div>
+
+        <p id="cat-cc-count-label" class="text-xs text-gray-500 mb-2"></p>
+
+        {/* Hierarchy tree table */}
+        <div class="bg-ccpanel border border-ccborder rounded-xl overflow-hidden">
+          <div class="grid grid-cols-[1fr_90px_90px_110px_140px_150px_170px] gap-2 px-4 py-2.5 border-b border-ccborder text-[11px] font-bold text-gray-500 uppercase tracking-wide">
+            <div>Category</div>
+            <div class="text-center">Products</div>
+            <div class="text-center">Country</div>
+            <div class="text-center">Nav order</div>
+            <div class="text-center">Featured</div>
+            <div class="text-center">Visible</div>
+            <div class="text-right">Actions</div>
+          </div>
+          <div id="cat-cc-tree" class="divide-y divide-ccborder/60"></div>
+          <div id="cat-cc-empty" class="hidden px-4 py-10 text-center text-sm text-gray-500">No categories match these filters.</div>
+        </div>
+
+        {/* Ecosystem navigation — schema-only foundation panel */}
+        <div class="mt-10">
+          <div class="flex items-center gap-2 mb-2">
+            <h2 class="text-lg font-bold text-white">Ecosystem Navigation</h2>
+            <span class="text-[10px] font-bold uppercase tracking-wide bg-amber-500/10 border border-amber-500/25 text-amber-400 rounded-full px-2 py-0.5">Schema foundation only</span>
+          </div>
+          <p class="text-sm text-gray-500 max-w-3xl mb-4">
+            Honest scope note: the header/footer ecosystem nav strip (NaijaShop, NaijaFresh, NaijaEats, etc.) is
+            still hardcoded in <code class="text-gray-400">Layout.tsx</code>'s <code class="text-gray-400">ECOSYSTEM_LINKS</code> array today.
+            This table shows and lets you edit the real underlying <code class="text-gray-400">ecosystem_verticals</code> configuration
+            (status, display order, and the new <code class="text-gray-400">nav_visible</code> column) — changes here persist to the
+            database and are ready for the header to consume once that follow-up wiring is authorized, but
+            <strong class="text-gray-300"> the customer-facing header does not read this yet.</strong> Not presented as complete.
+          </p>
+          <div class="bg-ccpanel border border-ccborder rounded-xl overflow-hidden">
+            <div class="grid grid-cols-[1fr_120px_100px_120px_140px] gap-2 px-4 py-2.5 border-b border-ccborder text-[11px] font-bold text-gray-500 uppercase tracking-wide">
+              <div>Vertical</div>
+              <div class="text-center">Status</div>
+              <div class="text-center">Order</div>
+              <div class="text-center">Nav visible</div>
+              <div class="text-right">Header consumes?</div>
+            </div>
+            {ecosystemVerticals.map((v) => (
+              <div class="grid grid-cols-[1fr_120px_100px_120px_140px] gap-2 px-4 py-2.5 items-center border-b border-ccborder/60 last:border-b-0">
+                <div class="flex items-center gap-2 text-sm text-gray-200 font-semibold">
+                  <span class="material-symbols-outlined text-base text-gray-500">{v.icon}</span> {v.name}
+                  <span class="text-gray-600 text-xs font-normal">{v.route}</span>
+                </div>
+                <div class="text-center">
+                  <span class={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${v.status === 'live' ? 'bg-ccaccent/15 text-ccaccent' : 'bg-black/30 text-gray-400 border border-white/10'}`}>{v.status}</span>
+                </div>
+                <div class="text-center text-sm text-gray-300">{v.display_order}</div>
+                <div class="text-center">
+                  <input type="checkbox" class="eco-nav-visible-toggle w-4 h-4 accent-ccaccent" data-id={v.id} checked={v.nav_visible === 1} disabled={!canManage} />
+                </div>
+                <div class="text-right text-xs text-gray-600 font-medium">No (hardcoded)</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Edit modal — only rendered for catalog.manage holders */}
+      {canManage && (
+        <div id="cat-cc-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div class="bg-ccpanel border border-ccborder rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div class="flex items-center justify-between px-5 py-4 border-b border-ccborder">
+              <h3 class="text-base font-bold text-white">Edit navigation config</h3>
+              <button type="button" id="cat-cc-modal-close" class="text-gray-500 hover:text-white"><span class="material-symbols-outlined">close</span></button>
+            </div>
+            <form id="cat-cc-form" class="p-5 flex flex-col gap-4">
+              <input type="hidden" id="cat-cc-f-id" />
+              <div>
+                <p class="text-xs text-gray-500">Category</p>
+                <p id="cat-cc-f-name" class="text-sm font-bold text-white mt-0.5"></p>
+                <p id="cat-cc-f-slug" class="text-xs text-gray-600 font-mono"></p>
+              </div>
+              <label class="flex items-center gap-2 text-sm text-gray-300">
+                <input type="checkbox" id="cat-cc-f-visible" class="w-4 h-4 accent-ccaccent" />
+                Visible in mega-menu / navigation
+              </label>
+              <div>
+                <label class="block text-xs font-semibold text-gray-400 mb-1">Navigation order (sort_order)</label>
+                <input type="number" id="cat-cc-f-sort-order" class="w-full bg-black/30 border border-ccborder rounded-lg px-3 py-2 text-sm text-gray-200 outline-none focus:border-ccaccent/50" />
+                <p class="text-[11px] text-gray-600 mt-1">Lower = appears first among siblings. Does not affect taxonomy structure.</p>
+              </div>
+              <label class="flex items-center gap-2 text-sm text-gray-300">
+                <input type="checkbox" id="cat-cc-f-featured" class="w-4 h-4 accent-ccaccent" />
+                Featured on homepage ("Shop by Category")
+              </label>
+              <div>
+                <label class="block text-xs font-semibold text-gray-400 mb-1">Homepage priority</label>
+                <input type="number" id="cat-cc-f-priority" class="w-full bg-black/30 border border-ccborder rounded-lg px-3 py-2 text-sm text-gray-200 outline-none focus:border-ccaccent/50" placeholder="Lower shows first" />
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-gray-400 mb-1">Navigation label override</label>
+                <input type="text" id="cat-cc-f-label" class="w-full bg-black/30 border border-ccborder rounded-lg px-3 py-2 text-sm text-gray-200 outline-none focus:border-ccaccent/50" placeholder="Leave blank to use real category name" />
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-gray-400 mb-1">Navigation badge</label>
+                <input type="text" id="cat-cc-f-badge" class="w-full bg-black/30 border border-ccborder rounded-lg px-3 py-2 text-sm text-gray-200 outline-none focus:border-ccaccent/50" placeholder="e.g. New, Hot — leave blank for none" />
+              </div>
+              <div class="flex items-center gap-2 pt-2">
+                <button type="submit" class="flex-1 bg-ccaccent text-ccbg font-bold text-sm py-2.5 rounded-lg hover:opacity-90 transition-opacity">Save changes</button>
+                <button type="button" id="cat-cc-form-cancel" class="px-4 py-2.5 text-sm font-semibold text-gray-400 hover:text-white">Cancel</button>
+              </div>
+              <p id="cat-cc-form-error" class="hidden text-xs text-red-400"></p>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Preview modal — renders the EXACT tree returned by the same getMegaMenuTree the customer sees */}
+      <div id="cat-cc-preview-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+        <div class="bg-white rounded-2xl w-full max-w-3xl max-h-[85vh] overflow-y-auto">
+          <div class="flex items-center justify-between px-5 py-4 border-b border-gray-200 sticky top-0 bg-white">
+            <div>
+              <h3 class="text-base font-bold text-gray-900">Mega-menu preview</h3>
+              <p class="text-xs text-gray-500">This is exactly what customers see — same data, same getMegaMenuTree() function.</p>
+            </div>
+            <button type="button" id="cat-cc-preview-close" class="text-gray-400 hover:text-gray-900"><span class="material-symbols-outlined">close</span></button>
+          </div>
+          <div id="cat-cc-preview-body" class="p-5 grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+        </div>
+      </div>
+
+      <script dangerouslySetInnerHTML={{
+        __html: `
+        (function () {
+          var CATEGORIES = ${categoriesJson};
+          var CAN_MANAGE = ${canManage ? 'true' : 'false'};
+          var expanded = {}; // categoryId -> bool, default expanded for level 1/2
+          CATEGORIES.forEach(function (c) { if (c.level <= 2) expanded[c.id] = true; });
+
+          function byParent(parentId) {
+            return CATEGORIES.filter(function (c) { return c.parent_id === parentId; }).sort(function (a, b) { return a.sort_order - b.sort_order; });
+          }
+
+          function matchesFilters(c) {
+            var q = document.getElementById('cat-cc-search').value.trim().toLowerCase();
+            var dept = document.getElementById('cat-cc-filter-dept').value;
+            var level = document.getElementById('cat-cc-filter-level').value;
+            var country = document.getElementById('cat-cc-filter-country').value;
+            var vis = document.getElementById('cat-cc-filter-visibility').value;
+            if (q && c.name.toLowerCase().indexOf(q) === -1 && c.slug.toLowerCase().indexOf(q) === -1) return false;
+            if (level && String(c.level) !== level) return false;
+            if (country === '__global__' && c.country_iso) return false;
+            if (country && country !== '__global__' && c.country_iso !== country) return false;
+            if (vis === 'visible' && c.is_visible !== 1) return false;
+            if (vis === 'hidden' && c.is_visible !== 0) return false;
+            if (vis === 'featured' && c.is_featured_home !== 1) return false;
+            if (dept) {
+              // ancestor check: walk up parent chain to see if it passes through the selected department
+              var cur = c, found = (String(c.id) === dept);
+              while (cur && cur.parent_id && !found) {
+                cur = CATEGORIES.filter(function (x) { return x.id === cur.parent_id; })[0];
+                if (cur && String(cur.id) === dept) found = true;
+              }
+              if (!found) return false;
+            }
+            return true;
+          }
+
+          function anyDescendantMatches(c) {
+            if (matchesFilters(c)) return true;
+            return byParent(c.id).some(anyDescendantMatches);
+          }
+
+          function renderNode(c, depth) {
+            var row = document.createElement('div');
+            row.className = 'grid grid-cols-[1fr_90px_90px_110px_140px_150px_170px] gap-2 px-4 py-2 items-center hover:bg-black/20 text-sm';
+            var children = byParent(c.id);
+            var hasChildren = children.length > 0;
+            var isExpanded = !!expanded[c.id];
+
+            var nameCell = document.createElement('div');
+            nameCell.className = 'flex items-center gap-1.5 min-w-0';
+            nameCell.style.paddingLeft = (depth * 20) + 'px';
+            if (hasChildren) {
+              var toggle = document.createElement('button');
+              toggle.type = 'button';
+              toggle.className = 'shrink-0 text-gray-500 hover:text-white';
+              toggle.innerHTML = '<span class="material-symbols-outlined text-lg">' + (isExpanded ? 'expand_more' : 'chevron_right') + '</span>';
+              toggle.addEventListener('click', function () { expanded[c.id] = !expanded[c.id]; renderTree(); });
+              nameCell.appendChild(toggle);
+            } else {
+              var spacer = document.createElement('span');
+              spacer.className = 'inline-block w-[18px] shrink-0';
+              nameCell.appendChild(spacer);
+            }
+            var label = document.createElement('span');
+            label.className = 'truncate ' + (c.is_visible ? 'text-gray-200' : 'text-gray-600 line-through');
+            label.textContent = c.nav_label_override || c.name;
+            nameCell.appendChild(label);
+            if (c.nav_label_override) {
+              var origBadge = document.createElement('span');
+              origBadge.className = 'text-[10px] text-gray-600 shrink-0';
+              origBadge.textContent = '(' + c.name + ')';
+              nameCell.appendChild(origBadge);
+            }
+            if (c.nav_badge) {
+              var badge = document.createElement('span');
+              badge.className = 'text-[9px] font-bold uppercase bg-ccaccent/15 text-ccaccent px-1.5 py-0.5 rounded shrink-0';
+              badge.textContent = c.nav_badge;
+              nameCell.appendChild(badge);
+            }
+            row.appendChild(nameCell);
+
+            var prodCell = document.createElement('div');
+            prodCell.className = 'text-center text-gray-400 text-xs';
+            prodCell.textContent = c.product_count;
+            row.appendChild(prodCell);
+
+            var countryCell = document.createElement('div');
+            countryCell.className = 'text-center text-gray-500 text-xs';
+            countryCell.textContent = c.country_iso || '—';
+            row.appendChild(countryCell);
+
+            var orderCell = document.createElement('div');
+            orderCell.className = 'text-center text-gray-400 text-xs';
+            orderCell.textContent = c.sort_order;
+            row.appendChild(orderCell);
+
+            var featCell = document.createElement('div');
+            featCell.className = 'text-center';
+            featCell.innerHTML = c.is_featured_home ? '<span class="material-symbols-outlined text-amber-400 text-lg">star</span>' : '<span class="text-gray-700 text-xs">—</span>';
+            row.appendChild(featCell);
+
+            var visCell = document.createElement('div');
+            visCell.className = 'text-center';
+            var visInput = document.createElement('input');
+            visInput.type = 'checkbox';
+            visInput.className = 'w-4 h-4 accent-ccaccent cat-vis-quick-toggle';
+            visInput.checked = c.is_visible === 1;
+            visInput.disabled = !CAN_MANAGE;
+            visInput.addEventListener('change', function () { quickToggleVisible(c.id, visInput.checked); });
+            visCell.appendChild(visInput);
+            row.appendChild(visCell);
+
+            var actionsCell = document.createElement('div');
+            actionsCell.className = 'text-right';
+            if (CAN_MANAGE) {
+              var editBtn = document.createElement('button');
+              editBtn.type = 'button';
+              editBtn.className = 'text-xs font-semibold text-ccaccent hover:underline';
+              editBtn.textContent = 'Edit';
+              editBtn.addEventListener('click', function () { openEditModal(c); });
+              actionsCell.appendChild(editBtn);
+            } else {
+              actionsCell.innerHTML = '<span class="text-xs text-gray-600">View only</span>';
+            }
+            row.appendChild(actionsCell);
+
+            var frag = document.createDocumentFragment();
+            frag.appendChild(row);
+            if (hasChildren && isExpanded) {
+              children.forEach(function (child) {
+                if (!anyDescendantMatches(child)) return;
+                var childFrag = renderNode(child, depth + 1);
+                frag.appendChild(childFrag);
+              });
+            }
+            return frag;
+          }
+
+          function renderTree() {
+            var container = document.getElementById('cat-cc-tree');
+            var empty = document.getElementById('cat-cc-empty');
+            container.innerHTML = '';
+            var roots = byParent(null).filter(anyDescendantMatches);
+            var visibleCount = CATEGORIES.filter(matchesFilters).length;
+            document.getElementById('cat-cc-count-label').textContent = visibleCount + ' of ' + CATEGORIES.length + ' categories match current filters';
+            if (roots.length === 0) {
+              empty.classList.remove('hidden');
+              return;
+            }
+            empty.classList.add('hidden');
+            roots.forEach(function (r) { container.appendChild(renderNode(r, 0)); });
+          }
+
+          function quickToggleVisible(id, isVisible) {
+            fetch('/api/control-center/category-nav/' + id, {
+              method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ is_visible: isVisible })
+            }).then(function (res) {
+              if (!res.ok) { alert('Failed to update visibility'); return; }
+              var cat = CATEGORIES.filter(function (c) { return c.id === id; })[0];
+              if (cat) cat.is_visible = isVisible ? 1 : 0;
+              renderTree();
+            }).catch(function () { alert('Network error updating visibility'); });
+          }
+
+          var editingId = null;
+          function openEditModal(c) {
+            editingId = c.id;
+            document.getElementById('cat-cc-f-id').value = c.id;
+            document.getElementById('cat-cc-f-name').textContent = c.name;
+            document.getElementById('cat-cc-f-slug').textContent = '/' + c.slug;
+            document.getElementById('cat-cc-f-visible').checked = c.is_visible === 1;
+            document.getElementById('cat-cc-f-sort-order').value = c.sort_order;
+            document.getElementById('cat-cc-f-featured').checked = c.is_featured_home === 1;
+            document.getElementById('cat-cc-f-priority').value = c.homepage_priority == null ? '' : c.homepage_priority;
+            document.getElementById('cat-cc-f-label').value = c.nav_label_override || '';
+            document.getElementById('cat-cc-f-badge').value = c.nav_badge || '';
+            document.getElementById('cat-cc-form-error').classList.add('hidden');
+            document.getElementById('cat-cc-modal').classList.remove('hidden');
+          }
+          function closeEditModal() { document.getElementById('cat-cc-modal').classList.add('hidden'); editingId = null; }
+
+          if (CAN_MANAGE) {
+            document.getElementById('cat-cc-modal-close').addEventListener('click', closeEditModal);
+            document.getElementById('cat-cc-form-cancel').addEventListener('click', closeEditModal);
+            document.getElementById('cat-cc-form').addEventListener('submit', function (e) {
+              e.preventDefault();
+              var priorityVal = document.getElementById('cat-cc-f-priority').value;
+              var payload = {
+                is_visible: document.getElementById('cat-cc-f-visible').checked,
+                sort_order: Number(document.getElementById('cat-cc-f-sort-order').value || 0),
+                is_featured_home: document.getElementById('cat-cc-f-featured').checked,
+                homepage_priority: priorityVal === '' ? null : Number(priorityVal),
+                nav_label_override: document.getElementById('cat-cc-f-label').value.trim() || null,
+                nav_badge: document.getElementById('cat-cc-f-badge').value.trim() || null,
+              };
+              fetch('/api/control-center/category-nav/' + editingId, {
+                method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+              }).then(function (res) {
+                if (!res.ok) { return res.json().then(function (d) { throw new Error(d.error || 'Save failed'); }); }
+                return res.json();
+              }).then(function (data) {
+                var cat = CATEGORIES.filter(function (c) { return c.id === editingId; })[0];
+                if (cat && data.result) { Object.assign(cat, data.result); }
+                closeEditModal();
+                renderTree();
+              }).catch(function (err) {
+                var errEl = document.getElementById('cat-cc-form-error');
+                errEl.textContent = err.message;
+                errEl.classList.remove('hidden');
+              });
+            });
+
+            document.querySelectorAll('.eco-nav-visible-toggle').forEach(function (el) {
+              el.addEventListener('change', function () {
+                fetch('/api/control-center/ecosystem-nav/' + el.getAttribute('data-id'), {
+                  method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ nav_visible: el.checked })
+                }).catch(function () { alert('Network error'); });
+              });
+            });
+          }
+
+          document.getElementById('cat-cc-search').addEventListener('input', renderTree);
+          document.getElementById('cat-cc-filter-dept').addEventListener('change', renderTree);
+          document.getElementById('cat-cc-filter-level').addEventListener('change', renderTree);
+          document.getElementById('cat-cc-filter-country').addEventListener('change', renderTree);
+          document.getElementById('cat-cc-filter-visibility').addEventListener('change', renderTree);
+          document.getElementById('cat-cc-expand-all').addEventListener('click', function () {
+            CATEGORIES.forEach(function (c) { expanded[c.id] = true; });
+            renderTree();
+          });
+          document.getElementById('cat-cc-collapse-all').addEventListener('click', function () {
+            CATEGORIES.forEach(function (c) { expanded[c.id] = false; });
+            renderTree();
+          });
+
+          // ---------- Preview modal: fetches the SAME getMegaMenuTree data the customer mega-menu uses ----------
+          document.getElementById('cat-cc-preview-btn').addEventListener('click', function () {
+            var modal = document.getElementById('cat-cc-preview-modal');
+            var body = document.getElementById('cat-cc-preview-body');
+            body.innerHTML = '<p class="text-sm text-gray-400 col-span-2">Loading live preview…</p>';
+            modal.classList.remove('hidden');
+            fetch('/api/control-center/category-nav/preview').then(function (res) { return res.json(); }).then(function (data) {
+              var tree = data.results || [];
+              body.innerHTML = '';
+              if (tree.length === 0) {
+                body.innerHTML = '<p class="text-sm text-gray-400 col-span-2">No visible categories — the customer mega-menu would show nothing right now.</p>';
+                return;
+              }
+              tree.forEach(function (dept) {
+                var col = document.createElement('div');
+                col.className = 'border border-gray-200 rounded-lg p-3';
+                var h = document.createElement('div');
+                h.className = 'flex items-center gap-1.5 font-bold text-gray-900 text-sm mb-2';
+                h.innerHTML = '<span class="material-symbols-outlined text-base text-gray-500">' + (dept.icon || 'category') + '</span>' + dept.name;
+                col.appendChild(h);
+                function renderList(nodes, depth) {
+                  var ul = document.createElement('ul');
+                  ul.className = depth === 0 ? 'space-y-1' : 'pl-3 mt-1 space-y-0.5 border-l border-gray-100';
+                  nodes.forEach(function (n) {
+                    var li = document.createElement('li');
+                    li.className = 'text-xs text-gray-600 flex items-center gap-1';
+                    li.textContent = n.name;
+                    if (n.badge) {
+                      var b = document.createElement('span');
+                      b.className = 'text-[9px] font-bold uppercase bg-primary/10 text-primary px-1 py-0.5 rounded';
+                      b.textContent = n.badge;
+                      li.appendChild(b);
+                    }
+                    ul.appendChild(li);
+                    if (n.children && n.children.length) ul.appendChild(renderList(n.children, depth + 1));
+                  });
+                  return ul;
+                }
+                col.appendChild(renderList(dept.children || [], 0));
+                body.appendChild(col);
+              });
+            }).catch(function () {
+              body.innerHTML = '<p class="text-sm text-red-500 col-span-2">Failed to load preview.</p>';
+            });
+          });
+          document.getElementById('cat-cc-preview-close').addEventListener('click', function () {
+            document.getElementById('cat-cc-preview-modal').classList.add('hidden');
+          });
+
+          renderTree();
+        })();
+        `
+      }}></script>
     </ControlCenterLayout>
   )
 })

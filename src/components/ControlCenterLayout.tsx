@@ -84,6 +84,7 @@ const NAV_GROUPS: {
     group: 'Marketing & Growth',
     items: [
       { key: 'promotions', label: 'Hero Campaigns', icon: 'sell', href: '/control-center/promotions', permission: 'promotions.read', implemented: true },
+      { key: 'categories', label: 'Category Manager', icon: 'category', href: '/control-center/categories', permission: 'catalog.read', implemented: true },
       { key: 'affiliates', label: 'Affiliates', icon: 'diversity_3', implemented: false },
       { key: 'communications', label: 'Communications', icon: 'forum', href: '/control-center/communications', permission: 'notifications.read', implemented: true },
     ],

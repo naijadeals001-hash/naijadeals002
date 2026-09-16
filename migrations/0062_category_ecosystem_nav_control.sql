@@ -1,0 +1,81 @@
+-- NaijaDeals — Checkpoint 2: Category / Mega-Menu + Ecosystem Nav
+-- Enterprise Control Center foundation (Pat's Phase 2 directive, 2026-09-16)
+--
+-- SCOPE DISCIPLINE: this migration adds ONLY the columns genuinely missing
+-- to let the Enterprise Control Center manage customer-facing category
+-- navigation and (partially — see below) ecosystem nav. It deliberately
+-- does NOT touch, duplicate, or replace:
+--   - the existing hierarchical taxonomy (id/slug/name/parent_id/level/
+--     path/category_type) — untouched, still the single source of truth
+--   - sort_order — REUSED as-is for navigation display order. It already
+--     exists (migration 0001) and getMegaMenuTree()/getCategoryDirectory()
+--     already ORDER BY it. No new "nav_order" column is created — Pat's
+--     spec explicitly says "if equivalent fields already exist, REUSE
+--     THEM." Reordering navigation via sort_order does NOT touch parent_id/
+--     level/path, so taxonomy relationships are provably unaffected by a
+--     reorder operation.
+--   - is_featured_home / homepage_priority (migration 0056) — REUSED
+--     as-is for "Featured" status. The Enterprise Control Center will
+--     gain WRITE access to these same columns (via category-nav-admin.ts)
+--     rather than a duplicate "featured" flag. getFeaturedHomeCategories()
+--     is completely unchanged by this migration.
+--   - country_iso (migration 0053) — REUSED as-is for country-aware
+--     category availability. No new country-scoping column.
+--
+-- NEW (genuinely missing) columns on `categories`:
+--   is_visible          — controls mega-menu / nav inclusion, independent
+--                          of whether the category has products. Defaults
+--                          to 1 for all 189 existing rows so this migration
+--                          is 100% behavior-preserving on apply (nothing
+--                          becomes hidden that wasn't already).
+--   nav_label_override  — lets an admin show a different label in the
+--                          NAVIGATION only (e.g. "Phones" instead of
+--                          "Smartphones") without renaming the category
+--                          itself (which would also rename it on PDPs,
+--                          breadcrumbs, /shop?category= results, SEO
+--                          titles, etc). NULL = use `name` (today's
+--                          exact behavior, unchanged for all rows).
+--   nav_badge           — free-text admin-set badge (e.g. "New", "Hot").
+--                          NULL by default on every row — never fabricated,
+--                          never auto-derived. An admin must explicitly
+--                          type a real badge for it to ever appear.
+--
+-- NO destructive changes. NO new table. NO duplicate taxonomy. Applies
+-- cleanly to the existing 189-row categories table with zero rows changing
+-- customer-visible behavior on apply (is_visible=1 default preserves
+-- current "everything shown" state exactly).
+
+ALTER TABLE categories ADD COLUMN is_visible INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE categories ADD COLUMN nav_label_override TEXT;
+ALTER TABLE categories ADD COLUMN nav_badge TEXT;
+
+CREATE INDEX IF NOT EXISTS idx_categories_nav_visible ON categories(is_visible);
+
+-- ============================================================
+-- Ecosystem navigation — SCHEMA-ONLY FOUNDATION (Pat's explicit
+-- "if migrating is larger than the safe scope of this checkpoint, build
+-- the schema/service foundation and clearly report what remains" clause).
+--
+-- ecosystem_verticals (migration 0010) ALREADY has: status (drives live/
+-- coming_soon), display_order, icon, name, route — nearly everything
+-- Pat's spec asks for. The one genuinely missing column is nav_visible:
+-- whether this vertical should appear in the header/footer ecosystem
+-- nav strip at all, DISTINCT from whether it has a full /ecosystem
+-- overview page (every vertical always gets an overview page; not every
+-- vertical necessarily belongs in the compact header nav forever).
+--
+-- Defaults to 1 for all 8 existing rows — zero behavior change on apply.
+--
+-- IMPORTANT — HONESTLY SCOPED: this migration does NOT wire Layout.tsx's
+-- hardcoded ECOSYSTEM_LINKS array to read from this table. That requires
+-- either (a) making Layout.tsx's header ecosystem strip fetch client-side
+-- lazily (mirroring the mega-menu's own proven pattern) or (b) threading
+-- vertical data through all 21 page handlers that render <Layout> today.
+-- Both are real, non-trivial changes touching the header on every single
+-- page — out of the safe scope of a single checkpoint that also delivers
+-- the full Category Manager. See Checkpoint 2 report Section 7 for the
+-- explicit "what remains" statement. This column and its service/API
+-- layer (getEcosystemNavLinks(), GET /api/catalog/ecosystem-nav) are real,
+-- live, and ready for that follow-up wiring — but the customer-facing
+-- header remains on ECOSYSTEM_LINKS until that follow-up is authorized.
+ALTER TABLE ecosystem_verticals ADD COLUMN nav_visible INTEGER NOT NULL DEFAULT 1;
