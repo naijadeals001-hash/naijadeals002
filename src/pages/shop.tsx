@@ -2,6 +2,7 @@ import type { Context } from 'hono'
 import { Layout } from '../components/Layout'
 import { ProductCard } from '../components/ProductCard'
 import type { AppEnv, CategoryRow, ProductWithListingRow } from '../types'
+import { recordBehaviorEvent } from '../lib/behavior-events'
 
 const PER_PAGE = 24
 
@@ -88,6 +89,20 @@ export async function shopPage(c: Context<AppEnv>) {
   if (minRating) {
     sql += ' AND p.rating_avg >= ?'
     binds.push(Number(minRating))
+  }
+
+  // Phase 3A — record category_view / search behavior events. Best-effort,
+  // never blocks rendering. Only fires on page 1 of a given filter combo's
+  // natural entry point (category browse or a search query) — pagination
+  // clicks and pure sort/price/rating refinements on an already-logged view
+  // are not separately re-logged, avoiding one visit inflating the signal.
+  if (page === 1) {
+    if (categoryRoot) {
+      await recordBehaviorEvent(c, { eventType: 'category_view', categoryId: categoryRoot.id, source: 'shop_grid' })
+    }
+    if (q) {
+      await recordBehaviorEvent(c, { eventType: 'search', searchQuery: q, source: 'shop_grid' })
+    }
   }
 
   const countSql = sql.replace(/SELECT p\.\*[\s\S]*?FROM products p/, 'SELECT COUNT(*) as total FROM products p')

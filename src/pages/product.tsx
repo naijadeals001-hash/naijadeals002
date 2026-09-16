@@ -4,6 +4,7 @@ import { ProductCard } from '../components/ProductCard'
 import type { AppEnv, ProductWithListingRow, ReviewRow, QuestionRow } from '../types'
 import { formatNaira, discountPercent, formatRatingCount } from '../lib/money'
 import { getListingsForProduct, getVariantsForListing } from '../lib/catalog'
+import { recordBehaviorEvent, maybePurgeStaleBehaviorEvents } from '../lib/behavior-events'
 
 export async function productPage(c: Context<AppEnv>) {
   const db = c.env.DB
@@ -45,6 +46,16 @@ export async function productPage(c: Context<AppEnv>) {
       404
     )
   }
+
+  // Phase 3A — record the product_view behavior event in parallel with the page's
+  // other data fetches (not serialized in front of them). Best-effort: never
+  // throws, never blocks/delays rendering if the write fails. Also carries the
+  // lazy retention-purge check (see behavior-events.ts — at most once/24h, no
+  // cron on this deploy target).
+  await Promise.all([
+    recordBehaviorEvent(c, { eventType: 'product_view', productId: product.id, categoryId: product.category_id, source: 'pdp' }),
+    maybePurgeStaleBehaviorEvents(db)
+  ])
 
   const [listingsResult, reviews, questions, related] = await Promise.all([
     getListingsForProduct(db, product.id),

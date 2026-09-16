@@ -3,6 +3,8 @@ import type { AppEnv } from '../types'
 import { hashPassword, verifyPassword, createSession, destroySession, setSessionCookie, clearSessionCookie, getSessionToken, isAccountStatusBlocked, requireAuth } from '../lib/auth'
 import { mergeGuestCartIntoUser } from '../lib/cart'
 import { getOrSetGuestToken } from '../lib/guest'
+import { mergeVisitorBehaviorIntoUser } from '../lib/behavior-events'
+import { getVisitorToken } from '../lib/visitor'
 import { checkLoginThrottle, recordLoginAttempt, getClientIp } from '../lib/login-throttle'
 import { requestPasswordReset, resetPasswordWithToken, WeakPasswordError, InvalidResetTokenError } from '../lib/password-reset'
 import { requestEmailVerification, requestPhoneVerification, confirmVerification, InvalidVerificationTokenError, NoTargetToVerifyError, AlreadyVerifiedError } from '../lib/identity-verification'
@@ -44,6 +46,14 @@ authApi.post('/register', async (c) => {
   // Merge any guest cart into the new account
   const guestToken = getOrSetGuestToken(c)
   await mergeGuestCartIntoUser(c.env.DB, guestToken, userId)
+
+  // Phase 3A — merge any pre-registration behavioral history (product views,
+  // category views, searches) into the new account. Same call-site pattern as
+  // the cart merge directly above; read-only getVisitorToken (not
+  // getOrSetVisitorToken) because there's nothing to merge if no nd_visitor
+  // cookie was ever issued to this browser.
+  const visitorToken = getVisitorToken(c)
+  if (visitorToken) await mergeVisitorBehaviorIntoUser(c.env.DB, visitorToken, userId)
 
   const token = await createSession(c.env.DB, userId, c.req.header('user-agent') ?? null)
   setSessionCookie(c, token)
@@ -118,6 +128,10 @@ authApi.post('/login', async (c) => {
 
   const guestToken = getOrSetGuestToken(c)
   await mergeGuestCartIntoUser(c.env.DB, guestToken, user.id)
+
+  // Phase 3A — same merge as /register above, for the returning-visitor login path.
+  const visitorToken = getVisitorToken(c)
+  if (visitorToken) await mergeVisitorBehaviorIntoUser(c.env.DB, visitorToken, user.id)
 
   const token = await createSession(c.env.DB, user.id, c.req.header('user-agent') ?? null)
   setSessionCookie(c, token)
