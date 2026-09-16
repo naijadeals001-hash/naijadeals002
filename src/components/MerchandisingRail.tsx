@@ -11,7 +11,28 @@ export interface EcosystemSpotlightCard {
   cta_label: string
   hero_image_desktop: string
   status: 'live' | 'beta' | 'in_development' | 'coming_soon'
+  /** Real per-vertical accent (ecosystem_verticals.accent_color, migration 0010) — e.g.
+   * 'green', 'amber', 'blue', 'purple', 'slate', 'orange', 'red', 'indigo'. Drives the
+   * reference's tinted-pill treatment (Section 5 of HOMEPAGE_VISUAL_SPEC.md: "9 rounded
+   * card buttons, each with a distinct tinted background color — one hue per vertical").
+   * NaijaShop (synthesized, not a DB row) is given 'green' explicitly in home.tsx. */
+  accent_color?: string
 }
+
+/** Tailwind requires statically-visible class strings for its JIT scanner — an
+ * interpolated `bg-${color}-100` would be purged. This lookup keeps every class
+ * literal so the CDN scanner (Layout.tsx's cdn.tailwindcss.com) always finds it. */
+const ACCENT_CLASSES: Record<string, { bg: string; text: string; iconBg: string }> = {
+  green: { bg: 'bg-green-50', text: 'text-green-700', iconBg: 'bg-green-100' },
+  amber: { bg: 'bg-amber-50', text: 'text-amber-700', iconBg: 'bg-amber-100' },
+  blue: { bg: 'bg-blue-50', text: 'text-blue-700', iconBg: 'bg-blue-100' },
+  purple: { bg: 'bg-purple-50', text: 'text-purple-700', iconBg: 'bg-purple-100' },
+  slate: { bg: 'bg-slate-50', text: 'text-slate-700', iconBg: 'bg-slate-100' },
+  orange: { bg: 'bg-orange-50', text: 'text-orange-700', iconBg: 'bg-orange-100' },
+  red: { bg: 'bg-red-50', text: 'text-red-700', iconBg: 'bg-red-100' },
+  indigo: { bg: 'bg-indigo-50', text: 'text-indigo-700', iconBg: 'bg-indigo-100' }
+}
+const DEFAULT_ACCENT = ACCENT_CLASSES.green
 
 /**
  * MerchandisingRail — the single, shared horizontal-rail UI abstraction for
@@ -63,7 +84,7 @@ interface MerchandisingRailProps {
 const CategoryCard: FC<{ category: CategoryWithCount }> = ({ category }) => (
   <a
     href={`/shop?category=${category.slug}`}
-    class="group flex flex-col w-[38vw] sm:w-40 md:w-44 lg:w-48 shrink-0 snap-start rounded-lg overflow-hidden border border-gray-200 bg-white hover:shadow-md transition-shadow"
+    class="group flex flex-col w-[36vw] sm:w-36 md:w-[9.75rem] lg:w-40 shrink-0 snap-start rounded-lg overflow-hidden border border-gray-200 bg-white hover:shadow-md transition-shadow"
   >
     <div class="relative aspect-square bg-gray-100 overflow-hidden">
       <img
@@ -73,51 +94,42 @@ const CategoryCard: FC<{ category: CategoryWithCount }> = ({ category }) => (
         class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
       />
     </div>
-    <div class="px-2.5 py-2 text-center">
-      <h3 class="text-sm font-semibold text-gray-800 line-clamp-1">{category.name}</h3>
+    <div class="px-2 py-1.5 text-center">
+      <h3 class="text-[13px] font-semibold text-gray-800 line-clamp-1">{category.name}</h3>
     </div>
   </a>
 )
 
 /**
- * Compact Ecosystem card (Checkpoint B item 6: "NOT the current large
- * photo-card block, NOT plain icon pills"). Real photography retained
- * (directive: "The photography is our enhancement") but at rail-card scale —
- * same footprint as CategoryCard — with a vertical name + one-line
- * description + a compact CTA, instead of the old 16:9 hero-image block with
- * a full paragraph and status badge overlay.
+ * Compact Ecosystem "pill" card (Checkpoint B, reference re-measurement:
+ * reference cards are ~115x80px tinted pills — icon + 2-line stacked text,
+ * NOT the large 16:9 photo-card block we had before, and NOT bare icon pills
+ * either since Pat also requires real photography kept). This card threads
+ * both requirements: a small real-photo roundel (keeps the "photography is
+ * our enhancement" rule) inside a tinted pill sized/proportioned to the
+ * reference (fixed ~104px width, ~84px height, rounded-xl), using the REAL
+ * per-vertical accent_color from ecosystem_verticals (migration 0010) for
+ * the tint — never an invented color.
  */
 const EcosystemCard: FC<{ card: EcosystemSpotlightCard }> = ({ card }) => {
-  const statusBadge =
-    card.status === 'live'
-      ? { label: 'Live', cls: 'bg-primary-fixed text-primary-dark' }
-      : card.status === 'beta'
-      ? { label: 'Beta', cls: 'bg-amber-100 text-amber-700' }
-      : card.status === 'in_development'
-      ? { label: 'Soon', cls: 'bg-blue-100 text-blue-600' }
-      : { label: 'Coming', cls: 'bg-white/90 text-gray-700' }
+  const accent = (card.accent_color && ACCENT_CLASSES[card.accent_color]) || DEFAULT_ACCENT
   return (
     <a
       href={card.route}
-      class="group flex flex-col w-[38vw] sm:w-40 md:w-44 lg:w-48 shrink-0 snap-start rounded-lg overflow-hidden border border-gray-200 bg-white hover:shadow-md transition-shadow"
+      class={`group flex flex-col items-center justify-center gap-1 w-[104px] h-[84px] shrink-0 snap-start rounded-xl ${accent.bg} hover:brightness-95 transition-all px-1.5 py-2 text-center`}
     >
-      <div class="relative aspect-square bg-gray-100 overflow-hidden">
+      <div class={`relative w-7 h-7 rounded-full overflow-hidden ${accent.iconBg} flex items-center justify-center shrink-0`}>
         <img
           src={card.hero_image_desktop}
-          alt={card.name}
+          alt=""
+          aria-hidden="true"
           loading="lazy"
-          class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+          class="w-full h-full object-cover opacity-90"
         />
-        <span class={`absolute top-1.5 left-1.5 text-[10px] font-bold rounded-full px-2 py-0.5 ${statusBadge.cls}`}>{statusBadge.label}</span>
+        <span class={`material-symbols-outlined absolute text-[13px] ${accent.text} drop-shadow-[0_1px_1px_rgba(255,255,255,0.9)]`}>{card.icon}</span>
       </div>
-      <div class="px-2.5 py-2 flex flex-col gap-0.5 flex-1">
-        <h3 class="text-sm font-semibold text-gray-800 flex items-center gap-1 line-clamp-1">
-          <span class="material-symbols-outlined text-primary text-sm">{card.icon}</span>
-          {card.name}
-        </h3>
-        <p class="text-[11px] text-gray-500 line-clamp-2 flex-1">{card.tagline}</p>
-        <span class="text-[11px] font-semibold text-primary group-hover:underline mt-0.5">{card.cta_label} →</span>
-      </div>
+      <span class={`text-[11px] font-bold ${accent.text} leading-tight line-clamp-1 w-full`}>{card.name}</span>
+      <span class="text-[9px] text-gray-500 leading-none line-clamp-1 w-full">{card.status === 'live' ? card.cta_label : 'Coming soon'}</span>
     </a>
   )
 }
@@ -136,13 +148,18 @@ export const MerchandisingRail: FC<MerchandisingRailProps> = ({
   const items = variant === 'product' ? products : variant === 'category' ? categories : ecosystemCards
   if (items.length === 0) return null
   const trackId = `carousel-track-${id}`
+  // Ecosystem strip is a slim ~80px row in the reference (Row 3 of the section inventory) —
+  // no full rail heading, just a small label + the pill track, much tighter than every other
+  // rail's py-4/mb-3 chrome. This is the one variant that departs from the shared header size,
+  // not the shared header STRUCTURE (still title-left, controls-right).
+  const isEcosystem = variant === 'ecosystem'
   return (
-    <section class="py-6 md:py-8 border-t border-gray-100">
-      <div class="max-w-[100rem] mx-auto px-4 md:px-6 lg:px-8">
-        <div class="flex items-center justify-between mb-4">
+    <section class={isEcosystem ? 'pt-2 pb-3' : 'py-4 md:py-5 border-t border-gray-100'}>
+      <div class="max-w-[80rem] mx-auto px-4 md:px-6 lg:px-8">
+        <div class={`flex items-center justify-between ${isEcosystem ? 'mb-2' : 'mb-3'}`}>
           <div>
-            <h2 class="text-lg md:text-xl font-bold text-gray-900 flex items-center gap-2">
-              {icon && <span class="material-symbols-outlined text-primary">{icon}</span>}
+            <h2 class={isEcosystem ? 'text-sm font-bold text-gray-700 flex items-center gap-1.5' : 'text-lg md:text-xl font-bold text-gray-900 flex items-center gap-2'}>
+              {icon && <span class={`material-symbols-outlined text-primary ${isEcosystem ? 'text-base' : ''}`}>{icon}</span>}
               {title}
             </h2>
             {subtitle && <p class="text-sm text-gray-500 mt-0.5">{subtitle}</p>}
@@ -177,7 +194,7 @@ export const MerchandisingRail: FC<MerchandisingRailProps> = ({
         </div>
         <div
           id={trackId}
-          class="flex gap-3 md:gap-4 overflow-x-auto pb-2 -mx-4 px-4 md:mx-0 md:px-0 snap-x scroll-smooth [&::-webkit-scrollbar]:hidden"
+          class={`flex overflow-x-auto pb-2 -mx-4 px-4 md:mx-0 md:px-0 snap-x scroll-smooth [&::-webkit-scrollbar]:hidden ${isEcosystem ? 'gap-2' : 'gap-2.5 md:gap-3'}`}
         >
           {variant === 'product' && products.map((p) => <ProductCard product={p} carousel />)}
           {variant === 'category' && categories.map((c) => <CategoryCard category={c} />)}

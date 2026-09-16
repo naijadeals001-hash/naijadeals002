@@ -58,7 +58,8 @@ export async function homePage(c: Context<AppEnv>) {
     cta_label: 'Start shopping',
     hero_image_desktop: '/static/hero/mega-electronics-sale-desktop.jpg',
     hero_image_mobile: '/static/hero/mega-electronics-sale-mobile.jpg',
-    status: 'live' as const
+    status: 'live' as const,
+    accent_color: 'green'
   }
   const spotlightVerticals = [naijaShopSpotlightCard, ...verticals]
 
@@ -75,7 +76,7 @@ export async function homePage(c: Context<AppEnv>) {
           <EcosystemWaitlistModal> is mounted once here so the hero's "Join the waitlist" CTA
           is a real, functional trigger — not a decorative dead link. */}
       <section class="bg-white border-b border-gray-100">
-        <div class="max-w-[100rem] mx-auto px-3 md:px-6 lg:px-8 py-3 md:py-5">
+        <div class="max-w-[80rem] mx-auto px-3 md:px-6 lg:px-8 py-3 md:py-5">
           <HeroZone campaigns={feed.hero_campaigns} user={user} personalization={personalization} />
         </div>
       </section>
@@ -111,13 +112,13 @@ export async function homePage(c: Context<AppEnv>) {
         icon="category"
         variant="category"
         categories={feed.shop_by_category}
-        viewAllHref="/shop"
+        viewAllHref="/categories"
       />
 
       {/* ============ 3. FLASH DEALS ============ */}
       {feed.flash_deals.length > 0 && (
-        <section class="py-6 md:py-8 border-t border-gray-100">
-          <div class="max-w-[100rem] mx-auto px-4 md:px-6 lg:px-8">
+        <section class="py-4 md:py-5 border-t border-gray-100">
+          <div class="max-w-[80rem] mx-auto px-4 md:px-6 lg:px-8">
             <div class="flex items-center justify-between mb-4">
               <h2 class="text-lg md:text-xl font-bold text-gray-900 flex items-center gap-2">
                 <span class="material-symbols-outlined text-amber-500">bolt</span>
@@ -195,13 +196,13 @@ export async function homePage(c: Context<AppEnv>) {
         icon="trending_up"
         variant="category"
         categories={feed.popular_categories}
-        viewAllHref="/shop?sort=popular"
+        viewAllHref="/categories/popular"
       />
 
       {/* ============ 8. TOP BRANDS ============ */}
       {feed.top_brands.length > 0 && (
-        <section id="top-brands-section" class="py-6 md:py-8 border-t border-gray-100">
-          <div class="max-w-[100rem] mx-auto px-4 md:px-6 lg:px-8">
+        <section id="top-brands-section" class="py-4 md:py-5 border-t border-gray-100">
+          <div class="max-w-[80rem] mx-auto px-4 md:px-6 lg:px-8">
             <h2 class="text-lg md:text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
               <span class="material-symbols-outlined text-primary">verified</span>
               Top Brands
@@ -282,8 +283,8 @@ export async function homePage(c: Context<AppEnv>) {
 
       {/* ============ 14. POPULAR VENDORS ============ */}
       {feed.popular_vendors.length > 0 && (
-        <section class="py-6 md:py-8 border-t border-gray-100">
-          <div class="max-w-[100rem] mx-auto px-4 md:px-6 lg:px-8">
+        <section class="py-4 md:py-5 border-t border-gray-100">
+          <div class="max-w-[80rem] mx-auto px-4 md:px-6 lg:px-8">
             <h2 class="text-lg md:text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
               <span class="material-symbols-outlined text-primary">storefront</span>
               Popular Vendors
@@ -310,8 +311,8 @@ export async function homePage(c: Context<AppEnv>) {
       )}
 
       {/* ============ 15. RECENTLY VIEWED (client-hydrated, hidden until populated) ============ */}
-      <section id="recently-viewed-section" class="py-6 md:py-8 border-t border-gray-100 hidden">
-        <div class="max-w-[100rem] mx-auto px-4 md:px-6 lg:px-8">
+      <section id="recently-viewed-section" class="py-4 md:py-5 border-t border-gray-100 hidden">
+        <div class="max-w-[80rem] mx-auto px-4 md:px-6 lg:px-8">
           <h2 class="text-lg md:text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
             <span class="material-symbols-outlined text-primary">history</span>
             Recently Viewed
@@ -321,8 +322,8 @@ export async function homePage(c: Context<AppEnv>) {
       </section>
 
       {/* ============ 16. MERCHANDISING STRIP ============ */}
-      <section class="py-6 md:py-8 border-t border-gray-100">
-        <div class="max-w-[100rem] mx-auto px-4 md:px-6 lg:px-8">
+      <section class="py-4 md:py-5 border-t border-gray-100">
+        <div class="max-w-[80rem] mx-auto px-4 md:px-6 lg:px-8">
           <div class="grid md:grid-cols-2 gap-4">
             <a href="/shop?category=grocery-and-food" class="relative rounded-xl overflow-hidden group aspect-[16/7]">
               <img src="/static/banners/banner-3.jpg" alt="Weekly groceries delivered fast" class="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-300" />
@@ -356,14 +357,14 @@ export async function homePage(c: Context<AppEnv>) {
           grows from 0 toward 54. The africa-glow-map.png backdrop is reused from its
           existing approved asset (public/static/graphics/), never regenerated. */}
       {discoverableCountries.length > 0 && (
-        <section class="py-6 md:py-8 border-t border-gray-100 relative overflow-hidden">
+        <section class="py-4 md:py-5 border-t border-gray-100 relative overflow-hidden">
           <img
             src="/static/graphics/africa-glow-map.png"
             alt=""
             aria-hidden="true"
             class="absolute inset-0 w-full h-full object-cover opacity-[0.04] pointer-events-none"
           />
-          <div class="max-w-[100rem] mx-auto px-4 md:px-6 lg:px-8 relative">
+          <div class="max-w-[80rem] mx-auto px-4 md:px-6 lg:px-8 relative">
             <h2 class="text-lg md:text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
               <span class="material-symbols-outlined text-primary">public</span>
               Discover Africa on NaijaDeals
@@ -394,8 +395,8 @@ export async function homePage(c: Context<AppEnv>) {
       )}
 
       {/* ============ 18. ECOSYSTEM CTA BANNER ============ */}
-      <section class="py-6 md:py-8">
-        <div class="max-w-[100rem] mx-auto px-4 md:px-6 lg:px-8">
+      <section class="py-4 md:py-5">
+        <div class="max-w-[80rem] mx-auto px-4 md:px-6 lg:px-8">
           <div class="bg-primary-light rounded-xl p-6 md:p-8 flex flex-col md:flex-row items-center justify-between gap-4">
             <div>
               <h3 class="text-lg font-bold text-primary-dark flex items-center gap-2">

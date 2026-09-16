@@ -85,7 +85,7 @@ function SellerGuestLanding() {
     <>
       {/* ============ Hero ============ */}
       <section class="bg-gradient-to-br from-primary-dark to-primary text-white">
-        <div class="max-w-[100rem] mx-auto px-4 md:px-6 lg:px-8 py-14 md:py-20">
+        <div class="max-w-[80rem] mx-auto px-4 md:px-6 lg:px-8 py-14 md:py-20">
           <div class="max-w-2xl">
             <span class="inline-flex items-center gap-1.5 text-xs font-semibold bg-white/10 rounded-full px-3 py-1 mb-5">
               <span class="material-symbols-outlined text-sm">storefront</span>
@@ -115,7 +115,7 @@ function SellerGuestLanding() {
 
       {/* ============ Benefits grid ============ */}
       <section class="py-12 md:py-16 border-b border-gray-100">
-        <div class="max-w-[100rem] mx-auto px-4 md:px-6 lg:px-8">
+        <div class="max-w-[80rem] mx-auto px-4 md:px-6 lg:px-8">
           <h2 class="text-xl md:text-2xl font-bold text-gray-900 text-center mb-2">Everything you need to grow your business</h2>
           <p class="text-sm text-gray-500 text-center mb-10 max-w-xl mx-auto">One dashboard for your entire store — from your first listing to your first payout.</p>
           <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">

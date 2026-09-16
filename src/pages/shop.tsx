@@ -136,7 +136,7 @@ export async function shopPage(c: Context<AppEnv>) {
 
   return c.render(
     <Layout title={pageTitle} user={user} locale={locale}>
-      <div class="max-w-[100rem] mx-auto px-4 md:px-6 lg:px-8 py-6 flex gap-6">
+      <div class="max-w-[80rem] mx-auto px-4 md:px-6 lg:px-8 py-6 flex gap-6">
         {/* ============ Sidebar filters (desktop) ============ */}
         <aside class="hidden md:block w-60 shrink-0 space-y-6">
           <div>

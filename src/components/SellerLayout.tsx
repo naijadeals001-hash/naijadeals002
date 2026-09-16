@@ -72,7 +72,7 @@ export const SellerLayout: FC<SellerLayoutProps> = ({ title, user, vendor, activ
       <body class="min-h-screen flex flex-col bg-gray-50 font-sans text-gray-900">
         {/* ===== Seller Center top bar — deliberately distinct chrome from the storefront header, same design tokens ===== */}
         <header class="sticky top-0 z-40 bg-primary-dark text-white shadow-sm">
-          <div class="max-w-[100rem] mx-auto flex items-center gap-3 px-4 md:px-6 lg:px-8 py-2.5">
+          <div class="max-w-[80rem] mx-auto flex items-center gap-3 px-4 md:px-6 lg:px-8 py-2.5">
             <a href="/" class="flex items-center shrink-0" aria-label="NaijaDeals home">
               <span class="text-lg font-bold tracking-tight">Naija<span class="text-primary-fixed">Deals</span></span>
             </a>
@@ -96,7 +96,7 @@ export const SellerLayout: FC<SellerLayoutProps> = ({ title, user, vendor, activ
           </div>
         </header>
 
-        <div class="flex-1 max-w-[100rem] w-full mx-auto md:flex">
+        <div class="flex-1 max-w-[80rem] w-full mx-auto md:flex">
           {/* ===== Desktop sidebar ===== */}
           <nav class="hidden md:block w-56 shrink-0 border-r border-gray-200 bg-white py-4">
             {NAV_ITEMS.map((item) =>

@@ -148,7 +148,7 @@ export const HeroCarousel: FC<{ campaigns: HeroCampaignRow[] }> = ({ campaigns }
                 <div
                   class={`absolute inset-0 flex items-end sm:items-center pointer-events-none ${textLight ? 'bg-gradient-to-t sm:bg-gradient-to-r from-black/70 sm:from-black/55 via-black/20 sm:via-black/10 to-transparent' : 'bg-gradient-to-t sm:bg-gradient-to-r from-white/75 sm:from-white/65 via-white/25 sm:via-white/10 to-transparent'}`}
                 >
-                  <div class="max-w-[100rem] w-full mx-auto px-5 sm:px-8 pb-6 sm:pb-0">
+                  <div class="max-w-[80rem] w-full mx-auto px-5 sm:px-8 pb-6 sm:pb-0">
                     <div class="max-w-sm pointer-events-auto">
                       <h2 class={`text-2xl sm:text-3xl font-extrabold leading-tight ${textLight ? 'text-white' : 'text-gray-900'}`}>
                         {campaign.title}

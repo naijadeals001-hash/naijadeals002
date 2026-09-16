@@ -799,7 +799,7 @@ controlCenterRoutes.get('/operations', async (c) => {
 
   return c.render(
     <ControlCenterLayout title="Operations Tower" user={user} ccAccess={ccAccess} active="operations_tower">
-      <div class="max-w-[100rem] mx-auto px-4 md:px-8 py-8">
+      <div class="max-w-[80rem] mx-auto px-4 md:px-8 py-8">
         <div class="flex items-center justify-between mb-1">
           <h1 class="text-3xl font-extrabold text-white tracking-tight">Operations Tower</h1>
           {grandTotal === 0 ? (
@@ -865,7 +865,7 @@ controlCenterRoutes.get('/verification', async (c) => {
 
   return c.render(
     <ControlCenterLayout title="Verification & KYC" user={user} ccAccess={ccAccess} active="verification">
-      <div class="max-w-[100rem] mx-auto px-4 md:px-8 py-8">
+      <div class="max-w-[80rem] mx-auto px-4 md:px-8 py-8">
         <h1 class="text-3xl font-extrabold text-white tracking-tight mb-1">Verification & KYC</h1>
         <p class="text-sm text-gray-500 mb-8 max-w-2xl">Real vendors and provider_profiles tables — every queue below is the live pending-verification list, oldest first.</p>
 
@@ -958,7 +958,7 @@ controlCenterRoutes.get('/system-health', requireControlCenterPermission('system
 
   return c.render(
     <ControlCenterLayout title="System Health" user={user} ccAccess={ccAccess} active="system_health">
-      <div class="max-w-[100rem] mx-auto px-4 md:px-8 py-8">
+      <div class="max-w-[80rem] mx-auto px-4 md:px-8 py-8">
         <div class="flex items-center justify-between mb-1">
           <h1 class="text-3xl font-extrabold text-white tracking-tight">Platform Health Center</h1>
           <span class="flex items-center gap-2 bg-ccaccent/10 border border-ccaccent/25 rounded-full px-4 py-2 text-sm font-bold text-ccaccent">
@@ -1002,7 +1002,7 @@ controlCenterRoutes.get('/finance', requireControlCenterPermission('payments.rea
 
   return c.render(
     <ControlCenterLayout title="Payments & Finance" user={user} ccAccess={ccAccess} active="finance">
-      <div class="max-w-[100rem] mx-auto px-4 md:px-8 py-8">
+      <div class="max-w-[80rem] mx-auto px-4 md:px-8 py-8">
         <h1 class="text-3xl font-extrabold text-white tracking-tight mb-1">Payments & Finance</h1>
         <p class="text-sm text-gray-500 mb-8 max-w-3xl">
           This is an operating VIEW over the existing Payment/Refund/Booking engines — never a second wallet, ledger or payment system. Every figure below is a live SUM/COUNT against payment_transactions, refunds, orders, bookings and service_orders.
@@ -1352,7 +1352,7 @@ controlCenterRoutes.get('/vendors/:id', requireControlCenterPermission('vendors.
 
   return c.render(
     <ControlCenterLayout title={profile.businessName ?? profile.name} user={user} ccAccess={ccAccess} active="vendors">
-      <div class="max-w-[100rem] mx-auto px-4 md:px-8 py-8">
+      <div class="max-w-[80rem] mx-auto px-4 md:px-8 py-8">
         <a href="/control-center/vendors" class="text-xs text-gray-500 hover:text-ccaccent mb-4 inline-flex items-center gap-1"><span class="material-symbols-outlined text-sm">arrow_back</span> Vendors</a>
         <div class="flex items-start justify-between mb-1 flex-wrap gap-3">
           <div>
@@ -1537,7 +1537,7 @@ controlCenterRoutes.get('/moderation', requireControlCenterPermission('moderatio
 
   return c.render(
     <ControlCenterLayout title="Content Moderation" user={user} ccAccess={ccAccess} active="moderation">
-      <div class="max-w-[100rem] mx-auto px-4 md:px-8 py-8">
+      <div class="max-w-[80rem] mx-auto px-4 md:px-8 py-8">
         <div class="flex items-center justify-between mb-1">
           <h1 class="text-3xl font-extrabold text-white tracking-tight">Content Moderation</h1>
           <span class="flex items-center gap-2 bg-amber-500/10 border border-amber-500/25 rounded-full px-4 py-2 text-sm font-bold text-amber-400">
@@ -1693,7 +1693,7 @@ controlCenterRoutes.get('/communications', requireControlCenterPermission('notif
 
   return c.render(
     <ControlCenterLayout title="Communications" user={user} ccAccess={ccAccess} active="communications">
-      <div class="max-w-[100rem] mx-auto px-4 md:px-8 py-8">
+      <div class="max-w-[80rem] mx-auto px-4 md:px-8 py-8">
         <h1 class="text-3xl font-extrabold text-white tracking-tight mb-1">Communications</h1>
         <p class="text-sm text-gray-500 mb-8 max-w-2xl">
           Real Engine 9 (Communication &amp; Notification Engine) observability — direct counts from{' '}
@@ -1824,7 +1824,7 @@ controlCenterRoutes.get('/customers', requireControlCenterPermission('customers.
 
   return c.render(
     <ControlCenterLayout title="Customers" user={user} ccAccess={ccAccess} active="customers">
-      <div class="max-w-[100rem] mx-auto px-4 md:px-8 py-8">
+      <div class="max-w-[80rem] mx-auto px-4 md:px-8 py-8">
         <h1 class="text-3xl font-extrabold text-white tracking-tight mb-1">Customers</h1>
         <p class="text-sm text-gray-500 mb-6 max-w-2xl">Real <code class="text-gray-400">users</code> table (role = customer) — most recently joined first. Click a customer to open their real Customer 360 profile.</p>
 
@@ -1890,7 +1890,7 @@ controlCenterRoutes.get('/customers/:id', requireControlCenterPermission('custom
 
   return c.render(
     <ControlCenterLayout title={profile.name} user={user} ccAccess={ccAccess} active="customers">
-      <div class="max-w-[100rem] mx-auto px-4 md:px-8 py-8">
+      <div class="max-w-[80rem] mx-auto px-4 md:px-8 py-8">
         <a href="/control-center/customers" class="text-xs text-gray-500 hover:text-ccaccent mb-4 inline-flex items-center gap-1"><span class="material-symbols-outlined text-sm">arrow_back</span> Customers</a>
         <div class="flex items-start justify-between mb-1 flex-wrap gap-3">
           <div>
@@ -1985,7 +1985,7 @@ controlCenterRoutes.get('/providers/:id', requireControlCenterPermission('provid
 
   return c.render(
     <ControlCenterLayout title={profile.displayName} user={user} ccAccess={ccAccess} active="providers">
-      <div class="max-w-[100rem] mx-auto px-4 md:px-8 py-8">
+      <div class="max-w-[80rem] mx-auto px-4 md:px-8 py-8">
         <a href="/control-center/providers" class="text-xs text-gray-500 hover:text-ccaccent mb-4 inline-flex items-center gap-1"><span class="material-symbols-outlined text-sm">arrow_back</span> Providers</a>
         <div class="flex items-start justify-between mb-1 flex-wrap gap-3">
           <div>

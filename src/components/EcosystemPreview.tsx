@@ -77,7 +77,7 @@ export const EcosystemPreview: FC<EcosystemPreviewProps> = ({ vertical, features
           </picture>
           <div class={`absolute inset-0 bg-gradient-to-r ${accent.heroFrom} via-black/40 to-transparent`}></div>
         </div>
-        <div class="relative max-w-[100rem] mx-auto px-4 md:px-6 lg:px-8 py-16 md:py-24">
+        <div class="relative max-w-[80rem] mx-auto px-4 md:px-6 lg:px-8 py-16 md:py-24">
           <div class="max-w-2xl">
             <span class="inline-flex items-center gap-1.5 text-xs font-bold bg-white text-gray-900 rounded-full px-3 py-1.5 mb-5 shadow-sm">
               <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
@@ -107,7 +107,7 @@ export const EcosystemPreview: FC<EcosystemPreviewProps> = ({ vertical, features
 
       {/* ============ What's coming: feature cards ============ */}
       <section class="py-14 md:py-20 border-b border-gray-100">
-        <div class="max-w-[100rem] mx-auto px-4 md:px-6 lg:px-8">
+        <div class="max-w-[80rem] mx-auto px-4 md:px-6 lg:px-8">
           <div class="text-center max-w-2xl mx-auto mb-10">
             <h2 class="text-xl md:text-2xl font-bold text-gray-900">What {vertical.name} will bring</h2>
             <p class="text-sm text-gray-500 mt-2">
@@ -152,7 +152,7 @@ export const EcosystemPreview: FC<EcosystemPreviewProps> = ({ vertical, features
 
       {/* ============ Explore the rest of the ecosystem ============ */}
       <section class="py-12 md:py-16">
-        <div class="max-w-[100rem] mx-auto px-4 md:px-6 lg:px-8 text-center">
+        <div class="max-w-[80rem] mx-auto px-4 md:px-6 lg:px-8 text-center">
           <h2 class="text-lg md:text-xl font-bold text-gray-900 mb-2">While you wait, explore NaijaShop</h2>
           <p class="text-sm text-gray-500 mb-6 max-w-lg mx-auto">
             NaijaShop is live today — thousands of products from verified Nigerian vendors, escrow-protected and delivered nationwide.

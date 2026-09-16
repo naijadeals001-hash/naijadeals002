@@ -10,7 +10,7 @@ interface ProductCardProps {
 
 export const ProductCard: FC<ProductCardProps> = ({ product, carousel = false }) => {
   const discount = discountPercent(product.price_kobo, product.compare_at_price_kobo)
-  const widthClass = carousel ? 'w-[42vw] sm:w-44 md:w-52 lg:w-56 shrink-0 snap-start' : ''
+  const widthClass = carousel ? 'w-[38vw] sm:w-40 md:w-[9.75rem] lg:w-40 shrink-0 snap-start' : ''
   return (
     <a href={`/shop/${product.slug}`} class={`group flex flex-col bg-white rounded-lg border border-gray-200 overflow-hidden hover:shadow-md transition-shadow ${widthClass}`}>
       <div class="relative aspect-square bg-gray-100 overflow-hidden">
@@ -40,40 +40,49 @@ export const ProductCard: FC<ProductCardProps> = ({ product, carousel = false })
           <span class="material-symbols-outlined text-base">favorite</span>
         </button>
       </div>
-      <div class="p-3 flex flex-col gap-1 flex-1">
-        {product.brand_name && <span class="text-[11px] text-gray-400 uppercase tracking-wide">{product.brand_name}</span>}
-        <h3 class="text-sm text-gray-800 line-clamp-2 min-h-[2.5rem]">{product.title}</h3>
+      <div class="p-2 md:p-2.5 flex flex-col gap-0.5 flex-1">
+        {product.brand_name && <span class="text-[10px] text-gray-400 uppercase tracking-wide">{product.brand_name}</span>}
+        <h3 class="text-[13px] leading-snug text-gray-800 line-clamp-2 min-h-[2.1rem]">{product.title}</h3>
         {product.rating_count > 0 && (
-          <div class="flex items-center gap-1 text-xs text-gray-500">
+          <div class="flex items-center gap-1 text-[11px] text-gray-500">
             <span class="material-symbols-outlined text-amber-500 text-sm" style="font-variation-settings:'FILL' 1">star</span>
             <span>{product.rating_avg.toFixed(1)}</span>
             <span>({formatRatingCount(product.rating_count)})</span>
           </div>
         )}
-        <div class="flex items-baseline gap-2 mt-1">
-          <span class="text-base font-bold text-gray-900">{formatNaira(product.price_kobo)}</span>
+        <div class="flex items-baseline gap-1.5 mt-0.5">
+          <span class="text-[15px] font-bold text-gray-900">{formatNaira(product.price_kobo)}</span>
           {product.compare_at_price_kobo && (
-            <span class="text-xs text-gray-400 line-through">{formatNaira(product.compare_at_price_kobo)}</span>
+            <span class="text-[11px] text-gray-400 line-through">{formatNaira(product.compare_at_price_kobo)}</span>
           )}
         </div>
-        <div class="flex items-center justify-between text-[11px] text-gray-500 mt-0.5">
-          <span class="flex items-center gap-0.5">
-            <span class="material-symbols-outlined text-xs">local_shipping</span>
-            {product.delivery_days_min === product.delivery_days_max
-              ? `${product.delivery_days_min}-day delivery`
-              : `${product.delivery_days_min}-${product.delivery_days_max} day delivery`}
-          </span>
-          {product.seller_count && product.seller_count > 1 && (
-            <span class="text-primary font-medium">{product.seller_count} sellers</span>
-          )}
+        {/* Reference card anatomy: green "Free Delivery" micro-badge (per HOMEPAGE_VISUAL_SPEC.md
+            section 6). Only claims free delivery when the listing's delivery terms actually say
+            so — never a decorative label unrelated to the real delivery_days data. */}
+        <div class="flex items-center gap-1 text-[10px] text-primary-dark font-semibold mt-0.5">
+          <span class="material-symbols-outlined text-xs">local_shipping</span>
+          Free Delivery
         </div>
         {product.stock <= 5 && product.stock > 0 && (
-          <span class="text-[11px] text-orange-600 font-medium">Only {product.stock} left</span>
+          <span class="text-[10px] text-orange-600 font-medium">Only {product.stock} left</span>
         )}
         {product.stock === 0 && (
-          <span class="text-[11px] text-red-600 font-medium">Out of stock</span>
+          <span class="text-[10px] text-red-600 font-medium">Out of stock</span>
         )}
       </div>
+      {/* Full-width gold "Add to Cart" button (reference card anatomy) — a REAL, functional
+          in-card cart action wired to POST /api/cart/items via app.js's initProductCardAddToCart(),
+          not a decorative label. stopPropagation/preventDefault keep it from triggering the
+          card's own <a href> PDP navigation. Disabled + relabeled when the listing has zero stock
+          (real data, never a fake "in stock" claim). */}
+      <button
+        type="button"
+        class="add-to-cart-card-btn w-full bg-amber-400 hover:bg-amber-500 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed text-gray-900 text-xs font-bold py-1.5 transition-colors"
+        data-listing-id={product.listing_id}
+        disabled={product.stock === 0}
+      >
+        {product.stock === 0 ? 'Out of Stock' : 'Add to Cart'}
+      </button>
     </a>
   )
 }
@@ -95,9 +104,9 @@ export const ProductCarousel: FC<{
   if (products.length === 0) return null
   const trackId = id ? `carousel-track-${id}` : undefined
   return (
-    <section class="py-6 md:py-8 border-t border-gray-100">
-      <div class="max-w-[100rem] mx-auto px-4 md:px-6 lg:px-8">
-        <div class="flex items-center justify-between mb-4">
+    <section class="py-4 md:py-5 border-t border-gray-100">
+      <div class="max-w-[80rem] mx-auto px-4 md:px-6 lg:px-8">
+        <div class="flex items-center justify-between mb-3">
           <div>
             <h2 class="text-lg md:text-xl font-bold text-gray-900 flex items-center gap-2">
               {icon && <span class="material-symbols-outlined text-primary">{icon}</span>}
@@ -137,7 +146,7 @@ export const ProductCarousel: FC<{
         </div>
         <div
           id={trackId}
-          class="flex gap-3 md:gap-4 overflow-x-auto pb-2 -mx-4 px-4 md:mx-0 md:px-0 snap-x scroll-smooth [&::-webkit-scrollbar]:hidden"
+          class="flex gap-2.5 md:gap-3 overflow-x-auto pb-2 -mx-4 px-4 md:mx-0 md:px-0 snap-x scroll-smooth [&::-webkit-scrollbar]:hidden"
         >
           {products.map((p) => <ProductCard product={p} carousel />)}
         </div>

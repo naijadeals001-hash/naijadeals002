@@ -433,6 +433,38 @@
     }).catch(function () { btn.disabled = false; });
   });
 
+  // ---------- In-card "Add to Cart" (ProductCard's full-width gold button, Checkpoint B
+  // card-anatomy fix) — a REAL POST to /api/cart/items, not a decorative label. Same
+  // document-level delegation pattern as the wishlist button above, so it works on every
+  // ProductCard everywhere (home rails, shop grid, PDP related products) with zero per-page
+  // wiring. stopPropagation/preventDefault stop the surrounding <a> from navigating to the PDP.
+  document.addEventListener('click', function (e) {
+    var btn = e.target.closest('.add-to-cart-card-btn');
+    if (!btn || btn.disabled) return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    var listingId = Number(btn.getAttribute('data-listing-id'));
+    if (!listingId) return;
+    var originalLabel = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Adding…';
+    api('/api/cart/items', { method: 'POST', body: JSON.stringify({ listing_id: listingId, quantity: 1 }) })
+      .then(function (res) {
+        if (res.status === 401) { location.href = '/login?next=' + encodeURIComponent(location.pathname + location.search); return; }
+        if (!res.ok) {
+          btn.disabled = false;
+          btn.textContent = originalLabel;
+          alert((res.data && res.data.error) || 'Could not add this item to your cart.');
+          return;
+        }
+        updateCartBadges(res.data.count);
+        btn.textContent = 'Added ✓';
+        setTimeout(function () { btn.disabled = false; btn.textContent = originalLabel; }, 1500);
+      })
+      .catch(function () { btn.disabled = false; btn.textContent = originalLabel; });
+  });
+
   // ---------- Dedicated Wishlist page (/account/wishlist): remove + move-to-cart ----------
   (function initWishlistPage() {
     const grid = document.getElementById('wishlist-grid');

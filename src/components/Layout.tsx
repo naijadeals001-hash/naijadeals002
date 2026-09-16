@@ -99,7 +99,7 @@ export const Layout: FC<LayoutProps> = ({ title, description, user, cartCount = 
           <div class="hidden md:block bg-primary-dark text-white">
             {/* ---------- TIER 1: Utility bar ---------- */}
             <div class="border-b border-white/10">
-              <div class="max-w-[100rem] mx-auto flex items-center justify-between px-6 lg:px-8 py-1.5 text-xs text-white/70">
+              <div class="max-w-[80rem] mx-auto flex items-center justify-between px-6 lg:px-8 py-1.5 text-xs text-white/70">
                 <div class="flex items-center gap-4">
                   <span>One Africa. More Possibilities.</span>
                 </div>
@@ -117,7 +117,7 @@ export const Layout: FC<LayoutProps> = ({ title, description, user, cartCount = 
               </div>
             </div>
             {/* ---------- TIER 2: Main header — logo, search, account/cart ---------- */}
-            <div class="max-w-[100rem] mx-auto flex items-center gap-4 px-6 lg:px-8 py-2.5">
+            <div class="max-w-[80rem] mx-auto flex items-center gap-4 px-6 lg:px-8 py-2.5">
               <a href="/" class="flex items-center shrink-0 bg-white/5 hover:bg-white/10 transition-colors rounded-lg px-3 py-1.5" aria-label="NaijaDeals home">
                 <span class="text-xl font-bold tracking-tight">Naija<span class="text-primary-fixed">Deals</span></span>
               </a>
@@ -176,7 +176,7 @@ export const Layout: FC<LayoutProps> = ({ title, description, user, cartCount = 
             </div>
             {/* ---------- TIER 3: All Categories trigger (DB-driven mega-menu) + ecosystem nav ---------- */}
             <nav class="bg-primary border-t border-white/10 relative">
-              <div class="max-w-[100rem] mx-auto flex items-center gap-1 px-6 lg:px-8 py-0 text-sm font-medium">
+              <div class="max-w-[80rem] mx-auto flex items-center gap-1 px-6 lg:px-8 py-0 text-sm font-medium">
                 {/* All Categories — opens the DB-driven mega-menu (src/lib/mega-menu.ts via
                     GET /api/catalog/categories/tree). Fetched lazily on first click by
                     initMegaMenu() in app.js — NO hardcoded category list here at all,
@@ -356,7 +356,7 @@ export const Layout: FC<LayoutProps> = ({ title, description, user, cartCount = 
 
         {/* ===== MEGA FOOTER ===== */}
         <footer class="bg-primary-dark text-white mt-8">
-          <div class="max-w-[100rem] mx-auto px-6 lg:px-8 py-10">
+          <div class="max-w-[80rem] mx-auto px-6 lg:px-8 py-10">
             <div class="border-b border-white/10 pb-8 mb-8">
               <div class="max-w-md">
                 <h3 class="font-semibold mb-1">{t('footer_newsletter_heading')}</h3>

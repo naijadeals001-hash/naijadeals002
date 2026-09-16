@@ -32,7 +32,7 @@ export async function ecosystemPage(c: Context<AppEnv>) {
   return c.render(
     <Layout title="Ecosystem" user={user} locale={locale} description="One NaijaDeals account for shopping, fresh food, eats, gigs, stays, mobility, delivery, entertainment and AI — across Nigeria.">
       <section class="bg-gradient-to-br from-primary-dark to-primary text-white">
-        <div class="max-w-[100rem] mx-auto px-6 lg:px-8 py-12 text-center">
+        <div class="max-w-[80rem] mx-auto px-6 lg:px-8 py-12 text-center">
           <span class="material-symbols-outlined text-4xl text-primary-fixed">workspace_premium</span>
           <h1 class="text-3xl lg:text-4xl font-bold mt-3">One account. One ecosystem.</h1>
           <p class="text-white/80 mt-3 max-w-xl mx-auto">

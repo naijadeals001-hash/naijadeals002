@@ -47,7 +47,7 @@ const SECTION_LOADERS: Record<string, (db: D1Database) => Promise<any>> = {
   nigerian_brands: (db) => getNigerianBrandProducts(db, 12),
   top_brands: (db) => getTopBrands(db, 12),
   shop_by_category: (db) => getFeaturedHomeCategories(db, 12),
-  popular_categories: (db) => getPopularCategories(db, 10),
+  popular_categories: (db) => getPopularCategories(db, 15),
   popular_vendors: (db) => getPopularVendors(db, 8)
 }
 

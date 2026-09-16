@@ -35,6 +35,7 @@ import { apiControlCenterRoutes } from './routes/api-control-center'
 // SSR pages
 import { homePage } from './pages/home'
 import { shopPage } from './pages/shop'
+import { categoriesPage, popularCategoriesPage } from './pages/categories'
 import { productPage } from './pages/product'
 import { cartPage } from './pages/cart'
 import { checkoutPage, checkoutCallbackPage } from './pages/checkout'
@@ -124,6 +125,16 @@ app.route('/api/control-center', apiControlCenterRoutes)
 // ---------- SSR pages ----------
 app.get('/', homePage)
 app.get('/shop', shopPage)
+// Real category discovery pages (Checkpoint B item 7) — genuine "See All"
+// destinations for the homepage's Shop by Category / Popular Categories
+// rails. Registered BEFORE /shop/:slug's catch-all-looking sibling only
+// because they're a completely separate path prefix, but ordered here for
+// readability alongside the other /shop* routes. NOTE: must also be
+// registered before nothing conflicting — /categories/popular is a static
+// path, not a param, so route order relative to /categories doesn't matter,
+// but Hono matches most-specific-first regardless.
+app.get('/categories', categoriesPage)
+app.get('/categories/popular', popularCategoriesPage)
 app.get('/shop/:slug', productPage)
 app.get('/cart', cartPage)
 app.get('/checkout/callback', checkoutCallbackPage)

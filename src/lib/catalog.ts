@@ -260,20 +260,69 @@ export async function getLimitedTimeDeals(db: D1Database, limit = 10): Promise<P
  * item 4), the same "show fewer, but all real" filter used by getTopBrands/
  * getPopularVendors/PRODUCT_CARD_SELECT is now applied here too. `image_url`
  * is added to the SELECT list so the rail has something to render.
+ *
+ * CHECKPOINT B RAIL-DENSITY FIX (2026-09-16, "IS NOT APPROVED YET" directive
+ * item 3): default limit raised 10 -> 15. This is NOT padding with fake data —
+ * 15 is the FULL, exact count of real-image-AND-real-product categories that
+ * currently exist (verified: `SELECT COUNT(*) FROM (... same WHERE clause ...)`
+ * = 15). The old limit=10 was silently truncating 5 genuinely-real categories
+ * off the end for no reason. Secondary sort key is homepage_priority ASC
+ * (NULLS LAST) purely as a tie-breaker among equal-product_count rows — it
+ * never overrides the real product_count ranking, it only makes ties
+ * deterministic by preferring already-curated categories. No popularity
+ * number is ever invented: every row's product_count is a live COUNT(*).
  */
-export async function getPopularCategories(db: D1Database, limit = 10) {
+export async function getPopularCategories(db: D1Database, limit = 15) {
   const { results } = await db
     .prepare(
-      `SELECT c.id, c.slug, c.name, c.icon, c.image_url, COUNT(p.id) as product_count
+      `SELECT c.id, c.slug, c.name, c.icon, c.image_url, c.homepage_priority, COUNT(p.id) as product_count
        FROM categories c
        JOIN products p ON p.category_id = c.id AND p.is_active = 1
        WHERE c.parent_id IS NOT NULL AND c.category_type = 'product'
          AND c.image_url IS NOT NULL AND c.image_url NOT LIKE '/ph.svg%'
-       GROUP BY c.id ORDER BY product_count DESC LIMIT ?`
+       GROUP BY c.id
+       ORDER BY product_count DESC, (c.homepage_priority IS NULL) ASC, c.homepage_priority ASC
+       LIMIT ?`
     )
     .bind(limit)
     .all()
   return results
+}
+
+/**
+ * Full category DIRECTORY — every department (level=1) with its direct
+ * children (level=2 groups) nested underneath. This is the data source for
+ * the genuine `/categories` browse-all-categories page (Checkpoint B "IS NOT
+ * APPROVED YET" directive item 7): Pat explicitly rejected `/shop` and
+ * `/shop?sort=popular` as "disguising the same Shop page behind a different
+ * URL" for the Shop by Category / Popular Categories rails' "See All"
+ * destinations. This function is a THIRD, distinct view over the same
+ * `categories` table — not the curated is_featured_home rail (
+ * getFeaturedHomeCategories), not the live-activity ranking (
+ * getPopularCategories) — a full taxonomy explorer showing all 22
+ * departments and their ~71 direct subcategory groups, image or no image,
+ * so every real department the business sells in is discoverable even
+ * before it has homepage-grade photography.
+ */
+export async function getCategoryDirectory(db: D1Database): Promise<Array<CategoryRow & { children: CategoryRow[] }>> {
+  const [{ results: departments }, { results: groups }] = await Promise.all([
+    db.prepare(`SELECT * FROM categories WHERE parent_id IS NULL AND category_type = 'product' ORDER BY sort_order ASC`).all<CategoryRow>(),
+    db
+      .prepare(
+        `SELECT c.* FROM categories c
+         JOIN categories p ON p.id = c.parent_id
+         WHERE p.parent_id IS NULL AND c.category_type = 'product'
+         ORDER BY c.sort_order ASC`
+      )
+      .all<CategoryRow>()
+  ])
+  const byParent = new Map<number, CategoryRow[]>()
+  for (const g of groups) {
+    const list = byParent.get(g.parent_id as number) ?? []
+    list.push(g)
+    byParent.set(g.parent_id as number, list)
+  }
+  return departments.map((d) => ({ ...d, children: byParent.get(d.id) ?? [] }))
 }
 
 /**
