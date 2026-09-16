@@ -21,7 +21,8 @@ import {
   getTopBrands,
   getPopularVendors,
   getLimitedTimeDeals,
-  getPopularCategories
+  getPopularCategories,
+  getFeaturedHomeCategories
 } from './catalog'
 import { getActiveHeroCampaigns } from './hero-campaigns'
 
@@ -45,6 +46,7 @@ const SECTION_LOADERS: Record<string, (db: D1Database) => Promise<any>> = {
   limited_time_deals: (db) => getLimitedTimeDeals(db, 10),
   nigerian_brands: (db) => getNigerianBrandProducts(db, 12),
   top_brands: (db) => getTopBrands(db, 12),
+  shop_by_category: (db) => getFeaturedHomeCategories(db, 12),
   popular_categories: (db) => getPopularCategories(db, 10),
   popular_vendors: (db) => getPopularVendors(db, 8)
 }
@@ -97,6 +99,7 @@ export async function getHomepageFeed(db: D1Database) {
     limited_time_deals: any[]
     nigerian_brands: any[]
     top_brands: any[]
+    shop_by_category: any[]
     popular_categories: any[]
     popular_vendors: any[]
   }

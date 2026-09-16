@@ -244,18 +244,64 @@ export async function getLimitedTimeDeals(db: D1Database, limit = 10): Promise<P
   return results
 }
 
-/** Subcategories ranked by live product count — "Popular Categories" (distinct from the fixed top-level "Shop by Category" list). */
+/**
+ * "Popular Categories" — subcategories ranked by live product-count activity, a
+ * genuinely different signal from "Shop by Category" (which is a curated
+ * is_featured_home/homepage_priority list — see getFeaturedHomeCategories below
+ * and migration 0056's header comment for why these must stay two distinct
+ * queries, not the same list twice).
+ *
+ * CHECKPOINT B FIX (Pat's "NO SHORTCUTS / EXACT REFERENCE FIDELITY" directive,
+ * 2026-09-16): this query previously had NO image-quality filter at all — it
+ * would rank and return categories regardless of whether image_url pointed at
+ * a real asset, a `/ph.svg` placeholder, or NULL. Since Checkpoint B replaces
+ * the old icon+text grid with a MerchandisingRail that requires a dominant
+ * REAL photo per card (no icons, no placeholders, no empty cards — directive
+ * item 4), the same "show fewer, but all real" filter used by getTopBrands/
+ * getPopularVendors/PRODUCT_CARD_SELECT is now applied here too. `image_url`
+ * is added to the SELECT list so the rail has something to render.
+ */
 export async function getPopularCategories(db: D1Database, limit = 10) {
   const { results } = await db
     .prepare(
-      `SELECT c.id, c.slug, c.name, c.icon, COUNT(p.id) as product_count
+      `SELECT c.id, c.slug, c.name, c.icon, c.image_url, COUNT(p.id) as product_count
        FROM categories c
        JOIN products p ON p.category_id = c.id AND p.is_active = 1
        WHERE c.parent_id IS NOT NULL AND c.category_type = 'product'
+         AND c.image_url IS NOT NULL AND c.image_url NOT LIKE '/ph.svg%'
        GROUP BY c.id ORDER BY product_count DESC LIMIT ?`
     )
     .bind(limit)
     .all()
+  return results
+}
+
+/**
+ * "Shop by Category" — curated/featured departments (migration 0056's
+ * is_featured_home flag), ordered by homepage_priority ASC — same convention
+ * as brands.display_order and hero_campaigns.display_order. This is a
+ * DIFFERENT dataset from getPopularCategories() by design: one is editorial
+ * curation (what we want to feature), the other is live activity ranking
+ * (what customers are actually buying). They may overlap (verified: 6 of 22
+ * curated categories are also in the top-12-by-product-count set) but are
+ * never forced to be identical.
+ *
+ * Real-asset filter matches every other homepage merchandising query in this
+ * file — a curated category without a real photo yet is excluded rather than
+ * rendered as a placeholder/icon card (directive: "no placeholder, no empty
+ * cards"). If this drops the result below `limit`, MerchandisingRail renders
+ * fewer cards — correct behavior, not a bug to patch over.
+ */
+export async function getFeaturedHomeCategories(db: D1Database, limit = 12): Promise<CategoryRow[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT * FROM categories
+       WHERE is_featured_home = 1 AND category_type = 'product'
+         AND image_url IS NOT NULL AND image_url NOT LIKE '/ph.svg%'
+       ORDER BY homepage_priority ASC LIMIT ?`
+    )
+    .bind(limit)
+    .all<CategoryRow>()
   return results
 }
 

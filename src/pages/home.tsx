@@ -4,8 +4,8 @@ import { Layout } from '../components/Layout'
 import { ProductCarousel } from '../components/ProductCard'
 import { HeroZone } from '../components/HeroZone'
 import { EcosystemWaitlistModal } from '../components/EcosystemWaitlistModal'
+import { MerchandisingRail } from '../components/MerchandisingRail'
 import {
-  getTopLevelCategories,
   getDealsNearYou
 } from '../lib/catalog'
 import { getHomepageFeed } from '../lib/homepage-feed'
@@ -28,8 +28,7 @@ export async function homePage(c: Context<AppEnv>) {
   const locale = c.get('locale')
   const selectedCity = getCookie(c, 'nd_city') || 'Lagos'
 
-  const [categories, feed, dealsNearYou, verticals, discoverableCountries, personalization] = await Promise.all([
-    getTopLevelCategories(db),
+  const [feed, dealsNearYou, verticals, discoverableCountries, personalization] = await Promise.all([
     getHomepageFeed(db),
     getDealsNearYou(db, selectedCity, 10),
     getAllVerticals(db),
@@ -82,27 +81,38 @@ export async function homePage(c: Context<AppEnv>) {
       </section>
       <EcosystemWaitlistModal />
 
-      {/* ============ 2. SHOP BY CATEGORY (icon grid — TEMPORARY, Checkpoint B replaces
-          this with a MerchandisingRail of real category photography per Pat's directive.
-          Left in place unchanged for Checkpoint A so category navigation is never simply
-          removed mid-rebuild — "missing asset != remove section" applies to structural
-          work-in-progress too, not just missing images.) ============ */}
-      <section class="py-6 md:py-8 border-t border-gray-100">
-        <div class="max-w-[100rem] mx-auto px-4 md:px-6 lg:px-8">
-          <h2 class="text-lg md:text-xl font-bold text-gray-900 mb-4">Shop by Category</h2>
-          <div class="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-10 gap-3">
-            {categories.map((cat) => (
-              <a
-                href={`/shop?category=${cat.slug}`}
-                class="flex flex-col items-center justify-center gap-2 bg-white border border-gray-200 rounded-xl p-3 md:p-4 hover:shadow-md hover:border-primary transition-all"
-              >
-                <span class="material-symbols-outlined text-2xl md:text-3xl text-primary">{cat.icon}</span>
-                <span class="text-[11px] md:text-xs font-medium text-gray-700 text-center leading-tight">{cat.name}</span>
-              </a>
-            ))}
-          </div>
-        </div>
-      </section>
+      {/* ============ 2. ECOSYSTEM STRIP — repositioned immediately below Hero, compact
+          treatment (Checkpoint B item 6, Pat's "NO SHORTCUTS" directive). Was section 17
+          (near page bottom) as a large 16:9 photo-card block; now uses the SAME
+          MerchandisingRail chrome as every other rail (real photography retained per
+          "the photography is our enhancement," but at rail-card scale — vertical name +
+          one-line description + compact CTA — not plain icon pills, not the old large
+          block). NaijaShop (the one LIVE vertical, synthesized since it isn't an
+          ecosystem_verticals row) + all ecosystem_verticals rows = 9 cards today; adding
+          a 10th+ vertical is a pure INSERT, zero code change here. ============ */}
+      <MerchandisingRail
+        id="ecosystem"
+        title="Explore the NaijaDeals Ecosystem"
+        icon="hub"
+        variant="ecosystem"
+        ecosystemCards={spotlightVerticals}
+      />
+
+      {/* ============ 3. SHOP BY CATEGORY — curated MerchandisingRail (Checkpoint B item 2).
+          Replaces the old 10-column icon grid. Dataset: is_featured_home=1 categories,
+          ordered by homepage_priority ASC (migration 0056), each with REAL premium
+          photography (migration 0057) — no icons, no placeholders, no empty cards.
+          Genuinely different dataset from Popular Categories below (curated vs. live
+          product-count ranking) even though a few slugs may overlap. ============ */}
+      <MerchandisingRail
+        id="shop-by-category"
+        title="Shop by Category"
+        subtitle="Curated departments across the NaijaDeals marketplace"
+        icon="category"
+        variant="category"
+        categories={feed.shop_by_category}
+        viewAllHref="/shop"
+      />
 
       {/* ============ 3. FLASH DEALS ============ */}
       {feed.flash_deals.length > 0 && (
@@ -171,28 +181,22 @@ export async function homePage(c: Context<AppEnv>) {
         viewAllHref="/shop?sort=rating"
       />
 
-      {/* ============ 7. POPULAR CATEGORIES ============ */}
-      {feed.popular_categories.length > 0 && (
-        <section class="py-6 md:py-8 border-t border-gray-100">
-          <div class="max-w-[100rem] mx-auto px-4 md:px-6 lg:px-8">
-            <h2 class="text-lg md:text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-              <span class="material-symbols-outlined text-primary">grid_view</span>
-              Popular Categories
-            </h2>
-            <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
-              {feed.popular_categories.map((cat: any) => (
-                <a href={`/shop?category=${cat.slug}`} class="flex items-center gap-3 bg-white border border-gray-200 rounded-xl p-3 hover:shadow-md hover:border-primary transition-all">
-                  <span class="material-symbols-outlined text-2xl text-primary shrink-0">{cat.icon}</span>
-                  <div class="min-w-0">
-                    <p class="text-sm font-medium text-gray-800 truncate">{cat.name}</p>
-                    <p class="text-xs text-gray-500">{cat.product_count} products</p>
-                  </div>
-                </a>
-              ))}
-            </div>
-          </div>
-        </section>
-      )}
+      {/* ============ 7. POPULAR CATEGORIES — MerchandisingRail (Checkpoint B item 3).
+          Replaces the old icon+text grid. Dataset: getPopularCategories()'s existing
+          product_count-DESC ranking (live activity signal, unchanged query logic) now
+          with a real-image filter added (catalog.ts) so every card has dominant real
+          photography — same rail chrome as Shop by Category, different dataset,
+          verified NOT identical by default (only 6/22 curated slugs overlap with the
+          top-by-count set). ============ */}
+      <MerchandisingRail
+        id="popular-categories"
+        title="Popular Categories"
+        subtitle="What customers are shopping for right now"
+        icon="trending_up"
+        variant="category"
+        categories={feed.popular_categories}
+        viewAllHref="/shop?sort=popular"
+      />
 
       {/* ============ 8. TOP BRANDS ============ */}
       {feed.top_brands.length > 0 && (
@@ -338,62 +342,10 @@ export async function homePage(c: Context<AppEnv>) {
         </div>
       </section>
 
-      {/* ============ 17. ECOSYSTEM SPOTLIGHT ============
-          ARCHITECTURE FIX (Pat's directive, 2026-09-15): a full ecosystem section, not a
-          curated 3-of-8 preview. Renders NaijaShop (the one LIVE vertical, synthesized
-          above since it isn't an ecosystem_verticals row) + ALL 8 planned verticals =
-          9 cards today. This is a horizontally-scrollable strip (the exact pattern
-          already proven at Top Brands/Popular Vendors below) specifically BECAUSE a
-          fixed grid (e.g. md:grid-cols-3) breaks visually and requires a manual layout
-          change every time a vertical is added — a scroll strip does not. Adding a 10th+
-          vertical is a pure INSERT INTO ecosystem_verticals (migration 0010): this
-          section's card count, layout, and code require zero changes when that happens.
-          Real photography for all 9 cards is reused from already-approved assets
-          (public/static/hero/ for NaijaShop, public/static/ecosystem/ for the 8 planned
-          verticals — same images EcosystemPreview.tsx already uses on the full preview
-          pages) — nothing generated for this section. Status badge is driven by each
-          card's real `status` field, never a hardcoded "Coming Soon" string. */}
-      {spotlightVerticals.length > 0 && (
-        <section class="py-6 md:py-8 border-t border-gray-100">
-          <div class="max-w-[100rem] mx-auto px-4 md:px-6 lg:px-8">
-            <h2 class="text-lg md:text-xl font-bold text-gray-900 mb-4">Explore the NaijaDeals Ecosystem</h2>
-            <div class="flex md:grid md:grid-cols-3 lg:grid-cols-4 gap-4 overflow-x-auto md:overflow-visible pb-2 -mx-4 px-4 md:mx-0 md:px-0 snap-x scroll-smooth [&::-webkit-scrollbar]:hidden">
-              {spotlightVerticals.map((v) => {
-                const statusBadge = v.status === 'live'
-                  ? { label: 'Live now', cls: 'bg-primary-fixed text-primary-dark' }
-                  : v.status === 'beta'
-                  ? { label: 'Beta', cls: 'bg-amber-100 text-amber-700' }
-                  : v.status === 'in_development'
-                  ? { label: 'In development', cls: 'bg-blue-100 text-blue-600' }
-                  : { label: 'Coming soon', cls: 'bg-white/90 text-gray-700' }
-                return (
-                  <a href={v.route} class="group shrink-0 snap-start w-64 md:w-auto bg-white border border-gray-200 rounded-xl overflow-hidden flex flex-col hover:shadow-md hover:border-primary transition-all">
-                    <div class="relative aspect-[16/9] overflow-hidden">
-                      <img
-                        src={v.hero_image_desktop}
-                        alt={v.name}
-                        loading="lazy"
-                        class="w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-300"
-                      />
-                      <span class={`absolute top-2 left-2 text-[11px] font-bold rounded-full px-2.5 py-1 ${statusBadge.cls}`}>{statusBadge.label}</span>
-                    </div>
-                    <div class="p-5 flex flex-col flex-1">
-                      <h3 class="font-bold text-gray-800 mb-1 flex items-center gap-2 text-sm">
-                        <span class="material-symbols-outlined text-primary text-lg">{v.icon}</span>
-                        {v.name}
-                      </h3>
-                      <p class="text-xs text-gray-500 mb-3 flex-1 line-clamp-2">{v.tagline}</p>
-                      <span class="text-xs font-semibold text-primary group-hover:underline">{v.cta_label} →</span>
-                    </div>
-                  </a>
-                )
-              })}
-            </div>
-          </div>
-        </section>
-      )}
-
-      {/* ============ 17b. COUNTRY DISCOVERY (Pat's "All 54 African Countries" directive, 2026-09-15) ============
+      {/* ============ 17. COUNTRY DISCOVERY (Pat's "All 54 African Countries" directive, 2026-09-15) ============
+          NOTE: the Ecosystem Spotlight that used to live here was REPOSITIONED to
+          immediately below the Hero (section 2 above) per Checkpoint B item 6 — it is
+          intentionally not duplicated in this location. 
           Database-driven, NOT 54 hardcoded cards — see getDiscoverableCountries() in
           src/lib/country.ts and migration 0054_country_discovery.sql. Renders ZERO
           countries until real photography is sourced/backfilled into cc_countries.image_url
