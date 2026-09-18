@@ -169,6 +169,44 @@ live in production.** The sections above are historical/Phase-1 and are
 increasingly stale — do not trust "Not Yet Implemented" or "Open Questions"
 above without cross-checking here first.
 
+### Unit 5A — Footer & Navigation Truth Pass (2026-09-18)
+- **What shipped**: 5 new honest public pages — `/about`, `/careers`,
+  `/terms`, `/privacy`, `/seller-terms` (`src/pages/company.tsx`). Fixed
+  footer's Careers link (`/admin` → `/careers`, was pointing to an
+  internal admin route) and 4 legal links that all previously pointed to
+  the shared `/help` placeholder (Privacy Policy → `/privacy`, Terms of
+  Service → `/terms`, Seller Terms → `/seller-terms`, Payment Terms →
+  `/terms`, documented decision — no `PAYSTACK_SECRET_KEY` configured in
+  production and no payment-specific legal content beyond what `/terms`
+  covers, so a standalone `/payment-terms` page would be fabricated
+  scope). Added `src/lib/social-links.ts`: a static, non-DB config module
+  for 7 social platforms, all currently `url: null` (no real handles
+  exist yet) — footer's social icon row renders nothing today, by
+  design, until real URLs are supplied later.
+- **Explicitly NOT touched** (per scope): the mega-menu (`src/lib/mega-menu.ts`),
+  category-pill navigation (`src/lib/category-pill-nav.ts`), the existing
+  footer's six-column structure, the newsletter backend
+  (`POST /api/catalog/newsletter`), the "Get the app (coming soon)"
+  badge state, and ecosystem-aware nav visibility — all confirmed
+  production-integrated by a prior audit and preserved byte-for-byte.
+- **Verified live on `https://naijadeals.com`**: all 5 new routes +
+  `/`, `/shop` return HTTP 200; footer/mega-menu/mobile drawer render
+  correctly with real DB-driven category data; newsletter round-tripped
+  against production D1 (valid persists, duplicate idempotent, invalid
+  returns 400, test row cleaned up after); Playwright at 1440×900 and
+  390×844 across all 7 pages shows zero console/network errors beyond
+  the documented guest-mode 401 exemption.
+- **Known pre-existing, unrelated test debt** (documented, not fixed):
+  `tests/control-center/verify-category-checkpoint2.mjs` and
+  `verify-category-pill-nav-checkpoint3.mjs` fail against current seed
+  data — they hardcode category slugs (`smartphones`, `toys-and-games`)
+  that aren't present in the current `categories` table. This predates
+  Unit 5A; `git diff` for this unit touches zero rows/tables and zero
+  test files. Flagged for attention before any future category-taxonomy
+  work (Unit 5B).
+- Deployed via `gsk hosted deploy` (Cloudflare Workers for Platform,
+  managed D1 `DB` + R2 `SELLER_UPLOADS` bindings, commit `03ae517`).
+
 ### Phase B — Customer vs Seller signup fork (2026-09-02)
 - **What shipped**: `/register` now forks into a "Customer Account" /
   "Seller Account" tabbed UI via `?intent=seller`. Seller-intent signups
