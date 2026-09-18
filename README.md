@@ -169,6 +169,62 @@ live in production.** The sections above are historical/Phase-1 and are
 increasingly stale — do not trust "Not Yet Implemented" or "Open Questions"
 above without cross-checking here first.
 
+### Category + Footer Live Reconciliation (2026-09-18)
+- **Root cause found and fixed**: migrations 0056/0057/0063 were authored
+  and tested against an unapplied "Phase 1a" 189-row taxonomy
+  (`scripts/seed/seed-phase1a-taxonomy-catalog.sql`, never applied to
+  production) instead of the real 79-row production `categories` table.
+  Because `UPDATE ... WHERE slug = X` silently no-ops on a non-matching
+  slug, those migrations recorded as "applied" while doing almost nothing
+  — explaining the partial `is_featured_home`/`nav_pill_visible` state and
+  both test failures flagged in Unit 5A's changelog entry below.
+- **Two previously-undocumented live bugs fixed as a side effect** (both
+  root-caused to `categories.level`/`path` being NULL on every real row,
+  since migration 0053 never backfilled them for this taxonomy):
+  1. `/shop?category=<parent-slug>` (e.g. `electronics`) returned **zero
+     products** for any parent-only category despite real children/products
+     existing underneath — `src/pages/shop.tsx`'s descendant filter
+     (`cat.path LIKE '<path>/%'`) always failed on a NULL path.
+  2. Enterprise Control Center's `/categories` admin page rendered an
+     **empty departments list** — `src/routes/control-center.tsx`'s
+     `level === 1` filter always failed on a NULL level.
+- **What shipped** (data-only, zero app code changes needed):
+  - `migrations/0065_category_taxonomy_level_path_backfill.sql` — derives
+    `level`/`path` from existing `parent_id` relationships for the real
+    taxonomy (2-pass; safe — real taxonomy has 0 grandchildren).
+  - `migrations/0066_category_pill_navigation_real_taxonomy_fix.sql` —
+    resets and re-curates `nav_pill_visible`/`nav_pill_order`/
+    `nav_label_override` using 13 REAL, product-bearing slugs (2 documented
+    substitutions for Phase-1a slots with no real equivalent: `shoes` for
+    `african-fashion`, `drinks` for `art-and-crafts`). No categories or
+    products were inserted, deleted, or fabricated — UPDATE-only on
+    existing rows.
+  - Fixed the two previously-failing checkpoint tests
+    (`verify-category-checkpoint2.mjs`, `verify-category-pill-nav-checkpoint3.mjs`)
+    to target the real, corrected data — assertions strengthened, never
+    weakened (e.g. checkpoint2's `>= 189` hardcoded count replaced with a
+    dynamic exact-count query).
+- **Verified live on `https://naijadeals.com`** post-deploy: homepage pill
+  nav renders the real 13-slug curation in order with correct label
+  overrides (Supermarket, Books & Learning); `/shop?category=electronics`
+  now returns 14 real products (previously 0); `d1_migrations` confirms
+  0065/0066 applied; `/api/version` reports `healthy: true`, `in_sync: true`,
+  zero missing/unexpected migrations. Playwright at 1440×900 and 390×844
+  against both local and production confirm correct rendering; production
+  screenshots captured
+  (`tests/control-center/browser/screenshots/prod-recon-*.png`).
+- Deployed via `gsk hosted deploy` (Cloudflare Workers for Platform,
+  managed D1 `DB` + R2 `SELLER_UPLOADS` bindings, commit `262442d`;
+  evidence commit `818588b`).
+- **Known platform-tooling note**: `/api/version`'s `git_sha` field, on
+  this hosted-deploy pipeline, reflects a build-time `git rev-parse HEAD`
+  run inside the backend's ephemeral packaging step — not necessarily a
+  real commit hash traceable on GitHub. Correctness of the deployed
+  artifact was independently confirmed via `expected_migrations` count
+  (66, matching the local `migrations/` directory exactly) and live D1
+  content, not via `git_sha`. Worth hardening in a future unit if
+  commit-level deploy provenance is needed.
+
 ### Unit 5A — Footer & Navigation Truth Pass (2026-09-18)
 - **What shipped**: 5 new honest public pages — `/about`, `/careers`,
   `/terms`, `/privacy`, `/seller-terms` (`src/pages/company.tsx`). Fixed
