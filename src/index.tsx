@@ -50,6 +50,7 @@ import { addressesPage } from './pages/addresses'
 import { ecosystemPage } from './pages/ecosystem'
 import { ecosystemPreviewPage } from './pages/ecosystem-preview'
 import { helpPage } from './pages/help'
+import { aboutPage, careersPage, termsPage, privacyPage, sellerTermsPage } from './pages/company'
 import { sellerGatewayPage, sellerOnboardingPage } from './pages/seller'
 import { sellerFinancePage } from './pages/seller-stubs'
 import { sellerDashboardPage } from './pages/seller-dashboard'
@@ -161,6 +162,16 @@ app.get('/account/addresses', requireAuthPage, addressesPage)
 app.get('/organizations/:organizationId', requireAuthPage, organizationPage)
 app.get('/ecosystem', ecosystemPage)
 app.get('/help', helpPage)
+
+// Unit 5A (Footer & Navigation Truth Pass) — real company/legal destinations
+// replacing the footer's previous placeholder pattern (Careers -> /admin;
+// Privacy/Terms/Seller Terms/Payment Terms all -> /help). See
+// src/pages/company.tsx's header comment for the full rationale.
+app.get('/about', aboutPage)
+app.get('/careers', careersPage)
+app.get('/terms', termsPage)
+app.get('/privacy', privacyPage)
+app.get('/seller-terms', sellerTermsPage)
 
 // /affiliate — the Affiliate program gateway. Like /seller, it resolves
 // Guest / Authenticated-not-enrolled / Enrolled state itself (src/pages/affiliate.tsx),

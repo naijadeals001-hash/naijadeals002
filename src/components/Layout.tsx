@@ -6,6 +6,7 @@ import { createTranslator, LANGUAGES, LIVE_LANGUAGES, LANG_QUERY_PARAM } from '.
 import { LanguageSelector } from './LanguageSelector'
 import { getEcosystemNavLinks, type EcosystemNavLink } from '../lib/ecosystem-nav'
 import { getCategoryPillNav, type CategoryPillLink } from '../lib/category-pill-nav'
+import { getConfiguredSocialLinks } from '../lib/social-links'
 
 interface LayoutProps {
   title?: string
@@ -83,6 +84,11 @@ export const Layout: FC<LayoutProps> = async ({ title, description, user, cartCo
     getEcosystemNavLinks(c.env.DB),
     getCategoryPillNav(c.env.DB),
   ])
+  // Unit 5A: static config, not DB-backed — see social-links.ts's header
+  // comment for why. Filters to configured platforms only; an empty array
+  // here means the whole social row renders nothing (never a row of dead
+  // icons pointing nowhere).
+  const socialLinks = getConfiguredSocialLinks()
   return (
     <html lang={locale.language} dir={locale.dir}>
       <head>
@@ -473,7 +479,7 @@ export const Layout: FC<LayoutProps> = async ({ title, description, user, cartCo
                 <a href="/about" class="block text-white/70 hover:text-white py-1">About NaijaDeals</a>
                 <a href="/seller" class="block text-white/70 hover:text-white py-1">{t('nav_sell_on_naijadeals')}</a>
                 <a href="/affiliate" class="block text-white/70 hover:text-white py-1">Affiliate Center</a>
-                <a href="/admin" class="block text-white/70 hover:text-white py-1">Careers</a>
+                <a href="/careers" class="block text-white/70 hover:text-white py-1">Careers</a>
                 <a href="/help" class="block text-white/70 hover:text-white py-1">Press</a>
               </div>
               <div>
@@ -504,10 +510,17 @@ export const Layout: FC<LayoutProps> = async ({ title, description, user, cartCo
               </div>
               <div>
                 <h4 class="font-semibold mb-3">{t('footer_policies')}</h4>
-                <a href="/help" class="block text-white/70 hover:text-white py-1">Privacy Policy</a>
-                <a href="/help" class="block text-white/70 hover:text-white py-1">Terms of Service</a>
-                <a href="/help" class="block text-white/70 hover:text-white py-1">Seller Terms</a>
-                <a href="/help" class="block text-white/70 hover:text-white py-1">Payment Terms</a>
+                <a href="/privacy" class="block text-white/70 hover:text-white py-1">Privacy Policy</a>
+                <a href="/terms" class="block text-white/70 hover:text-white py-1">Terms of Service</a>
+                <a href="/seller-terms" class="block text-white/70 hover:text-white py-1">Seller Terms</a>
+                {/* Payment Terms — Unit 5A decision (documented, not fabricated): this app
+                    does not yet have payment/legal functionality distinct enough to justify
+                    a standalone policy page (Paystack card payments are not even configured
+                    in production today — no PAYSTACK_SECRET_KEY secret set; the only other
+                    rail is the internal Wallet). Section 4 of /terms ("Orders, payments &
+                    escrow") already covers this, so this link points there rather than
+                    inventing a separate page with no real distinct content. */}
+                <a href="/terms" class="block text-white/70 hover:text-white py-1">Payment Terms</a>
               </div>
               <div>
                 <h4 class="font-semibold mb-3">{t('footer_trust_safety')}</h4>
@@ -517,6 +530,20 @@ export const Layout: FC<LayoutProps> = async ({ title, description, user, cartCo
                 <span class="flex items-center gap-1.5 text-white/70 py-1"><span class="material-symbols-outlined text-base">verified</span>Verified sellers</span>
               </div>
             </div>
+            {/* Social icon row — Unit 5A. Only platforms with a REAL, configured URL
+                (src/lib/social-links.ts) render here at all; an empty socialLinks
+                array (today's actual state — zero official accounts configured yet)
+                means this entire block renders nothing, never a row of dead icons
+                pointing at generic platform homepages. */}
+            {socialLinks.length > 0 && (
+              <div id="footer-social-links" class="flex items-center gap-3 pt-6 border-t border-white/10">
+                {socialLinks.map((s) => (
+                  <a href={s.url!} target="_blank" rel="noopener noreferrer" aria-label={s.label} class="flex items-center justify-center w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 transition-colors text-white">
+                    <span class="material-symbols-outlined text-base">{s.icon}</span>
+                  </a>
+                ))}
+              </div>
+            )}
             <div class="flex flex-col md:flex-row items-center justify-between gap-3 mt-8 pt-6 border-t border-white/10 text-xs text-white/50">
               <span>{t('footer_rights')}</span>
               <div class="flex items-center gap-3">
