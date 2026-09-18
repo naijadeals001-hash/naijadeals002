@@ -2,7 +2,7 @@
 """
 Phase 1a seed generator — NaijaShop Marketplace Taxonomy & Catalog Foundation.
 
-Generates a single SQL file (migrations/seed-phase1a-taxonomy-catalog.sql) that:
+Generates a single SQL file (scripts/seed/seed-phase1a-taxonomy-catalog.sql) that:
   1. Seeds a real, browsable PRODUCT category taxonomy (departments -> groups ->
      subcategories -> leaves) with the African/country layer woven directly into
      the SAME tree (country_iso set per node) rather than a parallel system —
@@ -43,17 +43,17 @@ comment). Phase 1b may layer in curated real photography for reference-image-
 critical hero/carousel slots; Phase 1a's job is correct, real, structured
 CATALOG DATA, which this provides in full.
 
-Output: migrations/seed-phase1a-taxonomy-catalog.sql (NOT a numbered migration
+Output: scripts/seed/seed-phase1a-taxonomy-catalog.sql (NOT a numbered migration
 — seed data, not schema DDL, matching this project's existing seed.sql
 convention). Apply with:
-  npx wrangler d1 execute naijadeals-production --local --file=./migrations/seed-phase1a-taxonomy-catalog.sql
+  npx wrangler d1 execute naijadeals-production --local --file=./scripts/seed/seed-phase1a-taxonomy-catalog.sql
 """
 import json
 import random
 
 random.seed(20260915)  # deterministic output — reruns produce identical SQL for diffing
 
-OUT_PATH = "/home/user/webapp/migrations/seed-phase1a-taxonomy-catalog.sql"
+OUT_PATH = "/home/user/webapp/scripts/seed/seed-phase1a-taxonomy-catalog.sql"
 
 # Existing max ids (queried live from D1 before writing this script) — new rows
 # start strictly above these so nothing collides with the 36 legacy service

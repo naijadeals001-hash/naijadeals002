@@ -5,7 +5,7 @@ and the product/listing/variant catalog. Depends on scripts/seed/_categories.jso
 (written by generate_phase1a_seed.py) for category ids.
 
 Run generate_phase1a_seed.py FIRST, then this script. Output is appended to
-the SAME migrations/seed-phase1a-taxonomy-catalog.sql file this script opens
+the SAME scripts/seed/seed-phase1a-taxonomy-catalog.sql file this script opens
 in append mode, so the two stages ship as one seed file.
 """
 import json
@@ -13,7 +13,7 @@ import random
 
 random.seed(20260915)
 
-OUT_PATH = "/home/user/webapp/migrations/seed-phase1a-taxonomy-catalog.sql"
+OUT_PATH = "/home/user/webapp/scripts/seed/seed-phase1a-taxonomy-catalog.sql"
 
 VENDOR_ID_START = 57       # existing max vendor id = 56 (all cctest fixtures)
 BRAND_ID_START = 1         # brands table is currently empty

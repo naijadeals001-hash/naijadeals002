@@ -4,7 +4,7 @@ Phase 1a seed generator, stage 3 — the product catalog itself.
 
 Depends on scripts/seed/_categories.json and scripts/seed/_stage2.json
 (brand/vendor id lookups) written by the two prior stage scripts. Appends to
-the same migrations/seed-phase1a-taxonomy-catalog.sql file.
+the same scripts/seed/seed-phase1a-taxonomy-catalog.sql file.
 
 Design principle (explicit approved instruction): "Do NOT create obviously
 fake filler products simply to increase row counts." Every product below is a
@@ -19,7 +19,7 @@ import random
 
 random.seed(20260915)
 
-OUT_PATH = "/home/user/webapp/migrations/seed-phase1a-taxonomy-catalog.sql"
+OUT_PATH = "/home/user/webapp/scripts/seed/seed-phase1a-taxonomy-catalog.sql"
 
 categories = json.load(open("/home/user/webapp/scripts/seed/_categories.json"))
 by_slug = {r["slug"]: r for r in categories}
