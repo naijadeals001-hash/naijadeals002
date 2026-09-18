@@ -1,13 +1,18 @@
 /**
  * Centralized social media link configuration — Unit 5A (Footer & Navigation
- * Truth Pass, Pat's directive 2026-09-18).
+ * Truth Pass, Pat's directive 2026-09-18), activated in Unit D (Footer
+ * Reconciliation, 2026-09-18) with Pat's real, explicitly-supplied handles.
  *
- * WHY THIS FILE EXISTS: the footer needs a social icon row, but this
- * repository has ZERO authoritative social URLs configured anywhere (no
- * NaijaDeals Facebook/Instagram/TikTok/etc. handle exists in code, env, or
- * DB). Per Pat's explicit "DO NOT INVENT SOCIAL MEDIA URLs" rule, every
- * platform below defaults to `null` (unconfigured) rather than a guessed or
- * generic platform-homepage URL.
+ * WHY THIS FILE EXISTS: the footer needs a social icon row. Per Pat's
+ * explicit "DO NOT INVENT SOCIAL MEDIA URLs" rule, every platform defaults
+ * to `null` (unconfigured/hidden) unless Pat has explicitly supplied the
+ * real, official URL below.
+ *
+ * UNIT D ACTIVATION (2026-09-18): Pat supplied 4 real accounts verbatim —
+ * Instagram, YouTube, TikTok, X/Twitter. Facebook, LinkedIn, and Pinterest
+ * remain `null` (Pat did not supply accounts for these; they stay hidden).
+ * NOTE: Pat confirmed the handle mismatch (naijadeals1 vs naijadeals2 across
+ * platforms) is INTENTIONAL — do not "correct" it to be consistent.
  *
  * HOW TO ACTIVATE A PLATFORM LATER: once a real, official NaijaDeals social
  * account exists, set its value below to the exact profile URL. The footer
@@ -35,10 +40,10 @@ export interface SocialLinkDef {
 
 export const SOCIAL_LINKS: readonly SocialLinkDef[] = [
   { icon: 'facebook', label: 'NaijaDeals on Facebook', url: null },
-  { icon: 'photo_camera', label: 'NaijaDeals on Instagram', url: null },
-  { icon: 'music_note', label: 'NaijaDeals on TikTok', url: null },
-  { icon: 'smart_display', label: 'NaijaDeals on YouTube', url: null },
-  { icon: 'close', label: 'NaijaDeals on X', url: null },
+  { icon: 'photo_camera', label: 'NaijaDeals on Instagram', url: 'https://instagram.com/naijadeals1' },
+  { icon: 'music_note', label: 'NaijaDeals on TikTok', url: 'https://www.tiktok.com/@naijadeals1' },
+  { icon: 'smart_display', label: 'NaijaDeals on YouTube', url: 'https://youtube.com/@NaijaDeals1' },
+  { icon: 'close', label: 'NaijaDeals on X', url: 'https://x.com/naijadeals2' },
   { icon: 'work', label: 'NaijaDeals on LinkedIn', url: null },
   { icon: 'push_pin', label: 'NaijaDeals on Pinterest', url: null },
 ] as const
