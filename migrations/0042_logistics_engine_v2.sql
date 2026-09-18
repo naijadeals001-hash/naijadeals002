@@ -411,7 +411,8 @@ INSERT INTO vehicle_types (key, label_key, icon, display_order, transport_mode) 
   ('pickup',      'vehicle_type.pickup',      'truck-pickup', 60, 'road'),
   ('truck',       'vehicle_type.truck',       'truck',      70, 'road'),
   ('refrigerated_truck', 'vehicle_type.refrigerated_truck', 'truck-fast', 80, 'road'),
-  ('boat',        'vehicle_type.boat',        'ship',       90, 'water');
+  ('boat',        'vehicle_type.boat',        'ship',       90, 'water')
+ON CONFLICT(key) DO NOTHING;
 
 -- ============================================================
 -- 12. GPS_EVENTS — already matches spec section 25 exactly; no schema
