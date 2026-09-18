@@ -169,6 +169,77 @@ live in production.** The sections above are historical/Phase-1 and are
 increasingly stale — do not trust "Not Yet Implemented" or "Open Questions"
 above without cross-checking here first.
 
+### Unit D — Footer Social Links Activation (2026-09-18)
+- **What shipped**: activated 4 of 7 `src/lib/social-links.ts` placeholders
+  with the real, official NaijaDeals accounts Pat explicitly supplied —
+  Instagram (`https://instagram.com/naijadeals1`), YouTube
+  (`https://youtube.com/@NaijaDeals1`), TikTok
+  (`https://www.tiktok.com/@naijadeals1`), X/Twitter
+  (`https://x.com/naijadeals2`). Facebook, LinkedIn, and Pinterest remain
+  `url: null` (hidden) — Pat did not supply accounts for these. The
+  `naijadeals1` vs `naijadeals2` handle mismatch across platforms is
+  **intentional per Pat**, not a bug — not "corrected" for consistency.
+- **Explicitly out of scope, by Pat's decision**: Pat's initial footer
+  description named a 5-column layout ("Get to Know Us / Make Money With
+  Us / Let Us Help You / Our Services / Legal") and "app store badges."
+  Investigation confirmed the live footer has always had 6 columns (Get to
+  Know Us / Customer Service / Payments & Delivery / Ecosystem / Policies
+  / Trust & Safety) with real functional links under each, and no
+  published mobile app exists to link real store badges to. Pat confirmed:
+  keep the 6-column architecture exactly as-is (it "contains real
+  functionality"), keep "Get the app (coming soon)" honest, do not
+  fabricate App Store/Play Store URLs. Zero footer structure changes made.
+- **Single-file source change** (`src/lib/social-links.ts` only) — the
+  footer component (`Layout.tsx`) required zero edits, exactly as designed
+  in Unit 5A ("easy to populate later without changing the footer
+  component").
+- **Verified live on `https://naijadeals.com`** post-deploy: new
+  `footer-social-links-unit-d.mjs` Playwright suite (18/18 assertions
+  across 1440×900 and 390×844) confirms — exactly 4 social icons render
+  with the exact hrefs above, all open `target=_blank` with
+  `rel=noopener noreferrer`, Facebook/LinkedIn/Pinterest confirmed absent
+  from the DOM, all 6 existing footer columns byte-identical to before,
+  newsletter form intact, app placeholder text unchanged, zero `/admin`
+  links, copyright line (`© 2026 NaijaDeals. All rights reserved. A
+  Nigerian digital commerce ecosystem.`) present and unchanged. Full
+  regression suite (`header-nav-scroll-affordance`, `ecosystem-nav-2a`,
+  `checkpoint2`) re-run clean against both local and production, zero
+  side effects. `/api/version` reports `healthy: true`, `in_sync: true`.
+  Production screenshots captured
+  (`tests/control-center/browser/screenshots/footer-unitd-*.png`).
+- Deployed via `gsk hosted deploy` (code-only, no new migrations; commit
+  `faae033`; evidence commit `cbe295c`).
+- **Note on Pat's originally-quoted copyright line**: Pat's request also
+  referenced `© 2026 NaijaDeals. All Rights Reserved. — Africa | People |
+  Careers | Community` as an expected footer element. The live copyright
+  line has never included an "Africa | People | Careers | Community" link
+  row, and no `/africa`, `/people`, or `/community` routes exist in this
+  codebase — per the standing "do not invent links" rule, these were not
+  fabricated. Flagged for Pat's awareness, not auto-resolved.
+
+### Header Nav Scroll Affordance Fix (2026-09-18)
+- **What shipped**: the Tier-3 header nav strip (category pills +
+  ecosystem links + Deals, both desktop and mobile) previously scrolled
+  horizontally with a hidden native scrollbar and zero visual affordance —
+  users had no indication more content existed off-screen or how to reach
+  it. Added hover-reveal scroll buttons + edge-fade gradient cues on
+  desktop (`group/navscroll` pattern, mirroring the existing
+  `MerchandisingRail.tsx` `.carousel-nav-btn` pattern) and an edge-fade cue
+  on mobile. Buttons auto-disable at true start/end of scroll (no dead-end
+  arrows ever shown).
+- **Files changed**: `src/components/Layout.tsx` (desktop/mobile nav
+  markup restructure), `public/static/app.js` (new `initHeaderNavScroll()`
+  IIFE), `public/static/style.css` (`.nav-scroll-btn:disabled` rule).
+- **Verified live on `https://naijadeals.com`** post-deploy: new
+  `header-nav-scroll-affordance.mjs` Playwright suite (10/10 assertions
+  across 1100×800 desktop and 390×844 mobile) confirms hover-reveal,
+  click-to-scroll, and correct disable-at-edge behavior with zero
+  regressions on the pre-existing category-pill-nav and ecosystem-nav
+  checkpoints. Production screenshots captured
+  (`tests/control-center/browser/screenshots/nav-scroll-*.png`).
+- Deployed via `gsk hosted deploy` (code-only, no new migrations; commit
+  `a1b1b8d`; evidence commit `869e1ca`; Cloudflare Version `c45f8d00`).
+
 ### Category + Footer Live Reconciliation (2026-09-18)
 - **Root cause found and fixed**: migrations 0056/0057/0063 were authored
   and tested against an unapplied "Phase 1a" 189-row taxonomy
