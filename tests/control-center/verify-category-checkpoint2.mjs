@@ -53,11 +53,16 @@ function findNodeBySlug(tree, slug) {
 async function main() {
   console.log('--- Checkpoint 2 verification run, nonce', RUN_NONCE, '---')
 
-  // Pick a real, deep, currently-visible leaf category with a stable parent
-  // for the hide/show + label/badge tests. "smartphones" (child of Phones &
-  // Tablets, under Electronics) is a real seeded leaf confirmed to exist.
-  const targetSlug = 'smartphones'
-  const before = await queryOneD1(`SELECT id, parent_id, level, path, sort_order, is_visible, nav_label_override, nav_badge, is_featured_home, homepage_priority FROM categories WHERE slug = '${targetSlug}'`)
+  // Pick a real, currently-visible level-2 category with a stable parent
+  // for the hide/show + label/badge tests. "phones-tablets" (child of
+  // Electronics, id=2/parent_id=1) is a real seeded category confirmed to
+  // exist in the ACTUAL production taxonomy (79 rows, ids 1-150) — see
+  // migration 0065's header comment for why the taxonomy is only 2 levels
+  // deep today (originally this test targeted "smartphones", a slug from
+  // the unapplied "Phase 1a" 189-row seed that was never real production
+  // data; reconciled 2026-09-18, Category + Footer Live Reconciliation).
+  const targetSlug = 'phones-tablets'
+  const before = await queryOneD1(`SELECT id, name, parent_id, level, path, sort_order, is_visible, nav_label_override, nav_badge, is_featured_home, homepage_priority FROM categories WHERE slug = '${targetSlug}'`)
   assert.ok(before, `expected test category "${targetSlug}" to exist`)
   const targetId = before.id
   console.log(`OK: test target category "${targetSlug}" id=${targetId}, parent_id=${before.parent_id}, level=${before.level}, path=${before.path}`)
@@ -79,8 +84,17 @@ async function main() {
   const auditorListRes = await auditor.client.get('/api/control-center/category-nav')
   assert.equal(auditorListRes.status, 200, `auditor list failed: ${JSON.stringify(auditorListRes.body)}`)
   assert.ok(Array.isArray(auditorListRes.body.results), 'expected results array')
-  assert.ok(auditorListRes.body.results.length >= 189, `expected >=189 categories, got ${auditorListRes.body.results.length}`)
-  console.log(`PASS: auditor GET /category-nav -> 200, ${auditorListRes.body.results.length} categories (read access confirmed)`)
+  // Assert against the REAL row count in the DB (category_type='product',
+  // matching getCategoryNavTreeForAdmin's own WHERE clause exactly) rather
+  // than a hardcoded number — this endpoint must always report the true
+  // live taxonomy size, whatever it is, not a number frozen at test-write
+  // time. Originally hardcoded to >=189, a figure from the unapplied
+  // "Phase 1a" seed that never matched real production data (actual count
+  // confirmed 43 product-type categories at the time of this fix,
+  // reconciled 2026-09-18, Category + Footer Live Reconciliation).
+  const realCategoryCount = (await queryOneD1(`SELECT COUNT(*) as n FROM categories WHERE category_type = 'product'`)).n
+  assert.equal(auditorListRes.body.results.length, realCategoryCount, `expected /category-nav to return exactly the real DB product-category count (${realCategoryCount}), got ${auditorListRes.body.results.length}`)
+  console.log(`PASS: auditor GET /category-nav -> 200, ${auditorListRes.body.results.length} categories (matches real DB count exactly, read access confirmed)`)
 
   const auditorMutateRes = await auditor.client.patch(`/api/control-center/category-nav/${targetId}`, { is_visible: false })
   assert.equal(auditorMutateRes.status, 403, `expected 403 for auditor mutation, got ${auditorMutateRes.status}`)
@@ -129,7 +143,7 @@ async function main() {
   assert.equal(revertLabelRes.status, 200)
   const treeAfterRevert = await publicTree()
   const revertedNode = findNodeBySlug(treeAfterRevert, targetSlug)
-  assert.equal(revertedNode.name, before.name ?? 'Smartphones', 'expected real category name restored after clearing override')
+  assert.equal(revertedNode.name, before.name ?? 'Phones & Tablets', 'expected real category name restored after clearing override')
   console.log('PASS: clearing nav_label_override/nav_badge restores the real category name in public tree')
 
   // 7. Reorder siblings -> persists and changes public tree order

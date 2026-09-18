@@ -174,13 +174,13 @@ async function main() {
 
     // 4. Label override
     await desktopPage.goto(BASE_URL, { waitUntil: 'networkidle' })
-    const supermarketPill = desktopPage.locator(`${PILL_SEL}[href="/shop?category=grocery-and-food"]`)
-    await assert_visible(supermarketPill, 'grocery-and-food pill')
+    const supermarketPill = desktopPage.locator(`${PILL_SEL}[href="/shop?category=groceries"]`)
+    await assert_visible(supermarketPill, 'groceries pill')
     const supermarketText = await supermarketPill.first().innerText()
-    assert.ok(supermarketText.includes('Supermarket'), `expected the grocery-and-food pill to render label override "Supermarket", got "${supermarketText}"`)
+    assert.ok(supermarketText.includes('Supermarket'), `expected the groceries pill to render label override "Supermarket", got "${supermarketText}"`)
     assert.ok(!supermarketText.includes('Grocery'), `expected the raw name "Grocery & Food" to NOT render (label override should replace it), got "${supermarketText}"`)
     await desktopPage.screenshot({ path: `${OUT_DIR}/cp3-desktop-04-label-override.png`, fullPage: false })
-    record('desktop-04-label-override', 'PASS', `grocery-and-food pill renders "Supermarket" label override, screenshot captured`)
+    record('desktop-04-label-override', 'PASS', `groceries pill renders "Supermarket" label override, screenshot captured`)
 
     // 5. Badge
     await patchCategory(electronics.id, { nav_badge: 'Hot' })

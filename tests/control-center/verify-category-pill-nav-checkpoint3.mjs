@@ -71,20 +71,38 @@ async function main() {
   {
     // Default-hidden state: any category NOT part of the curated seed must
     // default to nav_pill_visible=0 — pills are opt-in, never opt-out.
-    const row = await queryOneD1(`SELECT slug, nav_pill_visible FROM categories WHERE slug = 'toys-and-games'`)
-    assert.ok(row, 'expected toys-and-games category to exist as a non-curated control')
+    // "tv-audio" (TV, Audio & Video, a real sibling of the curated
+    // phones-tablets/laptops-computers under Electronics) is the real,
+    // currently-existing non-curated control — "toys-and-games" was a slug
+    // from the unapplied "Phase 1a" 189-row seed that was never real
+    // production data (reconciled 2026-09-18, Category + Footer Live
+    // Reconciliation — see migration 0066's header comment for the full
+    // root-cause writeup).
+    const row = await queryOneD1(`SELECT slug, nav_pill_visible FROM categories WHERE slug = 'tv-audio'`)
+    assert.ok(row, 'expected tv-audio category to exist as a non-curated control')
     assert.equal(row.nav_pill_visible, 0, `expected a non-curated category to default to nav_pill_visible=0, got ${row.nav_pill_visible}`)
-    console.log('PASS: default hidden state confirmed — non-curated category (toys-and-games) has nav_pill_visible=0')
+    console.log('PASS: default hidden state confirmed — non-curated category (tv-audio) has nav_pill_visible=0')
   }
 
   // ============================================================
   // 2. CURATED PILL SET: presence, count, exact order
   // ============================================================
+  // Real production slugs (migration 0066 — reconciled 2026-09-18): the
+  // ORIGINAL migration 0063 curated this exact 13-slot design (mixed
+  // level-1/level-2 depth, same department coverage) but was authored
+  // against an unapplied "Phase 1a" taxonomy whose slugs never existed in
+  // real production data, so every UPDATE silently affected 0 rows for 10
+  // of the 13 slugs. This list now reflects the REAL categories.slug
+  // values curated by 0066 for the SAME design intent — see that
+  // migration's header comment for the full mapping and root-cause
+  // writeup, including which 2 slots (originally african-fashion,
+  // art-and-crafts) were substituted with the closest genuine analogous
+  // real category rather than fabricated.
   const EXPECTED_PILL_SLUGS = [
-    'electronics', 'fashion', 'phones-and-tablets', 'computers-and-laptops',
-    'grocery-and-food', 'beauty-and-personal-care', 'home-and-kitchen',
-    'automotive', 'sports-and-fitness', 'african-fashion', 'art-and-crafts',
-    'baby-and-kids', 'books-and-education',
+    'electronics', 'fashion', 'phones-tablets', 'laptops-computers',
+    'groceries', 'beauty-health', 'home-kitchen',
+    'automotive', 'sports-outdoors', 'shoes', 'drinks',
+    'baby-products', 'books',
   ]
   {
     const dbPills = await queryD1(`SELECT slug, nav_pill_order, level FROM categories WHERE nav_pill_visible = 1 ORDER BY nav_pill_order ASC`)
@@ -105,13 +123,13 @@ async function main() {
     console.log('PASS: real customer-facing homepage HTML (#category-pill-nav-desktop) renders exactly the 13 curated pills in exact DB order')
 
     // Mixed depth: level-1 department (electronics, level 1) sits directly
-    // beside level-2 subcategory pills (phones-and-tablets, computers-and-
-    // laptops, african-fashion, level 2) with zero special-casing.
+    // beside level-2 subcategory pills (phones-tablets, laptops-computers,
+    // shoes, level 2) with zero special-casing.
     const levelBySlug = new Map((await queryD1(`SELECT slug, level FROM categories WHERE slug IN (${EXPECTED_PILL_SLUGS.map((s) => `'${s}'`).join(',')})`)).map((r) => [r.slug, r.level]))
     assert.equal(levelBySlug.get('electronics'), 1, 'expected electronics to be level 1')
-    assert.equal(levelBySlug.get('phones-and-tablets'), 2, 'expected phones-and-tablets to be level 2')
-    assert.equal(levelBySlug.get('computers-and-laptops'), 2, 'expected computers-and-laptops to be level 2')
-    assert.equal(levelBySlug.get('african-fashion'), 2, 'expected african-fashion to be level 2')
+    assert.equal(levelBySlug.get('phones-tablets'), 2, 'expected phones-tablets to be level 2')
+    assert.equal(levelBySlug.get('laptops-computers'), 2, 'expected laptops-computers to be level 2')
+    assert.equal(levelBySlug.get('shoes'), 2, 'expected shoes to be level 2')
     const distinctLevels = new Set([...levelBySlug.values()])
     assert.ok(distinctLevels.size >= 2, `expected the curated pill set to mix at least 2 taxonomy levels, found only: ${[...distinctLevels].join(',')}`)
     console.log(`PASS: mixed-depth taxonomy confirmed — curated pills span levels: ${[...distinctLevels].sort().join(', ')} (level-1 departments alongside level-2 subcategories, rendered identically with no special-casing)`)
@@ -311,8 +329,8 @@ async function main() {
   // LABEL MUTATION (nav_label_override) + CACHE INVALIDATION
   // ============================================================
   {
-    const grocery = await queryOneD1(`SELECT id, nav_label_override FROM categories WHERE slug = 'grocery-and-food'`)
-    assert.equal(grocery.nav_label_override, 'Supermarket', `precondition: expected grocery-and-food to start with A1 label override "Supermarket", got "${grocery.nav_label_override}"`)
+    const grocery = await queryOneD1(`SELECT id, nav_label_override FROM categories WHERE slug = 'groceries'`)
+    assert.equal(grocery.nav_label_override, 'Supermarket', `precondition: expected groceries to start with A1 label override "Supermarket", got "${grocery.nav_label_override}"`)
 
     // Real customer-facing proof of the EXISTING A1 override before touching it.
     const homeBefore = await fetch(`${BASE_URL}/`).then((r) => r.text())
@@ -407,10 +425,10 @@ async function main() {
   {
     const finalPills = await queryD1(`SELECT slug, nav_pill_order FROM categories WHERE nav_pill_visible = 1 ORDER BY nav_pill_order ASC`)
     assert.deepEqual(finalPills.map((p) => p.slug), EXPECTED_PILL_SLUGS, 'expected final DB state to exactly match the original 13-pill curated order')
-    const groceryFinal = await queryOneD1(`SELECT nav_label_override FROM categories WHERE slug = 'grocery-and-food'`)
-    assert.equal(groceryFinal.nav_label_override, 'Supermarket', 'expected grocery-and-food label override fully restored')
-    const booksFinal = await queryOneD1(`SELECT nav_label_override FROM categories WHERE slug = 'books-and-education'`)
-    assert.equal(booksFinal.nav_label_override, 'Books & Learning', 'expected books-and-education label override untouched')
+    const groceryFinal = await queryOneD1(`SELECT nav_label_override FROM categories WHERE slug = 'groceries'`)
+    assert.equal(groceryFinal.nav_label_override, 'Supermarket', 'expected groceries label override fully restored')
+    const booksFinal = await queryOneD1(`SELECT nav_label_override FROM categories WHERE slug = 'books'`)
+    assert.equal(booksFinal.nav_label_override, 'Books & Learning', 'expected books label override untouched')
     const electronicsFinal = await queryOneD1(`SELECT nav_badge FROM categories WHERE slug = 'electronics'`)
     assert.equal(electronicsFinal.nav_badge, null, 'expected Electronics badge fully restored to null')
     console.log('PASS: full end-state restoration verified — every value this script touched is back to its original Checkpoint-3 seed state')
