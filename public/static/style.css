@@ -71,3 +71,15 @@ input:focus, select:focus, textarea:focus, button:focus-visible {
 
 /* Sticky header shadow only after scroll would be nicer with JS, but a subtle
    permanent shadow (already applied via Tailwind classes) keeps this file lean. */
+
+/* Header category/ecosystem nav strip scroll buttons (initHeaderNavScroll,
+   app.js) — Category + Footer Live Reconciliation follow-up. Tailwind's CDN
+   JIT `disabled:hidden` variant only compiles classes it sees used with a
+   `disabled` attribute already present at scan time, which the buttons don't
+   have on first paint (JS toggles it after measuring scrollWidth). A plain CSS
+   rule sidesteps that timing gap entirely: whenever the button gains the
+   `disabled` attribute (set by initHeaderNavScroll when already at that edge),
+   it's hidden, full stop — no dead-end arrow is ever clickable or visible. */
+.nav-scroll-btn:disabled {
+  display: none;
+}

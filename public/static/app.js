@@ -943,6 +943,65 @@
     });
   })();
 
+  // ---------- Header category/ecosystem nav strip: hover-reveal scroll buttons +
+  // edge-fade "there's more" cue (Category + Footer Live Reconciliation follow-up,
+  // 2026-09-18 — Pat: "supposed to be able to scroll to the end... when you hover
+  // on it, you can scroll to the right or left... there should be no cut off").
+  // Unlike initCarouselNav() above, this strip mixes pill/icon widths with no
+  // single "card width" to use as a scroll step, so it gets its own small handler:
+  // fixed-distance scrollBy() per click, plus a scroll/resize listener that
+  // toggles each button's `disabled` attribute (and CSS hides a disabled button
+  // via .nav-scroll-btn:disabled { display:none } — see style.css) so there is
+  // NEVER a dead-end arrow at either end of the strip. Runs for BOTH the desktop
+  // track (buttons + hover fade) and the mobile track (fade cue only, no buttons —
+  // hover doesn't exist on touch, native swipe already works there).
+  (function initHeaderNavScroll() {
+    const desktopTrack = document.getElementById('header-nav-scroll-track');
+    const leftBtn = document.getElementById('header-nav-scroll-left-btn');
+    const rightBtn = document.getElementById('header-nav-scroll-right-btn');
+    const leftFade = document.querySelector('[data-nav-fade="left"]');
+    const rightFade = document.querySelector('[data-nav-fade="right"]');
+
+    function updateDesktopEdges() {
+      if (!desktopTrack) return;
+      const atStart = desktopTrack.scrollLeft <= 1;
+      const atEnd = desktopTrack.scrollLeft + desktopTrack.clientWidth >= desktopTrack.scrollWidth - 1;
+      if (leftBtn) leftBtn.disabled = atStart;
+      if (rightBtn) rightBtn.disabled = atEnd;
+      if (leftFade) leftFade.style.visibility = atStart ? 'hidden' : 'visible';
+      if (rightFade) rightFade.style.visibility = atEnd ? 'hidden' : 'visible';
+    }
+
+    if (desktopTrack) {
+      [leftBtn, rightBtn].forEach(function (btn) {
+        if (!btn) return;
+        btn.addEventListener('click', function () {
+          const dir = Number(btn.getAttribute('data-dir'));
+          desktopTrack.scrollBy({ left: dir * 240, behavior: 'smooth' });
+        });
+      });
+      desktopTrack.addEventListener('scroll', updateDesktopEdges, { passive: true });
+      window.addEventListener('resize', updateDesktopEdges);
+      // Re-check after fonts/layout settle (pill widths can shift on first paint).
+      updateDesktopEdges();
+      setTimeout(updateDesktopEdges, 300);
+    }
+
+    const mobileTrack = document.getElementById('header-nav-scroll-track-mobile');
+    const rightFadeMobile = document.querySelector('[data-nav-fade="right-mobile"]');
+    function updateMobileFade() {
+      if (!mobileTrack || !rightFadeMobile) return;
+      const atEnd = mobileTrack.scrollLeft + mobileTrack.clientWidth >= mobileTrack.scrollWidth - 1;
+      rightFadeMobile.style.opacity = atEnd ? '0' : '1';
+    }
+    if (mobileTrack) {
+      mobileTrack.addEventListener('scroll', updateMobileFade, { passive: true });
+      window.addEventListener('resize', updateMobileFade);
+      updateMobileFade();
+      setTimeout(updateMobileFade, 300);
+    }
+  })();
+
   // ---------- Hero: DESKTOP 5-panel mosaic — rotates campaign CONTENT through fixed
   // panel slots (never removes/hides panels), autoplay, prev/next, indicators, keyboard,
   // hover-pause, reduced-motion, visibility-pause. Mobile carousel is a separate IIFE below. ----------

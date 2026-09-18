@@ -238,41 +238,87 @@ export const Layout: FC<LayoutProps> = async ({ title, description, user, cartCo
                     header (Pat's "allow horizontal overflow for additional categories/
                     verticals" instruction) while "All Categories" stays pinned/always-visible
                     to its left. flex-1 min-w-0 is what lets this region shrink and scroll
-                    instead of pushing the header wider than the viewport. ---------- */}
-                <div class="flex-1 min-w-0 flex items-center gap-1 overflow-x-auto [&::-webkit-scrollbar]:hidden">
-                  {/* Header Category Pills — curated navigation shortcuts (nav_pill_visible/
-                      nav_pill_order, migration 0063), DELIBERATELY INDEPENDENT of is_visible
-                      (mega-menu) and is_featured_home (homepage rails) — see
-                      category-pill-nav.ts's doc comment. Mixed depth by design (a level-1
-                      department pill can sit next to a level-2 subcategory pill). Every href
-                      is /shop?category=<slug>, resolved at any depth by shop.tsx — no
-                      hardcoded destination URLs. */}
-                  <div id="category-pill-nav-desktop" class="flex items-center gap-1 shrink-0">
-                    {categoryPills.map((cat) => (
-                      <a href={cat.href} class="flex items-center gap-1 shrink-0 px-2.5 py-2.5 hover:bg-white/10 transition-colors text-white/90 whitespace-nowrap">
-                        {cat.label}
-                        {cat.badge && <span class="text-[9px] bg-primary-fixed/90 text-primary-dark font-bold rounded px-1 py-0.5">{cat.badge}</span>}
-                      </a>
-                    ))}
+                    instead of pushing the header wider than the viewport.
+
+                    Category + Footer Live Reconciliation follow-up (2026-09-18): the strip
+                    used to just overflow-scroll with a HIDDEN scrollbar and zero affordance
+                    — no visual cue that more categories existed past the fold, and no way to
+                    reach them without a trackpad/touch swipe (Pat's report: "supposed to be
+                    able to scroll... when you hover on it, you can scroll to the right or
+                    left... there should be no cut off"). Fixed with the same hover-reveal
+                    chevron-button pattern already established in MerchandisingRail.tsx's
+                    .carousel-nav-btn (id="header-nav-scroll-track" is `data-target`, wired by
+                    initHeaderNavScroll() in app.js — NOT the rail's fixed "one card width"
+                    step logic, since this strip mixes pill/icon widths). Buttons are
+                    opacity-0 by default and only reveal on `group-hover` (desktop, mouse-
+                    driven) AND get out of the disabled/hidden state their own scroll-position
+                    listener maintains — so there is never a dead-end arrow at either end,
+                    and the underlying div is still natively wheel/trackpad-scrollable at all
+                    times regardless of hover state. ---------- */}
+                <div class="relative flex-1 min-w-0 group/navscroll">
+                  <div id="header-nav-scroll-track" class="flex items-center gap-1 overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:hidden">
+                    {/* Header Category Pills — curated navigation shortcuts (nav_pill_visible/
+                        nav_pill_order, migration 0063), DELIBERATELY INDEPENDENT of is_visible
+                        (mega-menu) and is_featured_home (homepage rails) — see
+                        category-pill-nav.ts's doc comment. Mixed depth by design (a level-1
+                        department pill can sit next to a level-2 subcategory pill). Every href
+                        is /shop?category=<slug>, resolved at any depth by shop.tsx — no
+                        hardcoded destination URLs. */}
+                    <div id="category-pill-nav-desktop" class="flex items-center gap-1 shrink-0">
+                      {categoryPills.map((cat) => (
+                        <a href={cat.href} class="flex items-center gap-1 shrink-0 px-2.5 py-2.5 hover:bg-white/10 transition-colors text-white/90 whitespace-nowrap">
+                          {cat.label}
+                          {cat.badge && <span class="text-[9px] bg-primary-fixed/90 text-primary-dark font-bold rounded px-1 py-0.5">{cat.badge}</span>}
+                        </a>
+                      ))}
+                    </div>
+                    {/* Visual grouping divider — Pat's explicit "customers must be able to
+                        clearly distinguish SHOP/CATEGORIES from NAIJADEALS ECOSYSTEM"
+                        instruction. A subtle uppercase micro-label rather than a header
+                        redesign: same divider style already used before "Deals" below. */}
+                    <span class="w-px h-4 bg-white/20 shrink-0 mx-1"></span>
+                    <span class="shrink-0 text-[9px] font-bold uppercase tracking-wide text-white/40 px-1 select-none" aria-hidden="true">Ecosystem</span>
+                    {/* Ecosystem pills — the "one super-app, not nine websites" strip */}
+                    <div id="ecosystem-nav-desktop" class="flex items-center gap-1 shrink-0">
+                      {ecosystemLinks.map((eco) => (
+                        <a href={eco.href} class="flex items-center gap-1.5 shrink-0 px-2.5 py-2.5 hover:bg-white/10 transition-colors text-white/90">
+                          <span class="material-symbols-outlined text-base">{eco.icon}</span>
+                          {eco.label.replace('Naija', '')}
+                          {!eco.live && <span class="text-[9px] bg-white/15 rounded px-1 py-0.5">Soon</span>}
+                        </a>
+                      ))}
+                    </div>
+                    <span class="w-px h-4 bg-white/20 shrink-0 mx-1"></span>
+                    <a href="/shop?deals=1" class="flex items-center gap-1 shrink-0 px-2.5 py-2.5 hover:bg-white/10 transition-colors text-primary-fixed font-semibold whitespace-nowrap">{t('nav_deals')}</a>
                   </div>
-                  {/* Visual grouping divider — Pat's explicit "customers must be able to
-                      clearly distinguish SHOP/CATEGORIES from NAIJADEALS ECOSYSTEM"
-                      instruction. A subtle uppercase micro-label rather than a header
-                      redesign: same divider style already used before "Deals" below. */}
-                  <span class="w-px h-4 bg-white/20 shrink-0 mx-1"></span>
-                  <span class="shrink-0 text-[9px] font-bold uppercase tracking-wide text-white/40 px-1 select-none" aria-hidden="true">Ecosystem</span>
-                  {/* Ecosystem pills — the "one super-app, not nine websites" strip */}
-                  <div id="ecosystem-nav-desktop" class="flex items-center gap-1 shrink-0">
-                    {ecosystemLinks.map((eco) => (
-                      <a href={eco.href} class="flex items-center gap-1.5 shrink-0 px-2.5 py-2.5 hover:bg-white/10 transition-colors text-white/90">
-                        <span class="material-symbols-outlined text-base">{eco.icon}</span>
-                        {eco.label.replace('Naija', '')}
-                        {!eco.live && <span class="text-[9px] bg-white/15 rounded px-1 py-0.5">Soon</span>}
-                      </a>
-                    ))}
-                  </div>
-                  <span class="w-px h-4 bg-white/20 shrink-0 mx-1"></span>
-                  <a href="/shop?deals=1" class="flex items-center gap-1 shrink-0 px-2.5 py-2.5 hover:bg-white/10 transition-colors text-primary-fixed font-semibold whitespace-nowrap">{t('nav_deals')}</a>
+                  {/* Edge fade + hover-reveal scroll buttons. pointer-events-none on the fade
+                      layers so they never block clicks on pills underneath; the buttons
+                      themselves sit above the fade and ARE clickable. Both start hidden via
+                      JS-added [data-at-start]/[data-at-end] attributes (see initHeaderNavScroll
+                      in app.js) so there's no left-arrow flash on page load when already at
+                      the start. */}
+                  <div class="pointer-events-none absolute inset-y-0 left-0 w-8 bg-gradient-to-r from-primary to-transparent opacity-0 group-hover/navscroll:opacity-100 transition-opacity" data-nav-fade="left"></div>
+                  <div class="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-primary to-transparent opacity-0 group-hover/navscroll:opacity-100 transition-opacity" data-nav-fade="right"></div>
+                  <button
+                    type="button"
+                    aria-label="Scroll categories left"
+                    id="header-nav-scroll-left-btn"
+                    data-target="header-nav-scroll-track"
+                    data-dir="-1"
+                    class="nav-scroll-btn absolute left-0 top-1/2 -translate-y-1/2 z-10 w-7 h-7 rounded-full bg-primary-dark border border-white/20 flex items-center justify-center text-white opacity-0 group-hover/navscroll:opacity-100 transition-opacity"
+                  >
+                    <span class="material-symbols-outlined text-base">chevron_left</span>
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Scroll categories right"
+                    id="header-nav-scroll-right-btn"
+                    data-target="header-nav-scroll-track"
+                    data-dir="1"
+                    class="nav-scroll-btn absolute right-0 top-1/2 -translate-y-1/2 z-10 w-7 h-7 rounded-full bg-primary-dark border border-white/20 flex items-center justify-center text-white opacity-0 group-hover/navscroll:opacity-100 transition-opacity"
+                  >
+                    <span class="material-symbols-outlined text-base">chevron_right</span>
+                  </button>
                 </div>
               </div>
             </nav>
@@ -326,29 +372,38 @@ export const Layout: FC<LayoutProps> = async ({ title, description, user, cartCo
                 desktop, consuming the exact same categoryPills/ecosystemLinks arrays
                 (getCategoryPillNav()/getEcosystemNavLinks()) — no separate mobile
                 data source, per Pat's explicit instruction. */}
-            <div class="flex items-center px-3 pb-2.5 overflow-x-auto text-[11px] [&::-webkit-scrollbar]:hidden">
-              <div id="category-pill-nav-mobile-scroller" class="flex items-center gap-4 shrink-0">
-                {categoryPills.map((cat) => (
-                  <a href={cat.href} class="flex flex-col items-center gap-0.5 shrink-0 text-white/80 relative">
-                    <span class="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center">
-                      <span class="material-symbols-outlined text-lg">{cat.icon}</span>
-                    </span>
-                    <span class="whitespace-nowrap">{cat.label}</span>
-                    {cat.badge && <span class="absolute -top-1 right-1 text-[8px] bg-primary-fixed text-primary-dark font-bold rounded px-1 leading-tight">{cat.badge}</span>}
-                  </a>
-                ))}
+            {/* Category + Footer Live Reconciliation follow-up: mobile already scrolls
+                natively via touch/swipe on this overflow-x-auto row (no JS needed, unlike
+                desktop's hover-button pattern above) — but with a hidden scrollbar and no
+                edge cue, it looked "cut off" with nothing signaling more content exists past
+                the fold. relative + the two fade divs below give the same discoverability
+                affordance as desktop without needing hover (which doesn't exist on touch). */}
+            <div class="relative">
+              <div id="header-nav-scroll-track-mobile" class="flex items-center px-3 pb-2.5 overflow-x-auto text-[11px] [&::-webkit-scrollbar]:hidden">
+                <div id="category-pill-nav-mobile-scroller" class="flex items-center gap-4 shrink-0">
+                  {categoryPills.map((cat) => (
+                    <a href={cat.href} class="flex flex-col items-center gap-0.5 shrink-0 text-white/80 relative">
+                      <span class="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center">
+                        <span class="material-symbols-outlined text-lg">{cat.icon}</span>
+                      </span>
+                      <span class="whitespace-nowrap">{cat.label}</span>
+                      {cat.badge && <span class="absolute -top-1 right-1 text-[8px] bg-primary-fixed text-primary-dark font-bold rounded px-1 leading-tight">{cat.badge}</span>}
+                    </a>
+                  ))}
+                </div>
+                <span class="w-px h-8 bg-white/20 shrink-0 mx-3"></span>
+                <div id="ecosystem-nav-mobile-scroller" class="flex items-center gap-4 shrink-0">
+                  {ecosystemLinks.map((eco) => (
+                    <a href={eco.href} class="flex flex-col items-center gap-0.5 shrink-0 text-white/80">
+                      <span class="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center">
+                        <span class="material-symbols-outlined text-lg">{eco.icon}</span>
+                      </span>
+                      <span class="whitespace-nowrap">{eco.label.replace('Naija', '')}</span>
+                    </a>
+                  ))}
+                </div>
               </div>
-              <span class="w-px h-8 bg-white/20 shrink-0 mx-3"></span>
-              <div id="ecosystem-nav-mobile-scroller" class="flex items-center gap-4 shrink-0">
-                {ecosystemLinks.map((eco) => (
-                  <a href={eco.href} class="flex flex-col items-center gap-0.5 shrink-0 text-white/80">
-                    <span class="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center">
-                      <span class="material-symbols-outlined text-lg">{eco.icon}</span>
-                    </span>
-                    <span class="whitespace-nowrap">{eco.label.replace('Naija', '')}</span>
-                  </a>
-                ))}
-              </div>
+              <div class="pointer-events-none absolute inset-y-0 right-0 w-6 bg-gradient-to-l from-primary-dark to-transparent transition-opacity" data-nav-fade="right-mobile"></div>
             </div>
           </div>
         </header>
