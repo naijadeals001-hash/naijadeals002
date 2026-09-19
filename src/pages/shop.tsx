@@ -3,6 +3,7 @@ import { Layout } from '../components/Layout'
 import { ProductCard } from '../components/ProductCard'
 import type { AppEnv, CategoryRow, ProductWithListingRow } from '../types'
 import { recordBehaviorEvent } from '../lib/behavior-events'
+import { countryAvailabilitySqlFragment } from '../lib/country'
 
 const PER_PAGE = 24
 
@@ -18,6 +19,11 @@ export async function shopPage(c: Context<AppEnv>) {
   const minPrice = c.req.query('min_price')
   const maxPrice = c.req.query('max_price')
   const minRating = c.req.query('min_rating')
+  // Stage 2A: two INDEPENDENT country filters, identical semantics to
+  // api-catalog.ts's /products endpoint — see that file's comment for the
+  // full "never conflate availability with origin" rationale.
+  const country = c.req.query('country')?.toUpperCase()
+  const originCountry = c.req.query('origin_country')?.toUpperCase()
   const sort = c.req.query('sort') || 'newest'
   const page = Math.max(1, Number(c.req.query('page') || '1'))
   const offset = (page - 1) * PER_PAGE
@@ -90,6 +96,17 @@ export async function shopPage(c: Context<AppEnv>) {
     sql += ' AND p.rating_avg >= ?'
     binds.push(Number(minRating))
   }
+  if (country) {
+    sql += ` AND ${countryAvailabilitySqlFragment()}`
+    binds.push(country, country)
+  }
+  if (originCountry) {
+    sql += ` AND EXISTS (
+      SELECT 1 FROM product_country_origins pco
+      WHERE pco.product_id = p.id AND pco.country_iso = ? AND pco.verification_status = 'verified'
+    )`
+    binds.push(originCountry)
+  }
 
   // Phase 3A — record category_view / search behavior events. Best-effort,
   // never blocks rendering. Only fires on page 1 of a given filter combo's
@@ -140,7 +157,7 @@ export async function shopPage(c: Context<AppEnv>) {
   // (pagination, sort dropdown, filter checkboxes) — avoids losing the rest of the query string.
   function buildQuery(overrides: Record<string, string | undefined>): string {
     const params = new URLSearchParams()
-    const current: Record<string, string | undefined> = { category, q, deals, brand, nigerian: nigerianOnly, min_price: minPrice, max_price: maxPrice, min_rating: minRating, sort, page: String(page) }
+    const current: Record<string, string | undefined> = { category, q, deals, brand, nigerian: nigerianOnly, min_price: minPrice, max_price: maxPrice, min_rating: minRating, country, origin_country: originCountry, sort, page: String(page) }
     const merged = { ...current, ...overrides }
     for (const [k, v] of Object.entries(merged)) {
       if (v !== undefined && v !== '' && !(k === 'page' && v === '1')) params.set(k, v)

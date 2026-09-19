@@ -16,6 +16,8 @@
  * honest, seller/admin-DECLARED boolean per (listing, country) — nothing
  * more is claimed.
  */
+import { PRODUCT_CARD_SELECT } from './catalog'
+import type { ProductWithListingRow, VendorRow } from '../types'
 
 export interface CountryRow {
   id: number
@@ -131,6 +133,10 @@ export async function getListingCountryAvailability(db: D1Database, listingId: n
  * value the caller splices in, rather than a full query builder, since
  * every call site (api-catalog.ts's /products, /products/:slug) already
  * has its own base query shape this must not disturb.
+ *
+ * STAGE 2A: activated. Previously written (Marketplace Engine 2.1) but had
+ * zero callers until the country-aware /api/catalog/products?country= param
+ * and getProductsAvailableInCountry() below were added.
  */
 export function countryAvailabilitySqlFragment(): string {
   return `(
@@ -138,4 +144,139 @@ export function countryAvailabilitySqlFragment(): string {
       AND v.country_iso = ?
     OR EXISTS (SELECT 1 FROM listing_country_availability lca2 WHERE lca2.listing_id = l.id AND lca2.country_iso = ? AND lca2.is_available = 1)
   )`
+}
+
+/**
+ * Stage 2A — Africa Catalog & Country Architecture.
+ *
+ * ============================================================================
+ * THE THREE COUNTRY RELATIONSHIPS (never conflate these — see Stage 2A design
+ * doc section 5 for the exact data contract):
+ *
+ *   1. Product -> Origin Country -> Verification -> Source
+ *        table: product_country_origins (migration 0067)
+ *        "where was this product made/grown/crafted" — requires explicit
+ *        evidence; a product may have ZERO origin rows indefinitely, and
+ *        that is the honest, correct default, never an error.
+ *
+ *   2. Product/Listing -> Available/Sold In -> Country
+ *        table: listing_country_availability (pre-existing) +
+ *               vendor-country fallback (isListingAvailableInCountry above)
+ *        "can a customer in country X actually buy this listing" — this is
+ *        what ?country=XX means everywhere in this app, NEVER origin.
+ *
+ *   3. Vendor -> Based In -> Country
+ *        column: vendors.country_iso (pre-existing)
+ *        "where does the seller operate" — a business/legal-presence fact,
+ *        independent of what countries that vendor's listings ship to and
+ *        independent of where any of their products were actually made.
+ *
+ * These three functions below (getProductsAvailableInCountry,
+ * getProductsOriginatingFromCountry, getVendorsBasedInCountry) are the ONLY
+ * sanctioned entry points for "give me the products/vendors for country X" —
+ * every call site (country-detail.tsx, api-catalog.ts) must go through
+ * these, never write its own inline country-filtering SQL, so the "never
+ * conflate" rule is enforced structurally in one place, not by convention
+ * scattered across every call site.
+ * ============================================================================
+ */
+
+/**
+ * Requirement #2 relationship: products whose LISTINGS are available/sold in
+ * `countryIso`. Reuses the exact same PRODUCT_CARD_SELECT every other
+ * merchandising rail in catalog.ts uses (same real-image gate, same joins),
+ * plus countryAvailabilitySqlFragment()'s availability logic spliced in —
+ * never a parallel, slightly-different product query shape.
+ *
+ * DOES NOT touch product_country_origins or categories.country_iso in any
+ * way. A product manufactured in Kenya but sold by a Nigeria-based vendor
+ * who has explicitly enabled Kenya availability correctly appears here for
+ * countryIso='KE' — that is the availability relationship working exactly
+ * as designed, completely independent of where the product was made.
+ */
+export async function getProductsAvailableInCountry(db: D1Database, countryIso: string, limit = 24, offset = 0): Promise<ProductWithListingRow[]> {
+  const { results } = await db
+    .prepare(
+      `${PRODUCT_CARD_SELECT} AND ${countryAvailabilitySqlFragment()}
+       ORDER BY p.rating_count DESC, p.id DESC LIMIT ? OFFSET ?`
+    )
+    .bind(countryIso, countryIso, limit, offset)
+    .all<ProductWithListingRow>()
+  return results
+}
+
+/**
+ * Requirement #1 relationship: products with a VERIFIED origin row for
+ * `countryIso` in product_country_origins. Deliberately filters to
+ * verification_status = 'verified' ONLY — an 'unverified' or 'disputed' row
+ * must never surface on a public "Products From <Country>" page (this is
+ * the exact honesty gate migration 0067's own header comment specifies).
+ *
+ * Returns an empty array for every country until a human explicitly
+ * verifies at least one product's origin via the Control Center — this is
+ * the correct, expected state at the close of this unit (Stage 2A adds zero
+ * catalog rows and zero origin verifications).
+ */
+export async function getProductsOriginatingFromCountry(db: D1Database, countryIso: string, limit = 24, offset = 0): Promise<ProductWithListingRow[]> {
+  const { results } = await db
+    .prepare(
+      `${PRODUCT_CARD_SELECT} AND EXISTS (
+         SELECT 1 FROM product_country_origins pco
+         WHERE pco.product_id = p.id AND pco.country_iso = ? AND pco.verification_status = 'verified'
+       )
+       ORDER BY p.rating_count DESC, p.id DESC LIMIT ? OFFSET ?`
+    )
+    .bind(countryIso, limit, offset)
+    .all<ProductWithListingRow>()
+  return results
+}
+
+/**
+ * Requirement #3 relationship: vendors BASED IN `countryIso`
+ * (vendors.country_iso — a legal/operational-presence fact, pre-existing
+ * column, untouched by this migration). Same "real logo + verified" filter
+ * convention as getPopularVendors() in catalog.ts — a vendor without a real
+ * photo is excluded rather than rendered as a placeholder card, matching
+ * this codebase's "show fewer, but all real" rule everywhere else.
+ */
+export async function getVendorsBasedInCountry(db: D1Database, countryIso: string, limit = 24): Promise<VendorRow[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT * FROM vendors
+       WHERE country_iso = ? AND is_verified = 1 AND logo_url IS NOT NULL AND logo_url NOT LIKE '/ph.svg%'
+       ORDER BY rating_count DESC LIMIT ?`
+    )
+    .bind(countryIso, limit)
+    .all<VendorRow>()
+  return results
+}
+
+/**
+ * Requirement #4 (partial): brands "associated with" a country. Honest
+ * scope limitation, documented rather than silently wrong: this codebase
+ * has exactly ONE brand-nationality signal today (brands.is_nigerian,
+ * preserved unchanged per Pat's explicit Stage 2A decision — no
+ * brand_country_origins table is built in this unit). So NG returns the
+ * existing is_nigerian=1 brand set; every other ISO honestly returns an
+ * empty array rather than fabricating an association. When a generalized
+ * brand-origin model is authorized as its own future unit (see Stage 2A
+ * design doc section 1.4), this function's NG special-case is replaced by a
+ * real per-country query — the call sites (country-detail.tsx) do not
+ * change.
+ */
+export async function getBrandsAssociatedWithCountry(db: D1Database, countryIso: string, limit = 24) {
+  if (countryIso !== 'NG') return []
+  const { results } = await db
+    .prepare(
+      `SELECT b.id, b.slug, b.name, b.logo_url, b.is_featured, COUNT(p.id) as product_count
+       FROM brands b
+       JOIN products p ON p.brand_id = b.id AND p.is_active = 1
+       WHERE b.is_nigerian = 1 AND b.logo_url IS NOT NULL AND b.logo_url NOT LIKE '/ph.svg%' AND b.status = 'active'
+       GROUP BY b.id
+       ORDER BY b.is_featured DESC, product_count DESC
+       LIMIT ?`
+    )
+    .bind(limit)
+    .all()
+  return results
 }

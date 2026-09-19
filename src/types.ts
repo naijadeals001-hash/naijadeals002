@@ -76,7 +76,24 @@ export interface CategoryRow {
   level: number | null
   /** Materialized ancestor path, e.g. "1/14/203" — enables O(1) descendant lookups without a recursive CTE. NULL on rows that predate migration 0053. */
   path: string | null
-  /** NULL = global/pan-African category. Set = country-scoped node (e.g. "Nigerian Fashion" -> 'NG'). Migration 0053. */
+  /**
+   * NULL = global/pan-African category. Set = a regionally-themed TAXONOMY/
+   * NAVIGATION label (e.g. "Nigerian Fabrics" -> 'NG' for mega-menu display
+   * grouping). Migration 0053.
+   *
+   * STAGE 2A RULE (do not violate): this column is NOT a product-origin or
+   * listing-availability signal, no matter how tempting the name looks. A
+   * product sitting under a category with country_iso='NG' is NOT thereby
+   * "from Nigeria" or "available in Nigeria" — those facts live ONLY in
+   * product_country_origins and listing_country_availability respectively,
+   * each with its own independent verification/lifecycle. The one function
+   * that read this column as an origin signal (catalog.ts's
+   * getProductsByCountry) was removed in Stage 2A specifically because it
+   * violated this rule with zero callers ever relying on the behavior.
+   * If you are about to write `WHERE categories.country_iso = ?` to answer
+   * "is this product from/available in country X", stop — use
+   * product_country_origins or listing_country_availability instead.
+   */
   country_iso: string | null
 }
 
@@ -126,6 +143,8 @@ export interface VendorRow {
   organization_id: number | null
   /** Soft classification, not a CHECK constraint: individual | business | organization | manufacturer | distributor | wholesaler | farmer | retailer | brand */
   store_type: string
+  /** Vendor -> Based In -> Country (Stage 2A). Where the SELLER operates, distinct from product origin (product_country_origins) and listing availability (listing_country_availability). Defaults to 'NG' at the DB level; always present, never null. */
+  country_iso: string
 }
 
 export interface NigerianBankRow {

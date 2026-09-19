@@ -72,6 +72,30 @@ import { getOpenDisputesForAdmin, resolveDispute, createAndExecuteRefund, Refund
 import { createCategoryAttribute, updateCategoryAttribute, deleteCategoryAttribute, getAttributesForCategory } from '../lib/attributes'
 import { getAllCountries } from '../lib/country'
 import {
+  createCountryFact,
+  updateCountryFact,
+  verifyCountryFact,
+  disputeCountryFact,
+  deleteCountryFact,
+  getCountryFactsForAdmin,
+  getPendingCountryFacts,
+  VerificationSourceRequiredError,
+  CountryFactNotFoundError,
+  type CountryFactType,
+} from '../lib/country-profile'
+import {
+  proposeProductOrigin,
+  verifyProductOrigin,
+  disputeProductOrigin,
+  deleteProductOrigin,
+  getProductOrigins,
+  getPendingProductOrigins,
+  OriginVerificationSourceRequiredError,
+  ProductOriginNotFoundError,
+  type OriginType,
+} from '../lib/product-origins'
+import { invalidatePageSectionPrefix } from '../lib/page-cache'
+import {
   getCategoryNavTreeForAdmin,
   updateCategoryNavConfig,
   reorderCategoryChildren,
@@ -1005,6 +1029,424 @@ apiControlCenterRoutes.patch('/ecosystem-nav/:id', requireControlCenterPermissio
       permission_used: 'catalog.manage',
       note: 'Wired to the customer-facing header (Micro-Checkpoint 2A) — Layout.tsx consumes this via getEcosystemNavLinks(), cache invalidated on this write.',
     },
+    success: true,
+    ipAddress: getClientIp(c.req.header('cf-connecting-ip') ?? null),
+  })
+  return c.json({ success: true })
+})
+
+// ---------------------------------------------------------------------------
+// Stage 2A — Country facts (cc_country_facts) — propose -> verify workflow.
+//
+// Gate: country.settings.edit (Pat's approved authorization gate for this
+// unit — already scoped in production to COUNTRY_ADMIN/SUPER_ADMIN/
+// platform_admin/super_admin). Every mutation is audited via
+// recordControlCenterAction() with the actor identity taken EXCLUSIVELY
+// from c.get('user') — never from the request body. Public/seller/vendor
+// sessions cannot reach these routes at all: requireControlCenterApiAuth
+// (applied '*' above) already rejects anyone without a resolved Control
+// Center session before requireControlCenterPermission even runs.
+// ---------------------------------------------------------------------------
+
+const VALID_COUNTRY_FACT_TYPES: CountryFactType[] = ['major_city', 'history', 'culture', 'industry', 'government_leadership']
+
+function mapCountryFactErrorToResponse(err: unknown): { message: string; status: 400 | 404 } {
+  if (err instanceof CountryFactNotFoundError) return { message: err.message, status: 404 }
+  if (err instanceof VerificationSourceRequiredError) return { message: err.message, status: 400 }
+  return { message: err instanceof Error ? err.message : 'Failed to process country fact', status: 400 }
+}
+
+// GET /country-facts/pending — cross-country review queue (unverified facts awaiting an admin decision).
+apiControlCenterRoutes.get('/country-facts/pending', requireControlCenterPermission('country.settings.edit'), async (c) => {
+  const results = await getPendingCountryFacts(c.env.DB, Number(c.req.query('limit') ?? 100))
+  return c.json({ results })
+})
+
+// GET /country-facts/by-country/:countryId — every fact for one country, ANY status (admin management view).
+apiControlCenterRoutes.get('/country-facts/by-country/:countryId', requireControlCenterPermission('country.settings.edit'), async (c) => {
+  const countryId = Number(c.req.param('countryId'))
+  if (!Number.isInteger(countryId) || countryId <= 0) return c.json({ error: 'Invalid country id' }, 400)
+  const results = await getCountryFactsForAdmin(c.env.DB, countryId)
+  return c.json({ results })
+})
+
+// POST /country-facts — STEP 1 of propose -> verify. Always creates 'unverified' regardless of body content
+// (createCountryFact's input type has no verification_status field at all).
+apiControlCenterRoutes.post('/country-facts', requireControlCenterPermission('country.settings.edit'), async (c) => {
+  const admin = c.get('user')!
+  const body = await c.req.json<{
+    country_id?: number
+    country_iso?: string
+    fact_type?: string
+    label?: string
+    value?: string
+    sort_order?: number
+    source_url?: string | null
+  }>().catch(() => null)
+
+  if (!body?.country_id || !Number.isInteger(body.country_id)) {
+    return c.json({ error: 'country_id (integer) is required' }, 400)
+  }
+  if (!body.fact_type || !VALID_COUNTRY_FACT_TYPES.includes(body.fact_type as CountryFactType)) {
+    return c.json({ error: `fact_type must be one of: ${VALID_COUNTRY_FACT_TYPES.join(', ')}` }, 400)
+  }
+  if (!body.label?.trim() || !body.value?.trim()) {
+    return c.json({ error: 'label and value are required' }, 400)
+  }
+
+  try {
+    const id = await createCountryFact(c.env.DB, {
+      country_id: body.country_id,
+      fact_type: body.fact_type as CountryFactType,
+      label: body.label,
+      value: body.value,
+      sort_order: body.sort_order,
+      source_url: body.source_url ?? null,
+    })
+
+    await recordControlCenterAction(c.env.DB, {
+      actorUserId: admin.id,
+      actorName: admin.name,
+      action: 'country_fact_proposed',
+      entityType: 'cc_country_fact',
+      entityId: String(id),
+      afterState: { country_id: body.country_id, fact_type: body.fact_type, label: body.label, verification_status: 'unverified' },
+      context: { permission_used: 'country.settings.edit', note: 'Propose step — always unverified, never auto-verified.' },
+      success: true,
+      ipAddress: getClientIp(c.req.header('cf-connecting-ip') ?? null),
+    })
+
+    return c.json({ id, verification_status: 'unverified' }, 201)
+  } catch (err) {
+    const { message, status } = mapCountryFactErrorToResponse(err)
+    return c.json({ error: message }, status)
+  }
+})
+
+// PATCH /country-facts/:id — edit label/value/sort_order/source_url. Cannot change verification_status
+// (updateCountryFact's input type structurally excludes that field — only /verify and /dispute below can).
+apiControlCenterRoutes.patch('/country-facts/:id', requireControlCenterPermission('country.settings.edit'), async (c) => {
+  const admin = c.get('user')!
+  const factId = Number(c.req.param('id'))
+  if (!Number.isInteger(factId) || factId <= 0) return c.json({ error: 'Invalid fact id' }, 400)
+
+  const body: { label?: string; value?: string; sort_order?: number; source_url?: string | null } = await c.req.json().catch(() => ({}))
+  const input: { label?: string; value?: string; sort_order?: number; source_url?: string | null } = {}
+  if (body.label !== undefined) input.label = body.label
+  if (body.value !== undefined) input.value = body.value
+  if (body.sort_order !== undefined) input.sort_order = body.sort_order
+  if (body.source_url !== undefined) input.source_url = body.source_url
+  if (Object.keys(input).length === 0) return c.json({ error: 'No valid fields provided' }, 400)
+
+  const ok = await updateCountryFact(c.env.DB, factId, input)
+  if (!ok) return c.json({ error: 'Country fact not found' }, 404)
+
+  await recordControlCenterAction(c.env.DB, {
+    actorUserId: admin.id,
+    actorName: admin.name,
+    action: 'country_fact_updated',
+    entityType: 'cc_country_fact',
+    entityId: String(factId),
+    afterState: input,
+    context: { permission_used: 'country.settings.edit' },
+    success: true,
+    ipAddress: getClientIp(c.req.header('cf-connecting-ip') ?? null),
+  })
+  return c.json({ success: true })
+})
+
+// POST /country-facts/:id/verify — STEP 2 of propose -> verify. THE GUARDRAIL: verifyCountryFact()
+// throws VerificationSourceRequiredError if source_url is empty/whitespace — mapped to 400 below.
+// This is the ONLY route in the app that can move a fact to verification_status='verified'.
+apiControlCenterRoutes.post('/country-facts/:id/verify', requireControlCenterPermission('country.settings.edit'), async (c) => {
+  const admin = c.get('user')!
+  const factId = Number(c.req.param('id'))
+  if (!Number.isInteger(factId) || factId <= 0) return c.json({ error: 'Invalid fact id' }, 400)
+
+  const body = await c.req.json<{ source_url?: string }>().catch(() => ({}) as { source_url?: string })
+
+  try {
+    // Deliberately no early "if empty, return 400" guard here — the empty/whitespace
+    // case is routed THROUGH verifyCountryFact() so it throws VerificationSourceRequiredError
+    // and lands in the catch block below, where the rejected attempt gets audited exactly
+    // like any other failed verification (not silently short-circuited before the try).
+    await verifyCountryFact(c.env.DB, factId, body.source_url ?? '', admin.id)
+
+    // The country-detail page caches assembleCountryProfile() for 600s under
+    // country_profile:<ISO> — without invalidating it here, a just-verified
+    // fact would stay invisible to visitors for up to 10 minutes. We don't
+    // have the ISO on hand cheaply here, so we invalidate by fact id lookup.
+    const factRow = await c.env.DB
+      .prepare(`SELECT c.iso_code as iso FROM cc_country_facts f JOIN cc_countries c ON c.id = f.country_id WHERE f.id = ?`)
+      .bind(factId)
+      .first<{ iso: string }>()
+    if (factRow?.iso) {
+      await invalidatePageSectionPrefix(c.env.DB, `country_profile:${factRow.iso}`)
+    }
+
+    await recordControlCenterAction(c.env.DB, {
+      actorUserId: admin.id,
+      actorName: admin.name,
+      action: 'country_fact_verified',
+      entityType: 'cc_country_fact',
+      entityId: String(factId),
+      afterState: { verification_status: 'verified', source_url: body.source_url },
+      context: { permission_used: 'country.settings.edit', note: 'Verification requires a non-empty source_url — enforced in country-profile.ts, not just this route.' },
+      success: true,
+      ipAddress: getClientIp(c.req.header('cf-connecting-ip') ?? null),
+    })
+
+    return c.json({ success: true, verification_status: 'verified' })
+  } catch (err) {
+    const { message, status } = mapCountryFactErrorToResponse(err)
+
+    // Failed verification attempts (e.g. empty source_url) are still audited,
+    // per this codebase's existing "audit unsuccessful attempts too" convention.
+    await recordControlCenterAction(c.env.DB, {
+      actorUserId: admin.id,
+      actorName: admin.name,
+      action: 'country_fact_verify_rejected',
+      entityType: 'cc_country_fact',
+      entityId: String(factId),
+      context: { permission_used: 'country.settings.edit', reason: message },
+      success: false,
+      ipAddress: getClientIp(c.req.header('cf-connecting-ip') ?? null),
+    })
+
+    return c.json({ error: message }, status)
+  }
+})
+
+// POST /country-facts/:id/dispute — retraction path for a fact that has gone stale/wrong.
+apiControlCenterRoutes.post('/country-facts/:id/dispute', requireControlCenterPermission('country.settings.edit'), async (c) => {
+  const admin = c.get('user')!
+  const factId = Number(c.req.param('id'))
+  if (!Number.isInteger(factId) || factId <= 0) return c.json({ error: 'Invalid fact id' }, 400)
+
+  const ok = await disputeCountryFact(c.env.DB, factId)
+  if (!ok) return c.json({ error: 'Country fact not found' }, 404)
+
+  const factRow = await c.env.DB
+    .prepare(`SELECT c.iso_code as iso FROM cc_country_facts f JOIN cc_countries c ON c.id = f.country_id WHERE f.id = ?`)
+    .bind(factId)
+    .first<{ iso: string }>()
+  if (factRow?.iso) {
+    await invalidatePageSectionPrefix(c.env.DB, `country_profile:${factRow.iso}`)
+  }
+
+  await recordControlCenterAction(c.env.DB, {
+    actorUserId: admin.id,
+    actorName: admin.name,
+    action: 'country_fact_disputed',
+    entityType: 'cc_country_fact',
+    entityId: String(factId),
+    afterState: { verification_status: 'disputed' },
+    context: { permission_used: 'country.settings.edit' },
+    success: true,
+    ipAddress: getClientIp(c.req.header('cf-connecting-ip') ?? null),
+  })
+  return c.json({ success: true })
+})
+
+// DELETE /country-facts/:id
+apiControlCenterRoutes.delete('/country-facts/:id', requireControlCenterPermission('country.settings.edit'), async (c) => {
+  const admin = c.get('user')!
+  const factId = Number(c.req.param('id'))
+  if (!Number.isInteger(factId) || factId <= 0) return c.json({ error: 'Invalid fact id' }, 400)
+
+  const ok = await deleteCountryFact(c.env.DB, factId)
+  if (!ok) return c.json({ error: 'Country fact not found' }, 404)
+
+  await recordControlCenterAction(c.env.DB, {
+    actorUserId: admin.id,
+    actorName: admin.name,
+    action: 'country_fact_deleted',
+    entityType: 'cc_country_fact',
+    entityId: String(factId),
+    context: { permission_used: 'country.settings.edit' },
+    success: true,
+    ipAddress: getClientIp(c.req.header('cf-connecting-ip') ?? null),
+  })
+  return c.json({ success: true })
+})
+
+// ---------------------------------------------------------------------------
+// Stage 2A — Product country-of-origin claims (product_country_origins) —
+// identical propose -> verify discipline as country-facts above. Gate:
+// country.settings.edit (same approved permission — this is fundamentally
+// the same "evidence-gated geographic claim" administrative action as
+// country facts, just scoped to a product instead of a country page).
+//
+// CRITICAL: there is no route here that lets a seller/vendor propose or
+// verify their own product's origin. Every route below sits behind
+// requireControlCenterApiAuth ('*', applied at the top of this file) AND
+// requireControlCenterPermission('country.settings.edit') — a vendor
+// session (which is a completely separate auth system, see rbac.ts) simply
+// cannot reach these routes at all, let alone verify a claim.
+// ---------------------------------------------------------------------------
+
+const VALID_ORIGIN_TYPES_CC: OriginType[] = ['manufactured', 'grown', 'crafted', 'brand_origin', 'unspecified']
+
+function mapProductOriginErrorToResponse(err: unknown): { message: string; status: 400 | 404 } {
+  if (err instanceof ProductOriginNotFoundError) return { message: err.message, status: 404 }
+  if (err instanceof OriginVerificationSourceRequiredError) return { message: err.message, status: 400 }
+  return { message: err instanceof Error ? err.message : 'Failed to process product origin claim', status: 400 }
+}
+
+// GET /product-origins/pending — cross-product review queue.
+apiControlCenterRoutes.get('/product-origins/pending', requireControlCenterPermission('country.settings.edit'), async (c) => {
+  const results = await getPendingProductOrigins(c.env.DB, Number(c.req.query('limit') ?? 100))
+  return c.json({ results })
+})
+
+// GET /product-origins/by-product/:productId — every origin claim (any status) for one product.
+apiControlCenterRoutes.get('/product-origins/by-product/:productId', requireControlCenterPermission('country.settings.edit'), async (c) => {
+  const productId = Number(c.req.param('productId'))
+  if (!Number.isInteger(productId) || productId <= 0) return c.json({ error: 'Invalid product id' }, 400)
+  const results = await getProductOrigins(c.env.DB, productId)
+  return c.json({ results })
+})
+
+// POST /product-origins — STEP 1 of propose -> verify. Always 'unverified'. Requires an explicit,
+// human-supplied country_iso + origin_type + note — this route NEVER derives origin from category,
+// vendor location, brand nationality, or product title (no such lookup exists anywhere in this file
+// or in product-origins.ts).
+apiControlCenterRoutes.post('/product-origins', requireControlCenterPermission('country.settings.edit'), async (c) => {
+  const admin = c.get('user')!
+  const body = await c.req.json<{
+    product_id?: number
+    country_iso?: string
+    origin_type?: string
+    note?: string
+    source_url?: string | null
+  }>().catch(() => null)
+
+  if (!body?.product_id || !Number.isInteger(body.product_id)) {
+    return c.json({ error: 'product_id (integer) is required' }, 400)
+  }
+  if (!body.country_iso || !/^[A-Za-z]{2}$/.test(body.country_iso)) {
+    return c.json({ error: 'country_iso must be a 2-letter ISO code' }, 400)
+  }
+  if (!body.origin_type || !VALID_ORIGIN_TYPES_CC.includes(body.origin_type as OriginType)) {
+    return c.json({ error: `origin_type must be one of: ${VALID_ORIGIN_TYPES_CC.join(', ')}` }, 400)
+  }
+  if (!body.note?.trim()) {
+    return c.json({ error: 'note is required — explain the evidence/reasoning for this origin claim' }, 400)
+  }
+
+  try {
+    const id = await proposeProductOrigin(c.env.DB, {
+      product_id: body.product_id,
+      country_iso: body.country_iso.toUpperCase(),
+      origin_type: body.origin_type as OriginType,
+      note: body.note,
+      source_url: body.source_url ?? null,
+    })
+
+    await recordControlCenterAction(c.env.DB, {
+      actorUserId: admin.id,
+      actorName: admin.name,
+      action: 'product_origin_proposed',
+      entityType: 'product_country_origin',
+      entityId: String(id),
+      afterState: { product_id: body.product_id, country_iso: body.country_iso.toUpperCase(), origin_type: body.origin_type, verification_status: 'unverified' },
+      context: { permission_used: 'country.settings.edit', note: body.note },
+      success: true,
+      ipAddress: getClientIp(c.req.header('cf-connecting-ip') ?? null),
+    })
+
+    return c.json({ id, verification_status: 'unverified' }, 201)
+  } catch (err) {
+    const { message, status } = mapProductOriginErrorToResponse(err)
+    return c.json({ error: message }, status)
+  }
+})
+
+// POST /product-origins/:id/verify — STEP 2. THE GUARDRAIL: verifyProductOrigin() throws
+// OriginVerificationSourceRequiredError if source_url is empty — the ONLY route in the app that can
+// set product_country_origins.verification_status='verified'.
+apiControlCenterRoutes.post('/product-origins/:id/verify', requireControlCenterPermission('country.settings.edit'), async (c) => {
+  const admin = c.get('user')!
+  const originId = Number(c.req.param('id'))
+  if (!Number.isInteger(originId) || originId <= 0) return c.json({ error: 'Invalid origin id' }, 400)
+
+  const body = await c.req.json<{ source_url?: string }>().catch(() => ({}) as { source_url?: string })
+
+  try {
+    // Same deliberate non-short-circuit shape as /country-facts/:id/verify above — the
+    // empty-source_url case throws from verifyProductOrigin() and is audited in the catch.
+    await verifyProductOrigin(c.env.DB, originId, body.source_url ?? '', admin.id)
+
+    await recordControlCenterAction(c.env.DB, {
+      actorUserId: admin.id,
+      actorName: admin.name,
+      action: 'product_origin_verified',
+      entityType: 'product_country_origin',
+      entityId: String(originId),
+      afterState: { verification_status: 'verified', source_url: body.source_url },
+      context: { permission_used: 'country.settings.edit', note: 'Verification requires a non-empty source_url — enforced in product-origins.ts, not just this route.' },
+      success: true,
+      ipAddress: getClientIp(c.req.header('cf-connecting-ip') ?? null),
+    })
+
+    return c.json({ success: true, verification_status: 'verified' })
+  } catch (err) {
+    const { message, status } = mapProductOriginErrorToResponse(err)
+
+    await recordControlCenterAction(c.env.DB, {
+      actorUserId: admin.id,
+      actorName: admin.name,
+      action: 'product_origin_verify_rejected',
+      entityType: 'product_country_origin',
+      entityId: String(originId),
+      context: { permission_used: 'country.settings.edit', reason: message },
+      success: false,
+      ipAddress: getClientIp(c.req.header('cf-connecting-ip') ?? null),
+    })
+
+    return c.json({ error: message }, status)
+  }
+})
+
+// POST /product-origins/:id/dispute
+apiControlCenterRoutes.post('/product-origins/:id/dispute', requireControlCenterPermission('country.settings.edit'), async (c) => {
+  const admin = c.get('user')!
+  const originId = Number(c.req.param('id'))
+  if (!Number.isInteger(originId) || originId <= 0) return c.json({ error: 'Invalid origin id' }, 400)
+
+  const ok = await disputeProductOrigin(c.env.DB, originId)
+  if (!ok) return c.json({ error: 'Product origin claim not found' }, 404)
+
+  await recordControlCenterAction(c.env.DB, {
+    actorUserId: admin.id,
+    actorName: admin.name,
+    action: 'product_origin_disputed',
+    entityType: 'product_country_origin',
+    entityId: String(originId),
+    afterState: { verification_status: 'disputed' },
+    context: { permission_used: 'country.settings.edit' },
+    success: true,
+    ipAddress: getClientIp(c.req.header('cf-connecting-ip') ?? null),
+  })
+  return c.json({ success: true })
+})
+
+// DELETE /product-origins/:id
+apiControlCenterRoutes.delete('/product-origins/:id', requireControlCenterPermission('country.settings.edit'), async (c) => {
+  const admin = c.get('user')!
+  const originId = Number(c.req.param('id'))
+  if (!Number.isInteger(originId) || originId <= 0) return c.json({ error: 'Invalid origin id' }, 400)
+
+  const ok = await deleteProductOrigin(c.env.DB, originId)
+  if (!ok) return c.json({ error: 'Product origin claim not found' }, 404)
+
+  await recordControlCenterAction(c.env.DB, {
+    actorUserId: admin.id,
+    actorName: admin.name,
+    action: 'product_origin_deleted',
+    entityType: 'product_country_origin',
+    entityId: String(originId),
+    context: { permission_used: 'country.settings.edit' },
     success: true,
     ipAddress: getClientIp(c.req.header('cf-connecting-ip') ?? null),
   })

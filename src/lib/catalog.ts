@@ -19,7 +19,7 @@ import type { ProductWithListingRow, ListingRow, VendorRow, CategoryRow } from '
  * don't have real photography yet is correct behavior, not a bug — it will silently
  * backfill to the full count as more product-image batches ship (see phase0_mapping.json).
  */
-const PRODUCT_CARD_SELECT = `
+export const PRODUCT_CARD_SELECT = `
   SELECT p.*,
          cat.name as category_name, cat.slug as category_slug,
          b.name as brand_name, b.slug as brand_slug,
@@ -433,19 +433,18 @@ export async function getDealsNearYou(db: D1Database, city: string, limit = 10):
 }
 
 /**
- * "African Discovery" rails (Phase 1b) — products whose DIRECT category node
- * is scoped to a specific country (migration 0053's country_iso column,
- * e.g. "Ankara Fabric" -> NG). This is the real in-tree African layer, not a
- * collections/banner substitute — see migration 0053's header comment and
- * scripts/seed/generate_phase1a_seed.py's country_iso inheritance logic.
+ * REMOVED in Stage 2A (Africa Catalog & Country Architecture): this file
+ * used to export getProductsByCountry(), which filtered on
+ * `categories.country_iso` as a product-origin/availability signal. The
+ * Stage 2 discovery audit confirmed it had ZERO callers anywhere in the app
+ * (dead code) and that it violated the "categories.country_iso is a
+ * taxonomy/navigation label, never an origin/availability signal" rule now
+ * documented on CategoryRow in types.ts. Country-scoped product queries now
+ * go through src/lib/country.ts's getProductsAvailableInCountry() (uses
+ * listing_country_availability) and getProductsOriginatingFromCountry()
+ * (uses product_country_origins, verified rows only) — the two real,
+ * independently-verifiable relationships, never this shortcut.
  */
-export async function getProductsByCountry(db: D1Database, countryIso: string, limit = 12): Promise<ProductWithListingRow[]> {
-  const { results } = await db
-    .prepare(`${PRODUCT_CARD_SELECT} AND cat.country_iso = ? ORDER BY p.rating_count DESC, p.id DESC LIMIT ?`)
-    .bind(countryIso, limit)
-    .all<ProductWithListingRow>()
-  return results
-}
 
 /** Fetches product cards by an explicit id list, preserving the given order — used to hydrate "Recently Viewed" from client-side localStorage ids. */
 export async function getProductsByIds(db: D1Database, ids: number[]): Promise<ProductWithListingRow[]> {

@@ -37,6 +37,7 @@ import { homePage } from './pages/home'
 import { shopPage } from './pages/shop'
 import { categoriesPage, popularCategoriesPage } from './pages/categories'
 import { countriesPage } from './pages/countries'
+import { countryDetailPage } from './pages/country-detail'
 import { vendorsPage } from './pages/vendors'
 import { brandsPage } from './pages/brands'
 import { productPage } from './pages/product'
@@ -141,6 +142,7 @@ app.get('/shop', shopPage)
 app.get('/categories', categoriesPage)
 app.get('/categories/popular', popularCategoriesPage)
 app.get('/countries', countriesPage)
+app.get('/countries/:iso', countryDetailPage)
 app.get('/vendors', vendorsPage)
 app.get('/brands', brandsPage)
 app.get('/shop/:slug', productPage)

@@ -38,7 +38,7 @@ export async function countriesPage(c: Context<AppEnv>) {
 
         <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
           {countries.map((country) => (
-            <div class="bg-white border border-gray-200 rounded-xl overflow-hidden">
+            <a href={`/countries/${country.iso_code.toLowerCase()}`} class="bg-white border border-gray-200 rounded-xl overflow-hidden block hover:shadow-md hover:border-primary/40 transition-shadow">
               <div class="relative aspect-[4/3] overflow-hidden">
                 <img src={country.image_url} alt={country.name} loading="lazy" class="w-full h-full object-cover" />
                 {country.status === 'LIVE' && (
@@ -55,7 +55,7 @@ export async function countriesPage(c: Context<AppEnv>) {
                 )}
                 <p class="text-[11px] text-gray-400 mt-1">{country.region}</p>
               </div>
-            </div>
+            </a>
           ))}
         </div>
 

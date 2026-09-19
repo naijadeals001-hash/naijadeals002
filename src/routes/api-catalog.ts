@@ -4,7 +4,16 @@ import { getTopLevelCategories, getListingsForProduct, getVariantsForListing, ge
 import { getHomepageFeed } from '../lib/homepage-feed'
 import { getAllCollections, getCollectionBySlug, getProductsInCollection } from '../lib/collections'
 import { getProductAttributeValues } from '../lib/attributes'
-import { getLiveCountries } from '../lib/country'
+import {
+  getLiveCountries,
+  getProductsAvailableInCountry,
+  getProductsOriginatingFromCountry,
+  getVendorsBasedInCountry,
+  getBrandsAssociatedWithCountry,
+  countryAvailabilitySqlFragment,
+} from '../lib/country'
+import { assembleCountryProfile } from '../lib/country-profile'
+import { getOrComputePageSection } from '../lib/page-cache'
 import { getMegaMenuTree } from '../lib/mega-menu'
 
 export const catalogApi = new Hono<AppEnv>()
@@ -30,6 +39,86 @@ catalogApi.get('/collections/:slug', async (c) => {
 /** Marketplace Engine 2.1 (spec section 11): LIVE markets only — the honest "ship to" selector data source. cc_countries is the existing, previously-dormant Control Center table (migration 0013), never a duplicated Country Engine. */
 catalogApi.get('/countries', async (c) => {
   const results = await getLiveCountries(c.env.DB)
+  return c.json({ results })
+})
+
+/**
+ * Stage 2A — /countries/:iso profile: country row + verified facts, grouped
+ * by fact_type. Cached 600s (near-static content, longer TTL than the
+ * fast-moving product lists below) via the shared page-cache.ts helper.
+ * Returns 404 for an unknown ISO — never a fabricated empty-but-200 profile.
+ */
+catalogApi.get('/countries/:iso', async (c) => {
+  const iso = c.req.param('iso').toUpperCase()
+  const profile = await getOrComputePageSection(
+    c.env.DB,
+    `country_profile:${iso}`,
+    600,
+    () => assembleCountryProfile(c.env.DB, iso)
+  )
+  if (!profile) return c.json({ error: 'Country not found' }, 404)
+  return c.json(profile)
+})
+
+/**
+ * Stage 2A requirement #2: products whose LISTINGS are available/sold in
+ * :iso (listing_country_availability + vendor-country fallback). This is
+ * NOT origin — see /countries/:iso/products/origin below for that.
+ */
+catalogApi.get('/countries/:iso/products/available', async (c) => {
+  const iso = c.req.param('iso').toUpperCase()
+  const limit = Math.min(48, Number(c.req.query('limit') ?? 24))
+  const offset = Math.max(0, Number(c.req.query('offset') ?? 0))
+  const results = await getOrComputePageSection(
+    c.env.DB,
+    `country_products_available:${iso}:${limit}:${offset}`,
+    120,
+    () => getProductsAvailableInCountry(c.env.DB, iso, limit, offset)
+  )
+  return c.json({ results, filters_applied: { available_in: iso } })
+})
+
+/**
+ * Stage 2A requirement #1: products with a VERIFIED origin row for :iso
+ * (product_country_origins, verification_status='verified' only). This is
+ * NOT availability — a product can be from Ghana but unavailable there.
+ */
+catalogApi.get('/countries/:iso/products/origin', async (c) => {
+  const iso = c.req.param('iso').toUpperCase()
+  const limit = Math.min(48, Number(c.req.query('limit') ?? 24))
+  const offset = Math.max(0, Number(c.req.query('offset') ?? 0))
+  const results = await getOrComputePageSection(
+    c.env.DB,
+    `country_products_origin:${iso}:${limit}:${offset}`,
+    120,
+    () => getProductsOriginatingFromCountry(c.env.DB, iso, limit, offset)
+  )
+  return c.json({ results, filters_applied: { origin: iso } })
+})
+
+/** Stage 2A requirement #3: vendors BASED IN :iso (vendors.country_iso — legal/operational presence, independent of what they ship to or where their products are made). */
+catalogApi.get('/countries/:iso/vendors', async (c) => {
+  const iso = c.req.param('iso').toUpperCase()
+  const limit = Math.min(48, Number(c.req.query('limit') ?? 24))
+  const results = await getOrComputePageSection(
+    c.env.DB,
+    `country_vendors:${iso}:${limit}`,
+    120,
+    () => getVendorsBasedInCountry(c.env.DB, iso, limit)
+  )
+  return c.json({ results })
+})
+
+/** Stage 2A requirement #4 (partial — see country.ts's getBrandsAssociatedWithCountry doc comment for the honest NG-only scope limitation). */
+catalogApi.get('/countries/:iso/brands', async (c) => {
+  const iso = c.req.param('iso').toUpperCase()
+  const limit = Math.min(48, Number(c.req.query('limit') ?? 24))
+  const results = await getOrComputePageSection(
+    c.env.DB,
+    `country_brands:${iso}:${limit}`,
+    120,
+    () => getBrandsAssociatedWithCountry(c.env.DB, iso, limit)
+  )
   return c.json({ results })
 })
 
@@ -83,6 +172,13 @@ catalogApi.get('/products', async (c) => {
   const minRating = c.req.query('min_rating')
   const brand = c.req.query('brand')
   const nigerianOnly = c.req.query('nigerian')
+  // Stage 2A: two INDEPENDENT country filters — never conflated, never share
+  // a code path. `country` = listing availability (can I buy this in X?).
+  // `origin_country` = verified product origin (is this genuinely from X?).
+  // Both may be present at once (AND-combined) or absent (no country filter
+  // at all, today's pre-Stage-2A behavior, byte-identical when omitted).
+  const country = c.req.query('country')?.toUpperCase()
+  const originCountry = c.req.query('origin_country')?.toUpperCase()
   const page = Math.max(1, Number(c.req.query('page') || '1'))
   const perPage = 24
   const offset = (page - 1) * perPage
@@ -145,6 +241,23 @@ catalogApi.get('/products', async (c) => {
   if (nigerianOnly === '1') {
     sql += ' AND b.is_nigerian = 1'
   }
+  if (country) {
+    // Availability relationship ONLY (listing_country_availability + vendor
+    // fallback) — never product origin. Reuses the same shared SQL fragment
+    // getProductsAvailableInCountry() uses, so this endpoint and the
+    // /countries/:iso/products/available endpoint can never silently drift
+    // into two different definitions of "available in".
+    sql += ` AND ${countryAvailabilitySqlFragment()}`
+    binds.push(country, country)
+  }
+  if (originCountry) {
+    // Origin relationship ONLY, verified rows only — never availability.
+    sql += ` AND EXISTS (
+      SELECT 1 FROM product_country_origins pco
+      WHERE pco.product_id = p.id AND pco.country_iso = ? AND pco.verification_status = 'verified'
+    )`
+    binds.push(originCountry)
+  }
 
   // count query (same WHERE, no pagination) for pagination UI
   const countSql = sql.replace(
@@ -173,7 +286,16 @@ catalogApi.get('/products', async (c) => {
   binds.push(perPage, offset)
 
   const { results } = await c.env.DB.prepare(sql).bind(...binds).all()
-  return c.json({ products: results, total: countRow?.total ?? 0, page, per_page: perPage })
+  return c.json({
+    products: results,
+    total: countRow?.total ?? 0,
+    page,
+    per_page: perPage,
+    // Stage 2A data contract: echo exactly which country filter(s) fired so
+    // the frontend (and any future debugging) can never mistake one for the
+    // other — see the design doc's "country filtering semantics" section.
+    filters_applied: { available_in: country ?? null, origin: originCountry ?? null },
+  })
 })
 
 catalogApi.get('/products/:slug', async (c) => {
