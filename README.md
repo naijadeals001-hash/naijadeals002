@@ -621,3 +621,72 @@ above without cross-checking here first.
   full production wiring (locale reaching every page/component,
   geo/IP-based auto-detection) is tracked as a later phase, not yet done.
 - Ecosystem waitlist signup flow for NaijaEats/NaijaGigs/NaijaStay preview.
+
+## Stage 2C — Currency & Address Foundation (CLOSED 2026-09-19)
+
+**Scope:** currency-aware pricing across the catalog/cart/checkout/order
+stack (products can now legitimately price in NGN/GHS/KES/MAD depending on
+the selling vendor's country), a cross-currency mixed-cart warning, and an
+address book foundation (`country_regions` reference table + `country_iso`
+columns) — **NG-only in practice**; GH/KE reference data exists but no
+country activation, seller onboarding, payout rails, or FX conversion logic
+was touched (explicitly out of scope, see below).
+
+- **Migration `0071_currency_address_foundation.sql`**: adds
+  `product_listings.currency` (defaults `'NGN'`, backfilled once at migration
+  time for the 4 non-NG vendors via `vendors.country_iso → cc_countries`
+  join — never re-derived at read time), `orders.shipping_country`,
+  `addresses.country_iso`, and a new `country_regions` table (37 NG states
+  seeded from `nigerian_states` + 16 GH regions, reference-only — GH stays
+  `cc_countries.status='PLANNED'`, no activation implied).
+- **Cross-currency warning**: exact text *"Items from different currency
+  zones — totals are shown per currency group."* — shown when a cart mixes
+  listings priced in more than one currency; cart/checkout total math groups
+  and sums per-currency rather than force-converting.
+- **`ADDRESS_SUPPORTED_COUNTRIES`** (`src/lib/addresses.ts`) is intentionally
+  NG-only by design — extend only when a country's checkout/address flow is
+  genuinely wired up, never just because `country_regions` has rows for it.
+- **Explicitly out of scope this stage**: seller onboarding wizard, payout
+  system, Paystack multi-currency, M-Pesa, GH/KE activation, product-origin
+  population, Control Center RBAC changes, search/FTS5, automatic FX
+  conversion, multi-currency wallet, new payment rails.
+- **Verification**: 26/26 marketplace-engine tests, TypeScript baseline
+  unchanged (14 pre-existing errors, zero net-new), production build
+  succeeds, then **actual Chromium/Playwright** (not HTTP-only) — 18/18
+  scenarios × desktop (1440×900) + mobile (390×844) — run twice: once
+  locally pre-deploy, once again live against `https://naijadeals.com`
+  post-deploy. Both runs 18/18 pass. Live run created 2 throwaway test
+  accounts (`stage2c_pw_*@test.ng`) to exercise cart/checkout/address flows
+  against production; both deleted post-verification (cascade-cleaned via
+  `ON DELETE CASCADE` on `carts.user_id` / `notifications.user_id`), and
+  catalog counts re-confirmed unaffected afterward.
+- **GitHub**: commit `c4c4db826da87cb9951f6f9da8c58e45ee8a31eb` on `main`,
+  local/`origin/main`/GitHub-API SHA three-way match confirmed.
+- **Production**: migration 0071 applied (8/8 statements, 61 rows affected),
+  deploy Version ID `f012d886-16ad-4361-9c0d-5240083df4e4`. Catalog integrity
+  confirmed exact before and after: products=103, categories=254, brands=41,
+  vendors=35, product_listings=140.
+- **Deploy-pipeline bug found and fixed this release**: applying 0071 via
+  `gsk hosted d1_execute` ahead of `gsk hosted deploy` (to get an isolated,
+  verifiable production-data checkpoint before touching the Worker) left the
+  deploy pipeline's own `d1_migrations` bookkeeping table out of sync —
+  its internal `wrangler d1 migrations apply` step then tried to re-run 0071
+  during deploy and failed with `duplicate column name: currency`. Worker
+  code still published successfully (that step is independent), but the
+  bookkeeping mismatch would have repeated on **every future deploy**
+  indefinitely if left unreconciled. Fixed by manually inserting the correct
+  `d1_migrations` row and verifying it before closing the release. This
+  supersedes and hardens the "Deploy-pipeline lesson learned" note above —
+  full incident writeup and the corrected, enforceable rule (mandatory
+  bookkeeping reconciliation, not just a prohibition) are in
+  [`docs/ENGINEERING-SOP-D1-MIGRATION-RULE.md`](docs/ENGINEERING-SOP-D1-MIGRATION-RULE.md).
+- **Known test debt (documented, not fixed — out of scope by explicit
+  instruction)**: see
+  [`docs/STAGE2C-KNOWN-TEST-DEBT.md`](docs/STAGE2C-KNOWN-TEST-DEBT.md) — 7
+  pre-existing local-only FK-orphan rows (not introduced by Stage 2C),
+  `disposeTestDb()` not deleting fixture rows across all 7 search-engine
+  test files, 2 stale Control Center test assertions, 1 transient test flake
+  resolved by re-run.
+
+**Stage 2C status: CLOSED.** Live production verification passed before
+closure was declared, per the governing rule for this release.
