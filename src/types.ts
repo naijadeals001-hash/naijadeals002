@@ -990,6 +990,7 @@ export interface BookableListingRow {
   is_active: number
   category: string | null
   cover_image_url: string | null
+  stay_property_id: number | null
   service_listing_id: number | null
   timezone: string
   capacity_model: 'single' | 'multiple' | 'pooled' | 'per_resource'
@@ -1152,6 +1153,64 @@ export interface BookingCancellationPolicyRow {
   refund_percentage_after_cutoff: number
   flat_fee_kobo: number
   is_active: number
+  created_at: string
+}
+
+// ============================================================
+// NaijaStay — Stay domain data (migration 0034 stay_properties,
+// migration 0028 stay_unit_details). Both extend, never duplicate, the
+// Booking Engine's bookable_listings/booking_resources tables — a
+// stay_properties row is the physical "hotel/apartment/resort/villa"
+// entity; each of its bookable units is a bookable_listings row
+// (listing_type='stay_unit', vertical='stay') linked via
+// bookable_listings.stay_property_id, extended 1:1 by stay_unit_details.
+// ============================================================
+
+/** stay_properties (migration 0034) — the physical property entity (hotel/apartment/resort/villa/guesthouse/hostel/unique_stay), distinct from the generic bookable_listings "unit" wrapper. */
+export interface StayPropertyRow {
+  id: number
+  slug: string
+  owner_provider_profile_id: number
+  name: string
+  description: string
+  property_type: 'hotel' | 'apartment' | 'resort' | 'villa' | 'guesthouse' | 'hostel' | 'unique_stay' | 'vacation_home'
+  country_iso: string
+  city: string
+  neighborhood: string | null
+  address_line1: string | null
+  latitude: number | null
+  longitude: number | null
+  cover_image_url: string | null
+  gallery_json: string
+  amenities_json: string
+  house_rules: string | null
+  check_in_info: string | null
+  check_out_info: string | null
+  cancellation_policy: string | null
+  is_active: number
+  verification_status: 'unverified' | 'pending' | 'verified'
+  rating_avg: number
+  rating_count: number
+  created_at: string
+  updated_at: string
+}
+
+/** stay_unit_details (migration 0028) — 1:1 extension of a bookable_listings row (listing_type='stay_unit'), keyed by listing_id. Adds the room/unit-specific fields the generic engine has no reason to know about. */
+export interface StayUnitDetailRow {
+  listing_id: number
+  unit_type: string
+  max_guests: number
+  created_at: string
+}
+
+/** stay_property_status_events — audit trail for property-level moderation/verification transitions (mirrors booking_status_events' pattern at the property level, not yet used by this build phase but reserved for the verification workflow). */
+export interface StayPropertyStatusEventRow {
+  id: number
+  property_id: number
+  status_type: string
+  status: string
+  actor_user_id: number | null
+  note: string | null
   created_at: string
 }
 

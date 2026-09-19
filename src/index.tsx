@@ -69,6 +69,13 @@ import {
   gigsRequestDetailPage,
   gigsOrderDetailPage
 } from './pages/gigs'
+import {
+  stayHomePage,
+  stayPropertyPage,
+  stayBookPage,
+  stayDashboardPage,
+  stayBookingDetailPage
+} from './pages/stay'
 import { accountPage } from './pages/account'
 import { organizationPage } from './pages/organization'
 import { controlCenterRoutes } from './routes/control-center'
@@ -201,7 +208,6 @@ app.get('/affiliate', affiliatePage)
 // never a rebuild of this list.
 app.get('/fresh', ecosystemPreviewPage)
 app.get('/eats', ecosystemPreviewPage)
-app.get('/stay', ecosystemPreviewPage)
 app.get('/drive', ecosystemPreviewPage)
 app.get('/send', ecosystemPreviewPage)
 app.get('/stream', ecosystemPreviewPage)
@@ -222,6 +228,25 @@ app.get('/gigs/request', requireAuthPage, gigsRequestPage)
 app.get('/gigs/dashboard', requireAuthPage, gigsDashboardPage)
 app.get('/gigs/dashboard/requests/:id', requireAuthPage, gigsRequestDetailPage)
 app.get('/gigs/dashboard/orders/:id', requireAuthPage, gigsOrderDetailPage)
+
+// ---------- NaijaStay — real UI on top of the pre-existing Booking Engine 2.0 ----------
+// /stay used to route to the static ecosystemPreviewPage placeholder above.
+// The Booking Engine (migrations 0024/0028/0034/0041/0043) + Stay demo
+// seed (migration 0073) are real, so this vertical now gets real pages
+// instead of a "coming soon" card. NOTE: ecosystem_verticals.stay.status
+// remains 'coming_soon' until the full local + production E2E booking
+// lifecycle (hold -> confirm -> pay -> cancel/refund) has been verified —
+// see migration 0073's own closing comment. Dashboard/booking-detail
+// routes require auth (a booking belongs to a specific customer);
+// browse/property/book-flow-entry routes are public, mirroring /gigs' and
+// /shop's guest-browsable pattern (the book flow itself still requires the
+// customer to be signed in before it can create a hold, enforced by
+// requireAuthPage here rather than inside the page).
+app.get('/stay', stayHomePage)
+app.get('/stay/property/:slug', stayPropertyPage)
+app.get('/stay/book/:listingId', requireAuthPage, stayBookPage)
+app.get('/stay/dashboard', requireAuthPage, stayDashboardPage)
+app.get('/stay/dashboard/bookings/:id', requireAuthPage, stayBookingDetailPage)
 
 // ---------- Seller Portal — Phase 2: gateway + ownership-gated stubs ----------
 // /seller is the single destination for every "Sell on NaijaDeals" CTA (see
