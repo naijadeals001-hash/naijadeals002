@@ -169,6 +169,82 @@ live in production.** The sections above are historical/Phase-1 and are
 increasingly stale — do not trust "Not Yet Implemented" or "Open Questions"
 above without cross-checking here first.
 
+### Unit E Phase A / Stage 1 — Catalog Expansion CLOSED (2026-09-19)
+- **What shipped**: merged the 59 real-photographed products from the
+  abandoned Phase 1a taxonomy into the live catalog, alongside their full
+  category tree (all 189 phase1a categories imported as platform
+  taxonomy, not just the 59 products' ancestor closure), needed brands,
+  needed vendors, and listings. Added the `product_country_origins`
+  table (structure only — 0 rows; population is an explicit future
+  Phase B pass, never inferred from category names or brand identity).
+- **Authoritative production result** (before → after, all independently
+  verified against real production D1, not a local simulation):
+
+  | Resource        | Before |   After |
+  | ---------------- | -----: | ------: |
+  | Products         |     44 | **103** |
+  | Categories       |     79 | **254** |
+  | Brands           |     30 |  **41** |
+  | Vendors          |     21 |  **35** |
+  | Listings         |     80 | **140** |
+  | Country origins  |      0 |   **0** |
+
+  (Brands: 30 existing + 11 genuinely new = 41. An earlier "51" figure
+  quoted mid-execution was an arithmetic error, corrected here — the
+  actual generator scope, deliberately limited to only the brand IDs the
+  59 photographed products reference, was always 41.)
+- **Integrity battery — full pass, zero exceptions**: all pre-existing
+  rows (products 1-44, categories 1-79, brands 1-30, vendors 1-21,
+  listings 1-80) confirmed byte-identical pre/post migration; zero
+  duplicate slugs/SKUs among new rows; zero orphaned FK references
+  (category/brand/parent/product/vendor) among new rows; zero placeholder
+  (`/ph.svg`) images on new products; the pre-existing `vendors.id=21`
+  FK-to-`users` anomaly confirmed pre-existing (not introduced by this
+  deployment); `carts`/`orders`/`reviews`/`wishlists` growth between
+  snapshots confirmed as normal live traffic, not migration side-effects
+  (neither migration file references those tables).
+- **Two real bugs found and fixed mid-execution, both on the hosted D1
+  transport layer only — the committed migration files were never
+  altered to work around them**: (1) the hosted `d1_execute` SQL safety
+  filter rejects `PRAGMA` statements outright; (2) it also converts `--`
+  line comments into inline `/* */` blocks that can corrupt
+  multi-line `CREATE TABLE` statements, and separately caps payload size
+  at 64 KiB. Resolved by stripping PRAGMA and comments from the
+  *execution payload only* (syntax-validated locally against a clean
+  baseline copy before every submission) and splitting migration 0068
+  into 3 byte-safe batches at statement boundaries — reassembly verified
+  byte-identical to the full validated payload before submission. Also
+  manually registered both migrations in the `d1_migrations` tracking
+  table post-application (required since `d1_execute` bypasses wrangler's
+  migration runner) — confirmed necessary and correct when the subsequent
+  `gsk hosted deploy` log showed `GSK_MIGRATION_EXPECTED count=68` →
+  `✅ No migrations to apply!`.
+- **Deployed exact commit `c849dc833492487d450c53dd66c9803be92b813c`**
+  (no `--rebuild_db`, no `--recreate_worker` — a normal code redeploy).
+  `naijadeals.com` confirmed active. Production Chromium verification at
+  both 1440×900 and 390×844 — homepage, `/shop`, `/countries`, and a new
+  product's PDP (`house-of-tara-matte-lipstick-set`) all HTTP 200 with
+  new-content markers present at both viewports.
+- **Permanent caveat — SHA provenance (recorded, not resolved further)**:
+  production content equivalence to GitHub `c849dc8` is verified via 7
+  independent signatures (exact 68-file migration list byte-for-byte,
+  all 6 catalog counts, live new-product PDP). Production `/api/version`
+  reports an unresolvable 40-character SHA (`304181669644...`) that does
+  not correspond to any commit, branch, tag, or object in this
+  repository or on GitHub. Investigation established the hosted
+  deployment system builds in an isolated `/home/user/artifact`
+  environment on its own infrastructure — not by running `vite build`
+  inside this sandbox's `.git` — and the available Genspark tooling does
+  not expose that staging repository's build-source SHA. Therefore
+  git-object identity cannot be independently verified, though no
+  evidence of source-content divergence was found. Do not redeploy to
+  chase this SHA; do not modify `version.ts` / `vite.config.ts` to force
+  a match.
+- **Hard boundaries honored, unchanged**: no Phase B, no inferred
+  country-of-origin data, no unrelated fixes. The 68-product holdback
+  batch remains completely untouched — next catalog work starts from
+  this unit's closing state (103/254/41/35/140).
+
 ### Unit D — Footer Social Links Activation (2026-09-18)
 - **What shipped**: activated 4 of 7 `src/lib/social-links.ts` placeholders
   with the real, official NaijaDeals accounts Pat explicitly supplied —
