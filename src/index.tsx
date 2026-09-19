@@ -59,6 +59,16 @@ import { sellerProductsPage } from './pages/seller-products'
 import { sellerOrdersPage } from './pages/seller-orders'
 import { sellerInventoryPage } from './pages/seller-inventory'
 import { affiliatePage } from './pages/affiliate'
+import {
+  gigsHomePage,
+  gigsCategoryPage,
+  gigsProviderPage,
+  gigsListingPage,
+  gigsRequestPage,
+  gigsDashboardPage,
+  gigsRequestDetailPage,
+  gigsOrderDetailPage
+} from './pages/gigs'
 import { accountPage } from './pages/account'
 import { organizationPage } from './pages/organization'
 import { controlCenterRoutes } from './routes/control-center'
@@ -191,12 +201,27 @@ app.get('/affiliate', affiliatePage)
 // never a rebuild of this list.
 app.get('/fresh', ecosystemPreviewPage)
 app.get('/eats', ecosystemPreviewPage)
-app.get('/gigs', ecosystemPreviewPage)
 app.get('/stay', ecosystemPreviewPage)
 app.get('/drive', ecosystemPreviewPage)
 app.get('/send', ecosystemPreviewPage)
 app.get('/stream', ecosystemPreviewPage)
 app.get('/aura', ecosystemPreviewPage)
+
+// ---------- NaijaGigs — real UI on top of the pre-existing Service Engine 2.0 ----------
+// /gigs used to route to the static ecosystemPreviewPage placeholder above.
+// The Service Engine (migrations 0024, 0025, 0039) + demo seed (migration
+// 0072) are real, so this vertical now gets real pages instead of a
+// "coming soon" card. Dashboard/request routes require auth (a request/
+// order belongs to a specific customer); browse/detail routes are public,
+// mirroring /shop's guest-browsable pattern.
+app.get('/gigs', gigsHomePage)
+app.get('/gigs/category/:slug', gigsCategoryPage)
+app.get('/gigs/providers/:id', gigsProviderPage)
+app.get('/gigs/listings/:id', gigsListingPage)
+app.get('/gigs/request', requireAuthPage, gigsRequestPage)
+app.get('/gigs/dashboard', requireAuthPage, gigsDashboardPage)
+app.get('/gigs/dashboard/requests/:id', requireAuthPage, gigsRequestDetailPage)
+app.get('/gigs/dashboard/orders/:id', requireAuthPage, gigsOrderDetailPage)
 
 // ---------- Seller Portal — Phase 2: gateway + ownership-gated stubs ----------
 // /seller is the single destination for every "Sell on NaijaDeals" CTA (see
