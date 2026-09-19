@@ -44,6 +44,16 @@ export interface CreateOrganizationStoreInput {
   store_type?: string
   business_email?: string | null
   business_phone?: string | null
+  /**
+   * Stage 2C (Currency & Address Foundation): the vendor's operational
+   * country. MUST come from validated server-side input (the caller
+   * resolving this from the parent organization's own `country_iso`, or an
+   * explicit request body value it has validated) — never silently defaults
+   * to 'NG' regardless of the organization's actual country, which was the
+   * bug this field fixes. Falls back to 'NG' only at the INSERT layer
+   * below, as a last-resort default for callers that genuinely omit it.
+   */
+  country_iso?: string
 }
 
 /**
@@ -74,9 +84,9 @@ export async function createOrganizationStore(db: D1Database, organizationId: nu
   const result = await db
     .prepare(
       `INSERT INTO vendors
-        (slug, name, description, city, organization_id, store_type, business_name, business_email, business_phone,
+        (slug, name, description, city, organization_id, store_type, business_name, business_email, business_phone, country_iso,
          verification_status, onboarding_step, onboarding_completed_at, store_status, is_verified)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'verified', 6, datetime('now'), 'active', 1)`
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'verified', 6, datetime('now'), 'active', 1)`
     )
     .bind(
       slug,
@@ -87,7 +97,8 @@ export async function createOrganizationStore(db: D1Database, organizationId: nu
       input.store_type ?? 'organization',
       input.name,
       input.business_email ?? null,
-      input.business_phone ?? null
+      input.business_phone ?? null,
+      input.country_iso ?? 'NG'
     )
     .run()
 

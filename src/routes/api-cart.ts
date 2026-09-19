@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import type { AppEnv, CartItemRow } from '../types'
-import { getOrCreateCartId, getCartItems, getSavedForLaterItems, addToCart, updateCartItemQuantity, removeFromCart, setSavedForLater, groupByVendor, getBuyNowItem } from '../lib/cart'
+import { getOrCreateCartId, getCartItems, getSavedForLaterItems, addToCart, updateCartItemQuantity, removeFromCart, setSavedForLater, groupByVendor, groupByCurrency, getBuyNowItem } from '../lib/cart'
 import { getOrSetGuestToken } from '../lib/guest'
 import { validateCoupon } from '../lib/coupons'
 import { calculateDeliveryFeeKobo, type DeliveryMethod } from '../lib/orders'
@@ -13,11 +13,33 @@ async function resolveCartId(c: any): Promise<number> {
   return getOrCreateCartId(c.env.DB, user?.id ?? null, guestToken)
 }
 
+/**
+ * Stage 2C (Currency & Address Foundation): every AJAX-consumed cart summary
+ * now also carries a per-currency breakdown (`currency_groups`) alongside the
+ * pre-existing single `subtotal_kobo` figure. `subtotal_kobo` is UNCHANGED —
+ * it remains the raw combined total across all currencies (order/payment
+ * math semantics are explicitly untouched by this stage) — but the frontend
+ * (public/static/app.js) must render `currency_groups` instead of formatting
+ * `subtotal_kobo` as a single ₦ amount whenever more than one group is
+ * present, exactly mirroring the server-rendered cart.tsx behavior. This is
+ * the fix for the confirmed client-side AJAX currency-collapse gap.
+ */
 function summarize(items: Awaited<ReturnType<typeof getCartItems>>) {
   const subtotal = items.reduce((sum, i) => sum + i.price_kobo * i.quantity, 0)
   const count = items.reduce((s, i) => s + i.quantity, 0)
   const sellerCount = new Set(items.map((i) => i.vendor_id)).size
-  return { subtotal_kobo: subtotal, count, seller_count: sellerCount }
+  const currencyGroups = Array.from(groupByCurrency(items).entries()).map(([currency, g]) => ({
+    currency,
+    subtotal_kobo: g.subtotalMinor,
+    item_count: g.items.length
+  }))
+  return {
+    subtotal_kobo: subtotal,
+    count,
+    seller_count: sellerCount,
+    currency_groups: currencyGroups,
+    is_multi_currency: currencyGroups.length > 1
+  }
 }
 
 cartApi.get('/', async (c) => {
@@ -115,7 +137,7 @@ cartApi.post('/preview', async (c) => {
   let couponError: string | null = null
   let couponValid = false
   if (body.coupon_code) {
-    const validation = await validateCoupon(c.env.DB, body.coupon_code, subtotal)
+    const validation = await validateCoupon(c.env.DB, body.coupon_code, subtotal, items[0]?.currency ?? 'NGN')
     if (validation.valid) {
       discountKobo = validation.discountKobo ?? 0
       couponValid = true
@@ -130,6 +152,14 @@ cartApi.post('/preview', async (c) => {
     vendor_name: g.vendorName,
     item_count: g.items.length
   }))
+  // Stage 2C: same per-currency breakdown as summarize() above, so the
+  // checkout summary panel's live AJAX preview (delivery method / coupon
+  // recalculation) never collapses a multi-currency cart into one ₦ figure.
+  const currencyGroups = Array.from(groupByCurrency(items).entries()).map(([currency, g]) => ({
+    currency,
+    subtotal_kobo: g.subtotalMinor,
+    item_count: g.items.length
+  }))
 
   return c.json({
     subtotal_kobo: subtotal,
@@ -139,6 +169,8 @@ cartApi.post('/preview', async (c) => {
     seller_count: sellers.length,
     sellers,
     coupon_valid: couponValid,
-    coupon_error: couponError
+    coupon_error: couponError,
+    currency_groups: currencyGroups,
+    is_multi_currency: currencyGroups.length > 1
   })
 })

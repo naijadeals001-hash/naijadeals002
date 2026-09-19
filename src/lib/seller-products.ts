@@ -221,6 +221,29 @@ export interface CreateListingInput {
 }
 
 /**
+ * Stage 2C (Currency & Address Foundation): resolves the currency a NEW
+ * listing must be created with, from the OWNING VENDOR's own country_iso —
+ * never left to the schema's 'NGN' default, and never taken as a
+ * client-supplied value (a seller/client can't contradict their own
+ * vendor's country). A GH vendor's new listing gets GHS automatically; an
+ * NG vendor's gets NGN automatically. Falls back to 'NGN' only if the
+ * vendor's country_iso can't be resolved to a known currency (defensive —
+ * should not happen for any real vendor row).
+ */
+async function resolveListingCurrency(db: D1Database, vendorId: number): Promise<string> {
+  const row = await db
+    .prepare(
+      `SELECT cc.currency_code as currency_code
+       FROM vendors v
+       JOIN cc_countries cc ON cc.iso_code = v.country_iso
+       WHERE v.id = ?`
+    )
+    .bind(vendorId)
+    .first<{ currency_code: string }>()
+  return row?.currency_code ?? 'NGN'
+}
+
+/**
  * Creates a NEW listing (seller offer) attached to an EXISTING canonical
  * product. `vendorId` is the server-resolved owning vendor — never a
  * client-supplied value. Enforces the same UNIQUE(product_id, vendor_id)
@@ -238,13 +261,15 @@ export async function createListing(db: D1Database, vendorId: number, input: Cre
   if (input.price_kobo <= 0) throw new Error('price_kobo must be > 0')
   if (input.stock < 0) throw new Error('stock cannot be negative')
 
+  const currency = await resolveListingCurrency(db, vendorId)
+
   const result = await db
     .prepare(
       `INSERT INTO product_listings
-        (product_id, vendor_id, price_kobo, compare_at_price_kobo, stock, condition, delivery_days_min, delivery_days_max, warranty_months,
+        (product_id, vendor_id, price_kobo, compare_at_price_kobo, stock, currency, condition, delivery_days_min, delivery_days_max, warranty_months,
          unit_of_measure, unit_quantity, is_variable_weight, variable_weight_tolerance_pct, sku, warehouse_location, low_stock_threshold, allow_backorder,
          is_active, moderation_status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'pending_review')`
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'pending_review')`
     )
     .bind(
       input.product_id,
@@ -252,6 +277,7 @@ export async function createListing(db: D1Database, vendorId: number, input: Cre
       input.price_kobo,
       input.compare_at_price_kobo ?? null,
       input.stock,
+      currency,
       input.condition ?? 'new',
       input.delivery_days_min ?? 1,
       input.delivery_days_max ?? 3,

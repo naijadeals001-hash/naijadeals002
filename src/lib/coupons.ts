@@ -1,3 +1,5 @@
+import { formatMoney } from './money'
+
 export interface CouponRow {
   id: number
   code: string
@@ -19,8 +21,18 @@ export interface CouponValidationResult {
   discountKobo?: number
 }
 
-/** Validates a coupon code against the given subtotal and returns the discount it would apply. Real rules, real math — not a decorative input. */
-export async function validateCoupon(db: D1Database, code: string, subtotalKobo: number): Promise<CouponValidationResult> {
+/**
+ * Validates a coupon code against the given subtotal and returns the discount it would apply.
+ * Real rules, real math — not a decorative input.
+ *
+ * `currency` (Stage 2C: Currency & Address Foundation) is used ONLY to format the
+ * minimum-order error message in the cart's own currency instead of a hardcoded ₦ —
+ * it does NOT change the discount math itself, which still operates on the raw
+ * combined subtotalKobo exactly as before (cross-currency coupon math is explicitly
+ * out of scope for this stage; the caller passes whichever currency is most
+ * representative of the cart, defaulting to 'NGN').
+ */
+export async function validateCoupon(db: D1Database, code: string, subtotalKobo: number, currency: string = 'NGN'): Promise<CouponValidationResult> {
   const coupon = await db
     .prepare('SELECT * FROM coupons WHERE code = ? COLLATE NOCASE')
     .bind(code.trim())
@@ -35,7 +47,7 @@ export async function validateCoupon(db: D1Database, code: string, subtotalKobo:
     return { valid: false, error: 'This coupon has reached its usage limit' }
   }
   if (subtotalKobo < coupon.min_order_kobo) {
-    return { valid: false, error: `This coupon requires a minimum order of ₦${(coupon.min_order_kobo / 100).toLocaleString('en-NG')}` }
+    return { valid: false, error: `This coupon requires a minimum order of ${formatMoney(coupon.min_order_kobo, currency)}` }
   }
 
   let discountKobo = coupon.discount_type === 'percent'

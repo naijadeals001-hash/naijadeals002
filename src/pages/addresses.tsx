@@ -1,7 +1,7 @@
 import type { Context } from 'hono'
 import { Layout } from '../components/Layout'
 import type { AppEnv } from '../types'
-import { getAddressesForUser, getNigerianStates } from '../lib/addresses'
+import { getAddressesForUser, getNigerianStates, ADDRESS_SUPPORTED_COUNTRIES } from '../lib/addresses'
 
 export async function addressesPage(c: Context<AppEnv>) {
   const db = c.env.DB
@@ -46,6 +46,7 @@ export async function addressesPage(c: Context<AppEnv>) {
                   data-line1={addr.line1}
                   data-city={addr.city}
                   data-state={addr.state}
+                  data-country={addr.country_iso}
                   data-instructions={addr.delivery_instructions || ''}
                   data-is-default={addr.is_default}
                 >
@@ -127,6 +128,14 @@ export async function addressesPage(c: Context<AppEnv>) {
             <div>
               <label class="block text-xs font-medium text-gray-700 mb-1" for="af-city">City</label>
               <input id="af-city" placeholder="e.g. Ikeja" class="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/30" />
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-gray-700 mb-1" for="af-country">Country</label>
+              <select id="af-country" class="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/30 bg-white">
+                {ADDRESS_SUPPORTED_COUNTRIES.map((c) => (
+                  <option value={c.iso}>{c.name}</option>
+                ))}
+              </select>
             </div>
             <div>
               <label class="block text-xs font-medium text-gray-700 mb-1" for="af-state">State</label>

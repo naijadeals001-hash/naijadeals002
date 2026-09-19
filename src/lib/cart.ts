@@ -52,7 +52,7 @@ export async function getCartItems(db: D1Database, cartId: number): Promise<Cart
     .prepare(
       `SELECT ci.id, ci.cart_id, ci.listing_id, ci.variant_id, ci.quantity, ci.is_saved_for_later,
               p.id as product_id, p.title, p.slug, p.image_url,
-              l.price_kobo, l.compare_at_price_kobo, l.stock, l.vendor_id,
+              l.price_kobo, l.compare_at_price_kobo, l.currency, l.stock, l.vendor_id,
               l.delivery_days_min, l.delivery_days_max,
               v.name as vendor_name, v.slug as vendor_slug, v.is_verified,
               pv.variant_value
@@ -74,7 +74,7 @@ export async function getSavedForLaterItems(db: D1Database, cartId: number): Pro
     .prepare(
       `SELECT ci.id, ci.cart_id, ci.listing_id, ci.variant_id, ci.quantity, ci.is_saved_for_later,
               p.id as product_id, p.title, p.slug, p.image_url,
-              l.price_kobo, l.compare_at_price_kobo, l.stock, l.vendor_id,
+              l.price_kobo, l.compare_at_price_kobo, l.currency, l.stock, l.vendor_id,
               l.delivery_days_min, l.delivery_days_max,
               v.name as vendor_name, v.slug as vendor_slug, v.is_verified,
               pv.variant_value
@@ -181,7 +181,7 @@ export async function getBuyNowItem(
     .prepare(
       `SELECT -1 as id, -1 as cart_id, l.id as listing_id, ? as variant_id, ? as quantity, 0 as is_saved_for_later,
               p.id as product_id, p.title, p.slug, p.image_url,
-              l.price_kobo, l.compare_at_price_kobo, l.stock, l.vendor_id,
+              l.price_kobo, l.compare_at_price_kobo, l.currency, l.stock, l.vendor_id,
               l.delivery_days_min, l.delivery_days_max,
               v.name as vendor_name, v.slug as vendor_slug, v.is_verified,
               pv.variant_value
@@ -204,6 +204,28 @@ export function groupByVendor(items: CartItemRow[]): Map<number, { vendorName: s
       groups.set(item.vendor_id, { vendorName: item.vendor_name, items: [] })
     }
     groups.get(item.vendor_id)!.items.push(item)
+  }
+  return groups
+}
+
+/**
+ * Stage 2C (Currency & Address Foundation) — groups cart items by their
+ * listing's own `currency`. This exists ONLY to render an honest per-currency
+ * subtotal display when a cart spans more than one currency (e.g. a Ghana
+ * listing sitting alongside NG items) — it does NOT change checkout math,
+ * order totals, or payment behavior in any way. Order/payment still sum raw
+ * kobo exactly as before (Stage 2C explicitly does not touch that
+ * semantics); this is display-layer only, so a cart can never silently
+ * present "NGN 62,000 + GHS 500" as one combined ₦ number.
+ */
+export function groupByCurrency(items: CartItemRow[]): Map<string, { subtotalMinor: number; items: CartItemRow[] }> {
+  const groups = new Map<string, { subtotalMinor: number; items: CartItemRow[] }>()
+  for (const item of items) {
+    const currency = item.currency || 'NGN'
+    if (!groups.has(currency)) groups.set(currency, { subtotalMinor: 0, items: [] })
+    const group = groups.get(currency)!
+    group.subtotalMinor += item.price_kobo * item.quantity
+    group.items.push(item)
   }
   return groups
 }

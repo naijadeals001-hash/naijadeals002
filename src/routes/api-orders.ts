@@ -162,7 +162,7 @@ ordersApi.post('/checkout', async (c) => {
   const user = c.get('user')!
   const body = await c.req.json<{
     address_id?: number
-    name?: string; phone?: string; address?: string; city?: string; state?: string
+    name?: string; phone?: string; address?: string; city?: string; state?: string; country?: string
     delivery_method?: DeliveryMethod
     coupon_code?: string
     payment_method: 'wallet' | 'paystack'
@@ -172,13 +172,18 @@ ordersApi.post('/checkout', async (c) => {
   if (!body) return c.json({ error: 'Invalid request body' }, 400)
 
   // ---------- Resolve shipping details ----------
-  let shipping: { name: string; phone: string; address: string; city: string; state: string }
+  // Stage 2C (Currency & Address Foundation): shipping.country is resolved
+  // here — from the saved address's own country_iso when address_id is used,
+  // or from validated raw checkout input otherwise — and threaded through to
+  // createPendingOrder() to become the stored orders.shipping_country fact.
+  // Never left to default silently regardless of the actual address used.
+  let shipping: { name: string; phone: string; address: string; city: string; state: string; country: string }
   if (body.address_id) {
     const saved = await getAddress(c.env.DB, user.id, body.address_id)
     if (!saved) return c.json({ error: 'Selected address not found' }, 404)
-    shipping = { name: saved.recipient_name, phone: saved.phone, address: saved.line1, city: saved.city, state: saved.state }
+    shipping = { name: saved.recipient_name, phone: saved.phone, address: saved.line1, city: saved.city, state: saved.state, country: saved.country_iso ?? 'NG' }
   } else if (body.name && body.phone && body.address && body.city && body.state) {
-    shipping = { name: body.name, phone: body.phone, address: body.address, city: body.city, state: body.state }
+    shipping = { name: body.name, phone: body.phone, address: body.address, city: body.city, state: body.state, country: body.country ?? 'NG' }
   } else {
     return c.json({ error: 'A delivery address is required — select a saved address or enter shipping details' }, 400)
   }

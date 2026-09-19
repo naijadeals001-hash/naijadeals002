@@ -1,11 +1,11 @@
 import type { Context } from 'hono'
 import { Layout } from '../components/Layout'
 import type { AppEnv, CartItemRow } from '../types'
-import { getOrCreateCartId, getCartItems, getBuyNowItem, groupByVendor } from '../lib/cart'
-import { getAddressesForUser } from '../lib/addresses'
+import { getOrCreateCartId, getCartItems, getBuyNowItem, groupByVendor, groupByCurrency } from '../lib/cart'
+import { getAddressesForUser, getRegionsForCountry, ADDRESS_SUPPORTED_COUNTRIES } from '../lib/addresses'
 import { getWalletBalance } from '../lib/wallet'
 import { calculateDeliveryFeeKobo, DELIVERY_FEE_PER_SELLER_KOBO, countDistinctVendors } from '../lib/orders'
-import { formatNaira } from '../lib/money'
+import { formatNaira, formatMoney } from '../lib/money'
 
 /** Landing page the customer is redirected to after paying on Paystack's hosted checkout. */
 export async function checkoutCallbackPage(c: Context<AppEnv>) {
@@ -73,7 +73,23 @@ export async function checkoutPage(c: Context<AppEnv>) {
   const sellerGroups = Array.from(groupByVendor(items).entries())
   const deliveryFeeStandard = calculateDeliveryFeeKobo(items, 'standard')
   const deliveryFeeExpress = calculateDeliveryFeeKobo(items, 'express')
-  const [addresses, walletBalance] = await Promise.all([getAddressesForUser(db, user.id), getWalletBalance(db, user.id)])
+  const [addresses, walletBalance, regions] = await Promise.all([
+    getAddressesForUser(db, user.id),
+    getWalletBalance(db, user.id),
+    getRegionsForCountry(db, 'NG')
+  ])
+
+  // Stage 2C (Currency & Address Foundation): same per-currency grouping as cart.tsx,
+  // used to render an honest per-currency subtotal breakdown (Order Review + sidebar
+  // Order Summary) instead of ever collapsing a multi-currency cart into a single ₦
+  // figure. Delivery fee remains a flat NGN-per-seller-shipment charge (logistics
+  // pricing per non-NG country is explicitly out of Stage 2C's scope) and the
+  // Total/wallet/Paystack payment amount is UNCHANGED — still the same combined
+  // total_kobo number that createPendingOrder() has always computed — this is
+  // display-layer only, exactly per Pat's ruling.
+  const currencyGroups = Array.from(groupByCurrency(items).entries())
+  const isMultiCurrency = currencyGroups.length > 1
+  const primaryCurrency = currencyGroups[0]?.[0] ?? 'NGN'
 
   // Server-computed initial totals (standard delivery, no coupon) — JS recomputes live from here
   // via /api/cart/preview whenever delivery method or coupon changes, so what's on screen always
@@ -129,7 +145,7 @@ export async function checkoutPage(c: Context<AppEnv>) {
                   <p class="text-sm text-gray-500 mb-2">You don't have any saved addresses yet — add one below.</p>
                 )}
                 {addresses.map((addr) => (
-                  <label class="flex items-start gap-3 border border-gray-300 rounded-lg px-4 py-3 cursor-pointer has-[:checked]:border-primary has-[:checked]:bg-primary-light" data-address-option data-address-id={addr.id}>
+                  <label class="flex items-start gap-3 border border-gray-300 rounded-lg px-4 py-3 cursor-pointer has-[:checked]:border-primary has-[:checked]:bg-primary-light" data-address-option data-address-id={addr.id} data-country={addr.country_iso}>
                     <input type="radio" name="address_id" value={addr.id} checked={addr.id === initState.defaultAddressId} class="mt-1" />
                     <div class="flex-1">
                       <div class="flex items-center gap-2">
@@ -137,7 +153,7 @@ export async function checkoutPage(c: Context<AppEnv>) {
                         {addr.is_default === 1 && <span class="text-[10px] bg-primary text-white px-1.5 py-0.5 rounded font-semibold">DEFAULT</span>}
                       </div>
                       <p class="text-sm text-gray-600 mt-0.5">{addr.recipient_name} · {addr.phone}</p>
-                      <p class="text-sm text-gray-600">{addr.line1}, {addr.city}, {addr.state}</p>
+                      <p class="text-sm text-gray-600">{addr.line1}, {addr.city}, {addr.state}{addr.country_iso && addr.country_iso !== 'NG' ? `, ${addr.country_iso}` : ''}</p>
                     </div>
                   </label>
                 ))}
@@ -169,8 +185,21 @@ export async function checkoutPage(c: Context<AppEnv>) {
                   <input id="na-city" placeholder="e.g. Ikeja" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30" />
                 </div>
                 <div>
+                  <label class="block text-xs font-medium text-gray-700 mb-1">Country</label>
+                  <select id="na-country" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30 bg-white">
+                    {ADDRESS_SUPPORTED_COUNTRIES.map((country) => (
+                      <option value={country.iso}>{country.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
                   <label class="block text-xs font-medium text-gray-700 mb-1">State</label>
-                  <input id="na-state" placeholder="e.g. Lagos" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30" />
+                  <select id="na-state" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30 bg-white">
+                    <option value="">Select a state</option>
+                    {regions.map((r) => (
+                      <option value={r.name}>{r.name}</option>
+                    ))}
+                  </select>
                 </div>
                 <div id="new-address-error" class="hidden sm:col-span-2 text-red-600 text-xs"></div>
                 <div class="sm:col-span-2 flex gap-2">
@@ -198,7 +227,11 @@ export async function checkoutPage(c: Context<AppEnv>) {
                   <span class="material-symbols-outlined text-primary">local_shipping</span>
                   <div class="flex-1">
                     <p class="text-sm font-medium text-gray-800">Standard delivery — 3-7 business days</p>
-                    <p class="text-xs text-gray-500">₦{(DELIVERY_FEE_PER_SELLER_KOBO.standard / 100).toLocaleString('en-NG')} × {sellerCount} seller{sellerCount > 1 ? 's' : ''}</p>
+                    {/* Stage 2C: delivery fee is a flat NGN-per-seller-shipment charge regardless of
+                        listing currency (logistics pricing per non-NG country is out of scope) —
+                        formatted via formatMoney(..., 'NGN') explicitly rather than a hardcoded ₦
+                        string, so this stays correct if/when a non-NGN delivery fee is ever wired up. */}
+                    <p class="text-xs text-gray-500">{formatMoney(DELIVERY_FEE_PER_SELLER_KOBO.standard, 'NGN')} × {sellerCount} seller{sellerCount > 1 ? 's' : ''}</p>
                   </div>
                   <span class="text-sm font-bold text-gray-900">{formatNaira(deliveryFeeStandard)}</span>
                 </label>
@@ -207,7 +240,7 @@ export async function checkoutPage(c: Context<AppEnv>) {
                   <span class="material-symbols-outlined text-primary">bolt</span>
                   <div class="flex-1">
                     <p class="text-sm font-medium text-gray-800">Express delivery — 1-2 business days</p>
-                    <p class="text-xs text-gray-500">₦{(DELIVERY_FEE_PER_SELLER_KOBO.express / 100).toLocaleString('en-NG')} × {sellerCount} seller{sellerCount > 1 ? 's' : ''}</p>
+                    <p class="text-xs text-gray-500">{formatMoney(DELIVERY_FEE_PER_SELLER_KOBO.express, 'NGN')} × {sellerCount} seller{sellerCount > 1 ? 's' : ''}</p>
                   </div>
                   <span class="text-sm font-bold text-gray-900">{formatNaira(deliveryFeeExpress)}</span>
                 </label>
@@ -228,6 +261,12 @@ export async function checkoutPage(c: Context<AppEnv>) {
 
               <div class="space-y-5">
                 {sellerGroups.map(([vendorId, group]) => {
+                  // Stage 2C: a single seller's group total is always safe to sum directly —
+                  // a vendor's own listings always share one currency (the vendor's own
+                  // country-derived currency) — so no per-seller cross-currency grouping is
+                  // needed here, only the CART-WIDE totals below (sidebar + this section's
+                  // own footer) need the multi-currency-safe display.
+                  const groupCurrency = group.items[0]?.currency ?? 'NGN'
                   const groupTotal = group.items.reduce((s, i) => s + i.price_kobo * i.quantity, 0)
                   return (
                     <div class="border border-gray-100 rounded-lg overflow-hidden">
@@ -235,7 +274,7 @@ export async function checkoutPage(c: Context<AppEnv>) {
                         <span class="text-sm font-bold text-gray-800 flex items-center gap-1.5 min-w-0 truncate">
                           <span class="material-symbols-outlined text-primary text-base shrink-0">storefront</span><span class="truncate">{group.vendorName}</span>
                         </span>
-                        <span class="text-xs text-gray-500 shrink-0 whitespace-nowrap">Subtotal: {formatNaira(groupTotal)}</span>
+                        <span class="text-xs text-gray-500 shrink-0 whitespace-nowrap">Subtotal: {formatMoney(groupTotal, groupCurrency)}</span>
                       </div>
                       <div class="divide-y divide-gray-100">
                         {group.items.map((item) => (
@@ -244,9 +283,9 @@ export async function checkoutPage(c: Context<AppEnv>) {
                             <div class="flex-1 min-w-0">
                               <p class="text-sm text-gray-800 line-clamp-1">{item.title}</p>
                               {item.variant_value && <p class="text-xs text-gray-500">{item.variant_value}</p>}
-                              <p class="text-xs text-gray-500">Qty {item.quantity} × {formatNaira(item.price_kobo)}</p>
+                              <p class="text-xs text-gray-500">Qty {item.quantity} × {formatMoney(item.price_kobo, item.currency)}</p>
                             </div>
-                            <p class="text-sm font-semibold text-gray-900 shrink-0">{formatNaira(item.price_kobo * item.quantity)}</p>
+                            <p class="text-sm font-semibold text-gray-900 shrink-0">{formatMoney(item.price_kobo * item.quantity, item.currency)}</p>
                           </div>
                         ))}
                       </div>
@@ -254,6 +293,9 @@ export async function checkoutPage(c: Context<AppEnv>) {
                   )
                 })}
               </div>
+              {isMultiCurrency && (
+                <p class="text-xs text-amber-600 font-medium mt-3">Items from different currency zones — totals are shown per currency group.</p>
+              )}
 
               <div class="mt-5 border-t border-gray-100 pt-4">
                 <label class="block text-sm font-medium text-gray-700 mb-1.5">Have a coupon code?</label>
@@ -301,7 +343,7 @@ export async function checkoutPage(c: Context<AppEnv>) {
               <div class="flex gap-2 mt-5">
                 <button type="button" class="checkout-back-btn text-gray-600 font-medium px-4 py-2.5 rounded-lg hover:bg-gray-50 transition" data-back-step="3">Back</button>
                 <button type="button" id="place-order-btn" class="flex-1 bg-primary text-white font-semibold py-2.5 rounded-lg hover:bg-primary-dark transition">
-                  Place order — <span id="place-order-total">{formatNaira(initialTotal)}</span>
+                  Place order — <span id="place-order-total">{formatMoney(initialTotal, primaryCurrency)}</span>
                 </button>
               </div>
               <div class="flex items-center gap-1.5 text-xs text-gray-500 mt-3">
@@ -315,22 +357,51 @@ export async function checkoutPage(c: Context<AppEnv>) {
           <div class="bg-white border border-gray-200 rounded-xl p-5 h-fit lg:sticky lg:top-20 min-w-0">
             <h2 class="font-bold text-gray-800 mb-3">Order Summary</h2>
             <div class="space-y-1.5 text-sm">
-              <div class="flex justify-between text-gray-600">
+              {/*
+                Stage 2C: same always-both-present-one-hidden pattern as cart.tsx, so
+                the live /api/cart/preview refresh (delivery method / coupon changes)
+                can toggle purely from currency_groups.length without a reload.
+              */}
+              <div id="summary-currency-groups" class={`text-gray-600 space-y-1 ${isMultiCurrency ? '' : 'hidden'}`}>
+                {currencyGroups.map(([currency, group]) => (
+                  <div class="flex justify-between" data-currency-row data-currency={currency}>
+                    <span>{currency} subtotal (<span class="currency-row-count">{group.items.reduce((s, i) => s + i.quantity, 0)}</span> item{group.items.reduce((s, i) => s + i.quantity, 0) > 1 ? 's' : ''})</span>
+                    <span class="currency-row-subtotal">{formatMoney(group.subtotalMinor, currency)}</span>
+                  </div>
+                ))}
+                <p class="text-xs text-amber-600 font-medium pt-0.5">Items from different currency zones — totals are shown per currency group.</p>
+              </div>
+              <div id="summary-single-currency" class={`flex justify-between text-gray-600 ${isMultiCurrency ? 'hidden' : ''}`}>
                 <span>Subtotal ({cartCount} item{cartCount > 1 ? 's' : ''})</span>
-                <span id="summary-subtotal">{formatNaira(subtotal)}</span>
+                <span id="summary-subtotal">{formatMoney(subtotal, primaryCurrency)}</span>
               </div>
               <div class="flex justify-between text-gray-600">
                 <span>Delivery fee (<span id="summary-seller-count">{sellerCount}</span> seller{sellerCount > 1 ? 's' : ''})</span>
-                <span id="summary-delivery-fee">{formatNaira(deliveryFeeStandard)}</span>
+                {/* Flat NGN-per-seller-shipment charge regardless of listing currency — see orders.ts DELIVERY_FEE_PER_SELLER_KOBO doc comment. */}
+                <span id="summary-delivery-fee">{formatMoney(deliveryFeeStandard, 'NGN')}</span>
               </div>
               <div id="summary-discount-row" class="flex justify-between text-primary hidden">
                 <span>Discount</span>
-                <span id="summary-discount">-{formatNaira(0)}</span>
+                <span id="summary-discount">-{formatMoney(0, primaryCurrency)}</span>
               </div>
               <div class="flex justify-between text-base font-bold text-gray-900 pt-2 mt-1.5 border-t border-gray-100">
                 <span>Total</span>
-                <span id="summary-total">{formatNaira(initialTotal)}</span>
+                {/*
+                  KNOWN LIMITATION (flagged, not resolved in Stage 2C — order
+                  splitting / multi-currency payment rails are explicitly out of
+                  scope per Pat's ruling): when the cart is multi-currency, this
+                  single payment total is still the pre-existing combined
+                  raw-minor-unit sum across all items (unchanged order/payment
+                  math), displayed using the cart's PRIMARY currency's symbol as
+                  a legacy fallback since there is currently only one payment
+                  transaction. A visible caption below makes this explicit
+                  rather than silently implying it is a real converted amount.
+                */}
+                <span id="summary-total" data-currency={primaryCurrency}>{formatMoney(initialTotal, primaryCurrency)}</span>
               </div>
+              {isMultiCurrency && (
+                <p class="text-[11px] text-gray-400 pt-0.5">Charged as one payment in {primaryCurrency} — see per-currency subtotals above.</p>
+              )}
             </div>
           </div>
         </div>

@@ -1,9 +1,9 @@
 import type { Context } from 'hono'
 import { Layout } from '../components/Layout'
 import type { AppEnv, CartItemRow } from '../types'
-import { getOrCreateCartId, getCartItems, getSavedForLaterItems, groupByVendor } from '../lib/cart'
+import { getOrCreateCartId, getCartItems, getSavedForLaterItems, groupByVendor, groupByCurrency } from '../lib/cart'
 import { getOrSetGuestToken } from '../lib/guest'
-import { formatNaira } from '../lib/money'
+import { formatNaira, formatMoney } from '../lib/money'
 
 /** One line item row — always keyed by cart_items.id (`item.id`), NEVER by product_id. Two different
  * cart rows can share the same product_id (bought from two different sellers), so product_id would
@@ -18,9 +18,9 @@ function CartRow({ item }: { item: CartItemRow }) {
         <a href={`/shop/${item.slug}`} class="text-sm font-medium text-gray-800 hover:text-primary line-clamp-2">{item.title}</a>
         {item.variant_value && <p class="text-xs text-gray-500 mt-0.5">Option: {item.variant_value}</p>}
         <div class="flex items-baseline gap-2 mt-1">
-          <p class="text-sm font-bold text-gray-900">{formatNaira(item.price_kobo)}</p>
+          <p class="text-sm font-bold text-gray-900">{formatMoney(item.price_kobo, item.currency)}</p>
           {item.compare_at_price_kobo && item.compare_at_price_kobo > item.price_kobo && (
-            <p class="text-xs text-gray-400 line-through">{formatNaira(item.compare_at_price_kobo)}</p>
+            <p class="text-xs text-gray-400 line-through">{formatMoney(item.compare_at_price_kobo, item.currency)}</p>
           )}
         </div>
         {item.quantity > item.stock && (
@@ -41,7 +41,7 @@ function CartRow({ item }: { item: CartItemRow }) {
         </div>
       </div>
       <div class="text-right shrink-0">
-        <p class="line-total text-sm font-bold text-gray-900">{formatNaira(item.price_kobo * item.quantity)}</p>
+        <p class="line-total text-sm font-bold text-gray-900">{formatMoney(item.price_kobo * item.quantity, item.currency)}</p>
       </div>
     </div>
   )
@@ -56,7 +56,7 @@ function SavedRow({ item }: { item: CartItemRow }) {
       <div class="flex-1 min-w-0">
         <a href={`/shop/${item.slug}`} class="text-sm font-medium text-gray-800 hover:text-primary line-clamp-2">{item.title}</a>
         <p class="text-xs text-gray-500 mt-0.5">Sold by {item.vendor_name}</p>
-        <p class="text-sm font-bold text-gray-900 mt-1">{formatNaira(item.price_kobo)}</p>
+        <p class="text-sm font-bold text-gray-900 mt-1">{formatMoney(item.price_kobo, item.currency)}</p>
         <div class="flex items-center gap-3 mt-2">
           <button type="button" class="saved-move-to-cart-btn text-xs text-primary font-semibold hover:underline" data-cart-item-id={item.id}>
             Move to cart
@@ -80,6 +80,8 @@ export async function cartPage(c: Context<AppEnv>) {
   const subtotal = items.reduce((sum, i) => sum + i.price_kobo * i.quantity, 0)
   const cartCount = items.reduce((s, i) => s + i.quantity, 0)
   const sellerGroups = Array.from(groupByVendor(items).entries())
+  const currencyGroups = Array.from(groupByCurrency(items).entries())
+  const isMultiCurrency = currencyGroups.length > 1
 
   return c.render(
     <Layout title="Your Cart" user={user} cartCount={cartCount} locale={locale}>
@@ -137,9 +139,28 @@ export async function cartPage(c: Context<AppEnv>) {
 
             <div class="bg-white border border-gray-200 rounded-xl p-5 h-fit sticky top-20">
               <h2 class="font-bold text-gray-800 mb-3">Order Summary</h2>
-              <div class="flex justify-between text-sm text-gray-600 mb-1.5">
+              {/*
+                Stage 2C (Currency & Address Foundation): BOTH blocks below are always
+                present in the DOM (one hidden), never conditionally omitted, so the
+                client-side AJAX handler in app.js (initCartPage's applyCartSummary) can
+                toggle between them purely by currency_groups.length from a live
+                /api/cart response — without ever needing a full page reload just
+                because a quantity change happened to be the trigger. Server-side
+                render still decides which one starts visible, from the same
+                isMultiCurrency computed above.
+              */}
+              <div id="cart-summary-currency-groups" class={`text-sm text-gray-600 mb-1.5 space-y-1 ${isMultiCurrency ? '' : 'hidden'}`}>
+                {currencyGroups.map(([currency, group]) => (
+                  <div class="flex justify-between" data-currency-row data-currency={currency}>
+                    <span>{currency} subtotal (<span class="currency-row-count">{group.items.reduce((s, i) => s + i.quantity, 0)}</span> item{group.items.reduce((s, i) => s + i.quantity, 0) > 1 ? 's' : ''})</span>
+                    <span class="currency-row-subtotal">{formatMoney(group.subtotalMinor, currency)}</span>
+                  </div>
+                ))}
+                <p class="text-xs text-amber-600 font-medium pt-0.5">Items from different currency zones — totals are shown per currency group.</p>
+              </div>
+              <div id="cart-summary-single-currency" class={`flex justify-between text-sm text-gray-600 mb-1.5 ${isMultiCurrency ? 'hidden' : ''}`}>
                 <span>Subtotal (<span id="cart-summary-count">{cartCount}</span> items)</span>
-                <span id="cart-summary-subtotal">{formatNaira(subtotal)}</span>
+                <span id="cart-summary-subtotal" data-currency={currencyGroups[0]?.[0] ?? 'NGN'}>{formatMoney(subtotal, currencyGroups[0]?.[0] ?? 'NGN')}</span>
               </div>
               {sellerGroups.length > 0 && (
                 <p class="text-xs text-gray-500 mb-1.5">

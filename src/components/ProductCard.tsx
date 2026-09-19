@@ -1,6 +1,6 @@
 import type { FC } from 'hono/jsx'
 import type { ProductWithListingRow } from '../types'
-import { formatNaira, discountPercent, formatRatingCount } from '../lib/money'
+import { formatMoney, discountPercent, formatRatingCount } from '../lib/money'
 
 interface ProductCardProps {
   product: ProductWithListingRow
@@ -51,9 +51,9 @@ export const ProductCard: FC<ProductCardProps> = ({ product, carousel = false })
           </div>
         )}
         <div class="flex items-baseline gap-1.5 mt-0.5">
-          <span class="text-[15px] font-bold text-gray-900">{formatNaira(product.price_kobo)}</span>
+          <span class="text-[15px] font-bold text-gray-900">{formatMoney(product.price_kobo, product.currency)}</span>
           {product.compare_at_price_kobo && (
-            <span class="text-[11px] text-gray-400 line-through">{formatNaira(product.compare_at_price_kobo)}</span>
+            <span class="text-[11px] text-gray-400 line-through">{formatMoney(product.compare_at_price_kobo, product.currency)}</span>
           )}
         </div>
         {/* Reference card anatomy: green "Free Delivery" micro-badge (per HOMEPAGE_VISUAL_SPEC.md

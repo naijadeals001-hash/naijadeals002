@@ -9,6 +9,7 @@ import { PairedRailSection, PromoSidebarCard } from '../components/PairedRailSec
 import {
   getDealsNearYou
 } from '../lib/catalog'
+import { formatMoney } from '../lib/money'
 import { getHomepageFeed } from '../lib/homepage-feed'
 import { getAllVerticals } from '../lib/ecosystem-verticals'
 import { getDiscoverableCountries } from '../lib/country'
@@ -217,8 +218,8 @@ export async function homePage(c: Context<AppEnv>) {
                   <div class="p-3 flex flex-col gap-1">
                     <h3 class="text-sm text-gray-800 line-clamp-2 min-h-[2.5rem]">{p.title}</h3>
                     <div class="flex items-baseline gap-2">
-                      <span class="text-base font-bold text-gray-900">₦{(p.price_kobo / 100).toLocaleString('en-NG')}</span>
-                      <span class="text-xs text-gray-400 line-through">₦{(p.compare_at_price_kobo / 100).toLocaleString('en-NG')}</span>
+                      <span class="text-base font-bold text-gray-900">{formatMoney(p.price_kobo, p.currency)}</span>
+                      <span class="text-xs text-gray-400 line-through">{formatMoney(p.compare_at_price_kobo, p.currency)}</span>
                     </div>
                   </div>
                 </a>

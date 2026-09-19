@@ -24,7 +24,7 @@ export const PRODUCT_CARD_SELECT = `
          cat.name as category_name, cat.slug as category_slug,
          b.name as brand_name, b.slug as brand_slug,
          l.id as listing_id, l.vendor_id, v.name as vendor_name, v.slug as vendor_slug,
-         l.price_kobo, l.compare_at_price_kobo, l.stock,
+         l.price_kobo, l.compare_at_price_kobo, l.currency, l.stock,
          l.delivery_days_min, l.delivery_days_max, l.is_plus,
          (SELECT COUNT(*) FROM product_listings l2 WHERE l2.product_id = p.id AND l2.is_active = 1) as seller_count
   FROM products p

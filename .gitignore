@@ -39,3 +39,6 @@ prod_screenshots/
 prod_verify_results.json
 worker-configuration.d.ts
 core
+
+# Stage 2C Chromium verification harness (local QA tool, not app source)
+verify/

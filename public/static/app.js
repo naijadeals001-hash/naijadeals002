@@ -362,9 +362,41 @@
   })();
 
   function formatNaira(kobo) {
-    const naira = kobo / 100;
-    return '₦' + naira.toLocaleString('en-NG', { maximumFractionDigits: naira % 1 === 0 ? 0 : 2 });
+    return formatMoney(kobo, 'NGN');
   }
+
+  // Stage 2C (Currency & Address Foundation): client-side mirror of src/lib/money.ts's
+  // formatMoney() — MUST stay in sync with that module's symbol/locale maps. This is the
+  // only place in app.js that should format a minor-unit integer into a display string;
+  // every AJAX handler that re-renders a price/subtotal must go through this (or the
+  // currency-group-aware helpers below), never a hardcoded '₦' + toLocaleString('en-NG').
+  var CURRENCY_SYMBOLS = { NGN: '₦', GHS: '₵', KES: 'KSh', MAD: 'MAD ', ZAR: 'R' };
+  var CURRENCY_LOCALES = { NGN: 'en-NG', GHS: 'en-GH', KES: 'en-KE', MAD: 'fr-MA', ZAR: 'en-ZA' };
+  function formatMoney(minorUnits, currency) {
+    currency = currency || 'NGN';
+    const major = minorUnits / 100;
+    const symbol = CURRENCY_SYMBOLS[currency] || (currency + ' ');
+    const locale = CURRENCY_LOCALES[currency] || 'en-US';
+    return symbol + major.toLocaleString(locale, { minimumFractionDigits: major % 1 === 0 ? 0 : 2, maximumFractionDigits: 2 });
+  }
+
+  // Stage 2C: renders the same "N currency-group subtotals + soft warning" pattern used
+  // by cart.tsx / checkout.tsx's server-rendered markup, from an AJAX response's
+  // `currency_groups` array. Used by both the cart page's live quantity-change refresh
+  // and the checkout page's live delivery/coupon preview refresh, so an AJAX update can
+  // NEVER re-collapse a multi-currency cart into a single ₦ figure — the confirmed gap
+  // this fixes.
+  function renderCurrencyGroupsInto(containerEl, currencyGroups, warningText) {
+    if (!containerEl) return;
+    var rows = currencyGroups.map(function (g) {
+      var count = g.item_count;
+      return '<div class="flex justify-between" data-currency-row data-currency="' + g.currency + '">' +
+        '<span>' + g.currency + ' subtotal (<span class="currency-row-count">' + count + '</span> item' + (count > 1 ? 's' : '') + ')</span>' +
+        '<span class="currency-row-subtotal">' + formatMoney(g.subtotal_kobo, g.currency) + '</span></div>';
+    }).join('');
+    containerEl.innerHTML = rows + '<p class="text-xs text-amber-600 font-medium pt-0.5">' + warningText + '</p>';
+  }
+  var CROSS_CURRENCY_WARNING = 'Items from different currency zones — totals are shown per currency group.';
 
   // ---------- Cart count on initial load (covers guest + logged-in) ----------
   (function initCartCount() {
@@ -1247,7 +1279,7 @@
           return '<a href="/shop/' + p.slug + '" class="group flex items-center gap-2 hover:bg-gray-50 rounded-lg p-1 -m-1 transition-colors">' +
             '<div class="w-12 h-12 rounded-lg bg-gray-100 overflow-hidden shrink-0"><img src="' + p.image_url + '" alt="' + p.title.replace(/"/g, '&quot;') + '" loading="lazy" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"></div>' +
             '<div class="min-w-0 flex-1"><p class="text-xs text-gray-700 line-clamp-2 leading-tight">' + p.title + '</p>' +
-            '<p class="text-xs font-bold text-gray-900 mt-0.5">' + formatNaira(p.price_kobo) + '</p></div></a>';
+            '<p class="text-xs font-bold text-gray-900 mt-0.5">' + formatMoney(p.price_kobo, p.currency) + '</p></div></a>';
         }).join('');
         if (emptyState) emptyState.classList.add('hidden');
         track.classList.remove('hidden');
@@ -1302,8 +1334,29 @@
       updateCartBadges(data.count);
       const countEl = document.getElementById('cart-summary-count');
       const subtotalEl = document.getElementById('cart-summary-subtotal');
-      if (countEl) countEl.textContent = String(data.count);
-      if (subtotalEl) subtotalEl.textContent = formatNaira(data.subtotal_kobo);
+      const multiGroupEl = document.getElementById('cart-summary-currency-groups');
+      const singleGroupEl = document.getElementById('cart-summary-single-currency');
+      const currencyGroups = data.currency_groups || [];
+      const isMulti = data.is_multi_currency || currencyGroups.length > 1;
+      // Stage 2C: toggle between the two always-present blocks (see cart.tsx) rather
+      // than ever formatting data.subtotal_kobo as a single ₦ figure when the cart
+      // spans more than one currency — this is the confirmed AJAX-refresh fix.
+      if (multiGroupEl && singleGroupEl) {
+        if (isMulti) {
+          renderCurrencyGroupsInto(multiGroupEl, currencyGroups, CROSS_CURRENCY_WARNING);
+          multiGroupEl.classList.remove('hidden');
+          singleGroupEl.classList.add('hidden');
+        } else {
+          multiGroupEl.classList.add('hidden');
+          singleGroupEl.classList.remove('hidden');
+          if (countEl) countEl.textContent = String(data.count);
+          if (subtotalEl) subtotalEl.textContent = formatMoney(data.subtotal_kobo, currencyGroups[0] ? currencyGroups[0].currency : 'NGN');
+        }
+      } else {
+        // Fallback for any page still using the older single-subtotal markup only.
+        if (countEl) countEl.textContent = String(data.count);
+        if (subtotalEl) subtotalEl.textContent = formatMoney(data.subtotal_kobo, currencyGroups[0] ? currencyGroups[0].currency : 'NGN');
+      }
     }
 
     async function changeQuantity(cartItemId, newQty) {
@@ -1319,7 +1372,7 @@
         if (valueEl) valueEl.textContent = String(newQty);
         const item = res.data.items.find(function (i) { return i.id === cartItemId; });
         const lineTotalEl = row.querySelector('.line-total');
-        if (lineTotalEl && item) lineTotalEl.textContent = formatNaira(item.price_kobo * item.quantity);
+        if (lineTotalEl && item) lineTotalEl.textContent = formatMoney(item.price_kobo * item.quantity, item.currency);
       }
       applyCartSummary(res.data);
     }
@@ -1502,7 +1555,8 @@
           phone: (document.getElementById('na-phone') || {}).value || '',
           line1: (document.getElementById('na-line1') || {}).value || '',
           city: (document.getElementById('na-city') || {}).value || '',
-          state: (document.getElementById('na-state') || {}).value || ''
+          state: (document.getElementById('na-state') || {}).value || '',
+          country_iso: (document.getElementById('na-country') || {}).value || 'NG'
         };
         if (!payload.label || !payload.recipient_name || !payload.phone || !payload.line1 || !payload.city || !payload.state) {
           showError(newAddrError, 'Please fill in every field.');
@@ -1517,6 +1571,8 @@
     }
 
     // ---------- Live summary recalculation (delivery method + coupon) via /api/cart/preview ----------
+    const summaryCurrencyGroupsEl = document.getElementById('summary-currency-groups');
+    const summarySingleCurrencyEl = document.getElementById('summary-single-currency');
     const summarySubtotalEl = document.getElementById('summary-subtotal');
     const summaryDeliveryFeeEl = document.getElementById('summary-delivery-fee');
     const summarySellerCountEl = document.getElementById('summary-seller-count');
@@ -1537,21 +1593,43 @@
       const res = await api('/api/cart/preview', { method: 'POST', body: JSON.stringify(body) });
       if (!res.ok) return;
       const d = res.data;
+      const currencyGroups = d.currency_groups || [];
+      const isMulti = d.is_multi_currency || currencyGroups.length > 1;
+      const primaryCurrency = currencyGroups[0] ? currencyGroups[0].currency : 'NGN';
 
-      if (summarySubtotalEl) summarySubtotalEl.textContent = formatNaira(d.subtotal_kobo);
-      if (summaryDeliveryFeeEl) summaryDeliveryFeeEl.textContent = formatNaira(d.delivery_fee_kobo);
+      // Stage 2C: toggle the two always-present subtotal blocks exactly like
+      // applyCartSummary() on the cart page — never format d.subtotal_kobo as a
+      // single-currency figure when the cart spans more than one currency.
+      if (summaryCurrencyGroupsEl && summarySingleCurrencyEl) {
+        if (isMulti) {
+          renderCurrencyGroupsInto(summaryCurrencyGroupsEl, currencyGroups, CROSS_CURRENCY_WARNING);
+          summaryCurrencyGroupsEl.classList.remove('hidden');
+          summarySingleCurrencyEl.classList.add('hidden');
+        } else {
+          summaryCurrencyGroupsEl.classList.add('hidden');
+          summarySingleCurrencyEl.classList.remove('hidden');
+          if (summarySubtotalEl) summarySubtotalEl.textContent = formatMoney(d.subtotal_kobo, primaryCurrency);
+        }
+      } else if (summarySubtotalEl) {
+        summarySubtotalEl.textContent = formatMoney(d.subtotal_kobo, primaryCurrency);
+      }
+
+      // Delivery fee is always a flat NGN-per-seller-shipment charge (see orders.ts).
+      if (summaryDeliveryFeeEl) summaryDeliveryFeeEl.textContent = formatMoney(d.delivery_fee_kobo, 'NGN');
       if (summarySellerCountEl) summarySellerCountEl.textContent = String(d.seller_count);
-      if (summaryTotalEl) summaryTotalEl.textContent = formatNaira(d.total_kobo);
-      if (placeOrderTotalEl) placeOrderTotalEl.textContent = formatNaira(d.total_kobo);
+      if (summaryTotalEl) { summaryTotalEl.textContent = formatMoney(d.total_kobo, primaryCurrency); summaryTotalEl.setAttribute('data-currency', primaryCurrency); }
+      if (placeOrderTotalEl) placeOrderTotalEl.textContent = formatMoney(d.total_kobo, primaryCurrency);
 
       if (d.discount_kobo > 0) {
         if (summaryDiscountRow) summaryDiscountRow.classList.remove('hidden');
-        if (summaryDiscountEl) summaryDiscountEl.textContent = '-' + formatNaira(d.discount_kobo);
+        if (summaryDiscountEl) summaryDiscountEl.textContent = '-' + formatMoney(d.discount_kobo, primaryCurrency);
       } else if (summaryDiscountRow) {
         summaryDiscountRow.classList.add('hidden');
       }
 
-      // Wallet affordability re-check now that delivery/coupon changed the total
+      // Wallet affordability re-check now that delivery/coupon changed the total.
+      // Wallet balance itself is always NGN (single-currency wallet — multi-currency
+      // wallets are explicitly out of Stage 2C's scope), so formatNaira stays correct here.
       const canPayWallet = initData.walletBalanceKobo >= d.total_kobo;
       if (walletRadio) {
         walletRadio.disabled = !canPayWallet;
@@ -1582,7 +1660,9 @@
         applyCouponBtn.disabled = false;
         if (res.ok && res.data.coupon_valid) {
           appliedCouponCode = code;
-          if (couponFeedback) { couponFeedback.textContent = 'Coupon applied — you saved ' + formatNaira(res.data.discount_kobo) + '!'; couponFeedback.className = 'text-xs mt-1.5 text-primary font-medium'; }
+          const groups = res.data.currency_groups || [];
+          const couponCurrency = groups[0] ? groups[0].currency : 'NGN';
+          if (couponFeedback) { couponFeedback.textContent = 'Coupon applied — you saved ' + formatMoney(res.data.discount_kobo, couponCurrency) + '!'; couponFeedback.className = 'text-xs mt-1.5 text-primary font-medium'; }
         } else {
           appliedCouponCode = null;
           if (couponFeedback) { couponFeedback.textContent = (res.data && res.data.coupon_error) || 'Invalid coupon code.'; couponFeedback.className = 'text-xs mt-1.5 text-red-600 font-medium'; }

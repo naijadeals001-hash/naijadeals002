@@ -10,6 +10,16 @@ export interface ShippingDetails {
   address: string
   city: string
   state: string
+  /**
+   * Stage 2C (Currency & Address Foundation): explicit stored fact for
+   * orders.shipping_country, parameterized the same way listing currency
+   * is — resolved once at checkout time (from the saved address's
+   * country_iso, or from validated raw checkout input) and never
+   * re-derived at read time. Defaults to 'NG' only for callers that
+   * genuinely predate this field, preserving existing NG behavior
+   * byte-identically.
+   */
+  country?: string
 }
 
 export type DeliveryMethod = 'standard' | 'express'
@@ -74,7 +84,11 @@ export async function createPendingOrder(
   let discountKobo = 0
   let appliedCouponCode: string | null = null
   if (couponCode) {
-    const validation = await validateCoupon(db, couponCode, subtotal)
+    // currency is used only to format a would-be min-order error message in the
+    // right symbol; the discount math itself is unchanged (still raw kobo/minor
+    // units on the combined subtotal) — cross-currency coupon semantics are out
+    // of scope for Stage 2C.
+    const validation = await validateCoupon(db, couponCode, subtotal, items[0]?.currency ?? 'NGN')
     if (validation.valid && validation.coupon) {
       const claimed = await claimCouponUsage(db, validation.coupon.id)
       if (claimed) {
@@ -95,9 +109,9 @@ export async function createPendingOrder(
   const orderInsert = await db
     .prepare(
       `INSERT INTO orders (order_number, user_id, status, payment_status, subtotal_kobo, delivery_fee_kobo, total_kobo,
-                            shipping_name, shipping_phone, shipping_address, shipping_city, shipping_state,
+                            shipping_name, shipping_phone, shipping_address, shipping_city, shipping_state, shipping_country,
                             delivery_method, coupon_code, discount_kobo)
-       VALUES (?, ?, 'pending_payment', 'unpaid', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       VALUES (?, ?, 'pending_payment', 'unpaid', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .bind(
       orderNumber,
@@ -110,6 +124,7 @@ export async function createPendingOrder(
       shipping.address,
       shipping.city,
       shipping.state,
+      shipping.country ?? 'NG',
       deliveryMethod,
       appliedCouponCode,
       discountKobo

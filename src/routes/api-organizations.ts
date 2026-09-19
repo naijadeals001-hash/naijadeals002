@@ -286,8 +286,20 @@ organizationsApi.post('/:organizationId/store', requireOrganizationMember, requi
   const organizationId = Number(c.req.param('organizationId'))
   const body = await c.req.json<Partial<CreateOrganizationStoreInput>>().catch(() => null)
   if (!body?.name) return c.json({ error: 'name is required' }, 400)
+  // Stage 2C (Currency & Address Foundation): a store's operational country
+  // must come from validated input. The request body is client-supplied and
+  // may omit country_iso entirely; when it does, resolve the default from
+  // the PARENT ORGANIZATION's own country_iso (validated server-side data
+  // set at organization-creation time) rather than silently defaulting to
+  // 'NG' regardless of the organization's actual country. This is the fix
+  // for the confirmed vendor-country bug in createOrganizationStore().
+  const organization = await getOrganizationById(c.env.DB, organizationId)
+  const storeInput: CreateOrganizationStoreInput = {
+    ...(body as CreateOrganizationStoreInput),
+    country_iso: body.country_iso ?? organization?.country_iso ?? 'NG',
+  }
   try {
-    const vendorId = await createOrganizationStore(c.env.DB, organizationId, body as CreateOrganizationStoreInput)
+    const vendorId = await createOrganizationStore(c.env.DB, organizationId, storeInput)
     const vendor = await getVendorForOrganization(c.env.DB, organizationId)
     return c.json({ success: true, vendorId, store: vendor }, 201)
   } catch (err: any) {

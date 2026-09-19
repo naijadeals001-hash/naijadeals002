@@ -71,6 +71,9 @@ export async function orderDetailPage(c: Context<AppEnv>) {
     .first<OrderRow>()
 
   if (!order) {
+    // Stage 2C fix — see product.tsx's identical fix for the full root-cause
+    // explanation (c.render()'s 2nd arg is Layout props, not an HTTP status).
+    c.status(404)
     return c.render(
       <Layout title="Order not found" user={user} locale={locale}>
         <div class="max-w-2xl mx-auto text-center py-20">
@@ -78,8 +81,7 @@ export async function orderDetailPage(c: Context<AppEnv>) {
           <h1 class="text-xl font-bold mt-4">Order not found</h1>
           <a href="/orders" class="text-primary font-semibold hover:underline mt-2 inline-block">Back to orders</a>
         </div>
-      </Layout>,
-      404
+      </Layout>
     )
   }
 

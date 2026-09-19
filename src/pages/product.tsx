@@ -2,7 +2,7 @@ import type { Context } from 'hono'
 import { Layout } from '../components/Layout'
 import { ProductCard } from '../components/ProductCard'
 import type { AppEnv, ProductWithListingRow, ReviewRow, QuestionRow } from '../types'
-import { formatNaira, discountPercent, formatRatingCount } from '../lib/money'
+import { formatMoney, discountPercent, formatRatingCount } from '../lib/money'
 import { getListingsForProduct, getVariantsForListing } from '../lib/catalog'
 import { recordBehaviorEvent, maybePurgeStaleBehaviorEvents } from '../lib/behavior-events'
 
@@ -21,7 +21,7 @@ export async function productPage(c: Context<AppEnv>) {
               cat.name as category_name, cat.slug as category_slug,
               b.name as brand_name, b.slug as brand_slug,
               l.id as listing_id, l.vendor_id, v.name as vendor_name, v.slug as vendor_slug,
-              l.price_kobo, l.compare_at_price_kobo, l.stock,
+              l.price_kobo, l.compare_at_price_kobo, l.currency, l.stock,
               l.delivery_days_min, l.delivery_days_max, l.is_plus, l.warranty_months, l.condition,
               (SELECT COUNT(*) FROM product_listings l2 WHERE l2.product_id = p.id AND l2.is_active = 1) as seller_count
        FROM products p
@@ -35,6 +35,13 @@ export async function productPage(c: Context<AppEnv>) {
     .first<ProductWithListingRow & { warranty_months: number; condition: string }>()
 
   if (!product) {
+    // Stage 2C fix: c.render()'s (JSX renderer) second argument is Layout
+    // component PROPS, never an HTTP status — Hono's jsxRenderer middleware
+    // has no status-forwarding path at all (confirmed against the installed
+    // Hono 4.13.5 runtime source). The previous `c.render(<Layout>..., 404)`
+    // call silently discarded the 404 and always returned HTTP 200. The
+    // status must be set explicitly via Context.status() BEFORE rendering.
+    c.status(404)
     return c.render(
       <Layout title="Not found" user={user} locale={locale}>
         <div class="max-w-2xl mx-auto text-center py-20">
@@ -42,8 +49,7 @@ export async function productPage(c: Context<AppEnv>) {
           <h1 class="text-xl font-bold mt-4">Product not found</h1>
           <a href="/shop" class="text-primary font-semibold hover:underline mt-2 inline-block">Back to shop</a>
         </div>
-      </Layout>,
-      404
+      </Layout>
     )
   }
 
@@ -65,7 +71,7 @@ export async function productPage(c: Context<AppEnv>) {
       .prepare(
         `SELECT p.*, cat.name as category_name, cat.slug as category_slug,
                 l.id as listing_id, l.vendor_id, v.name as vendor_name, v.slug as vendor_slug,
-                l.price_kobo, l.compare_at_price_kobo, l.stock, l.delivery_days_min, l.delivery_days_max, l.is_plus,
+                l.price_kobo, l.compare_at_price_kobo, l.currency, l.stock, l.delivery_days_min, l.delivery_days_max, l.is_plus,
                 (SELECT COUNT(*) FROM product_listings l2 WHERE l2.product_id = p.id AND l2.is_active = 1) as seller_count
          FROM products p
          JOIN product_listings l ON l.product_id = p.id AND l.is_primary = 1 AND l.is_active = 1
@@ -81,7 +87,7 @@ export async function productPage(c: Context<AppEnv>) {
     // tracking exists yet); still a REAL query against real active products, not decorative filler.
     db
       .prepare(
-        `SELECT p.*, l.id as listing_id, l.vendor_id, v.name as vendor_name, l.price_kobo, l.compare_at_price_kobo, l.stock
+        `SELECT p.*, l.id as listing_id, l.vendor_id, v.name as vendor_name, l.price_kobo, l.compare_at_price_kobo, l.currency, l.stock
          FROM products p
          JOIN product_listings l ON l.product_id = p.id AND l.is_primary = 1 AND l.is_active = 1
          JOIN vendors v ON v.id = l.vendor_id
@@ -106,6 +112,9 @@ export async function productPage(c: Context<AppEnv>) {
   const whatsIncluded: string[] = JSON.parse(product.whats_included_json || '[]')
 
   const discount = discountPercent(product.price_kobo, product.compare_at_price_kobo)
+  // Cheapest competing listing, kept as its OWN row (not just its price) so its currency
+  // travels with it — sellers on this PDP are never assumed to share one currency.
+  const cheapestListing = listings.reduce((min: any, l: any) => (!min || l.price_kobo < min.price_kobo ? l : min), null as any)
 
   // Real rating distribution from the loaded review sample (not a fabricated curve).
   const ratingCounts = [5, 4, 3, 2, 1].map((star) => ({
@@ -121,7 +130,7 @@ export async function productPage(c: Context<AppEnv>) {
   // product without a verified photo must never appear as an FBT suggestion either.
   const fbtRows = await db
     .prepare(
-      `SELECT p.*, l.id as listing_id, l.price_kobo, l.compare_at_price_kobo, l.stock
+      `SELECT p.*, l.id as listing_id, l.price_kobo, l.compare_at_price_kobo, l.currency, l.stock
        FROM products p
        JOIN product_listings l ON l.product_id = p.id AND l.is_primary = 1 AND l.is_active = 1
        WHERE p.category_id = ? AND p.id != ? AND p.is_active = 1
@@ -191,17 +200,17 @@ export async function productPage(c: Context<AppEnv>) {
             </div>
 
             <div class="flex items-baseline gap-3 mt-4 border-t border-gray-100 pt-4">
-              <span class="text-3xl font-bold text-gray-900">{formatNaira(product.price_kobo)}</span>
+              <span class="text-3xl font-bold text-gray-900">{formatMoney(product.price_kobo, product.currency)}</span>
               {product.compare_at_price_kobo && (
                 <>
-                  <span class="text-lg text-gray-400 line-through">{formatNaira(product.compare_at_price_kobo)}</span>
+                  <span class="text-lg text-gray-400 line-through">{formatMoney(product.compare_at_price_kobo, product.currency)}</span>
                   <span class="text-sm font-semibold text-red-600">-{discount}%</span>
                 </>
               )}
             </div>
             {product.seller_count > 1 && (
               <a href="#compare-sellers" class="text-sm text-primary font-semibold hover:underline mt-1 inline-block">
-                {product.seller_count} sellers from {formatNaira(Math.min(...listings.map((l) => l.price_kobo)))}
+                {product.seller_count} sellers from {formatMoney(cheapestListing.price_kobo, cheapestListing.currency)}
               </a>
             )}
 
@@ -241,8 +250,8 @@ export async function productPage(c: Context<AppEnv>) {
           {/* ============ Buy box ============ */}
           <div class="lg:sticky lg:top-20 h-fit bg-white border border-gray-200 rounded-xl p-5">
             <div class="flex items-baseline gap-2">
-              <span class="text-2xl font-bold text-gray-900">{formatNaira(product.price_kobo)}</span>
-              {product.compare_at_price_kobo && <span class="text-sm text-gray-400 line-through">{formatNaira(product.compare_at_price_kobo)}</span>}
+              <span class="text-2xl font-bold text-gray-900">{formatMoney(product.price_kobo, product.currency)}</span>
+              {product.compare_at_price_kobo && <span class="text-sm text-gray-400 line-through">{formatMoney(product.compare_at_price_kobo, product.currency)}</span>}
             </div>
             {product.stock > 0 ? (
               <p class="text-sm text-green-700 font-medium mt-1 flex items-center gap-1">
@@ -322,7 +331,7 @@ export async function productPage(c: Context<AppEnv>) {
                         </div>
                         <p class="text-xs text-gray-500">{l.vendor_city}, {l.vendor_state} · {l.positive_feedback_percent}% positive</p>
                       </td>
-                      <td class="py-3 pr-4 font-semibold text-gray-900">{formatNaira(l.price_kobo)}</td>
+                      <td class="py-3 pr-4 font-semibold text-gray-900">{formatMoney(l.price_kobo, l.currency)}</td>
                       <td class="py-3 pr-4 text-gray-600 capitalize">{l.condition}</td>
                       <td class="py-3 pr-4 text-gray-600">{l.delivery_days_min}-{l.delivery_days_max} days</td>
                       <td class="py-3 pr-4 text-gray-600">
@@ -366,7 +375,8 @@ export async function productPage(c: Context<AppEnv>) {
               ))}
               <div class="ml-2">
                 <p class="text-sm text-gray-500">Total price:</p>
-                <p class="text-lg font-bold text-gray-900">{formatNaira(fbtTotal)}</p>
+                {/* Frequently-bought-together total: same-category items today are effectively always same-currency in practice; combining is acceptable here (unlike cart) because this is a single deterministic 2-3 item suggestion widget, not the actual order total. */}
+                <p class="text-lg font-bold text-gray-900">{formatMoney(fbtTotal, product.currency)}</p>
               </div>
             </div>
           </section>

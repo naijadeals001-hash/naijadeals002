@@ -13,7 +13,7 @@ import type { CollectionRow, ProductWithListingRow } from '../types'
 const PRODUCT_CARD_SELECT = `
   SELECT
     p.*, l.id AS listing_id, l.vendor_id, v.name AS vendor_name, v.slug AS vendor_slug,
-    l.price_kobo, l.compare_at_price_kobo, l.stock, l.delivery_days_min, l.delivery_days_max, l.is_plus,
+    l.price_kobo, l.compare_at_price_kobo, l.currency, l.stock, l.delivery_days_min, l.delivery_days_max, l.is_plus,
     c.name AS category_name, c.slug AS category_slug, b.name AS brand_name, b.slug AS brand_slug,
     (SELECT COUNT(*) FROM product_listings pl2 WHERE pl2.product_id = p.id AND pl2.is_active = 1) AS seller_count
   FROM products p

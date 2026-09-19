@@ -265,6 +265,8 @@ export interface ProductWithListingRow extends ProductRow {
   vendor_slug: string
   price_kobo: number
   compare_at_price_kobo: number | null
+  /** Stage 2C (migration 0071). The LISTING's own currency — explicit stored fact, defaults to 'NGN'. Never re-derive from vendor country at read time. */
+  currency: string
   stock: number
   delivery_days_min: number
   delivery_days_max: number
@@ -397,6 +399,8 @@ export interface CartItemRow {
   image_url: string
   price_kobo: number
   compare_at_price_kobo: number | null
+  /** Stage 2C (migration 0071). The listing's own currency, defaults to 'NGN'. */
+  currency: string
   stock: number
   vendor_id: number
   vendor_name: string
@@ -464,6 +468,8 @@ export interface AddressRow {
   line1: string
   city: string
   state: string
+  /** Stage 2C (migration 0071). Defaults to 'NG' for every pre-existing row. */
+  country_iso: string
   is_default: number
   delivery_instructions: string | null
 }
