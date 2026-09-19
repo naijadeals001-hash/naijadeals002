@@ -245,6 +245,172 @@ above without cross-checking here first.
   batch remains completely untouched — next catalog work starts from
   this unit's closing state (103/254/41/35/140).
 
+### Stage 2A — Africa Catalog & Country Architecture CLOSED (2026-09-19)
+- **What shipped**: a 54-country African market architecture layered on
+  top of the existing `cc_countries` table, built around three explicitly
+  distinct relationships that are never conflated: **Product → Origin
+  Country** (`product_country_origins`, propose→verify workflow),
+  **Product/Listing → Availability** (`listing_country_availability` +
+  vendor-country fallback — pre-existing, untouched), and **Vendor →
+  Based-in Country** (`vendors.country_iso`, pre-existing, untouched).
+  Added a country profile service (`src/lib/country-profile.ts`,
+  `cc_country_facts` table — sourced facts like population/currency/
+  capital, same two-step verification workflow as origins), a
+  `/countries` directory page and `/countries/:iso` detail page for all
+  54 nations, 11 new Control Center admin routes
+  (`src/routes/api-control-center.ts`) for proposing/verifying/disputing/
+  deleting both country facts and product origins, and reverse lookup
+  index `idx_vendors_country_iso` for vendor-by-country queries.
+  Migrations **0069** (`cc_country_facts` table + 2 indexes) and **0070**
+  (`idx_vendors_country_iso`) are the only schema changes. `brands
+  .is_nigerian` and `categories.country_iso` were explicitly left
+  untouched in meaning — `country_iso` on categories is a **taxonomy**
+  field, never repurposed as a product-origin signal.
+- **Two-step propose → verify workflow** (identical shape for both
+  `cc_country_facts` and `product_country_origins`): a propose call
+  always creates a row with `verification_status='unverified'`
+  regardless of input; only a separate `verify*()` function can set
+  `verified`, and it throws `VerificationSourceRequiredError` /
+  `OriginVerificationSourceRequiredError` on an empty/whitespace
+  `source_url` — there is no code path that can mark something verified
+  without a real source. Origin proposals additionally require a
+  non-empty evidence note. Every propose/verify/dispute/delete action is
+  audited via `recordControlCenterAction()` with actor identity read
+  exclusively from the authenticated Control Center session
+  (`c.get('user')`) — never from request input.
+- **Guardrail-audit bug found and fixed during this stage**: both verify
+  routes originally returned an early `400` on an empty `source_url`
+  *before* the try/catch block, so the guardrail function itself never
+  ran and the rejected attempt was never audited — silently contradicting
+  the routes' own inline comments. Fixed by removing the early return and
+  routing the empty-check through the guardrail function
+  (`verifyCountryFact` / `verifyProductOrigin`), which now throws into the
+  catch block and is properly audited with `action:
+  'country_fact_verify_rejected'` / equivalent, `success:false`.
+  Re-verified directly against the database: a rejected empty-source
+  verify attempt now produces exactly that audit row, and the fact/origin
+  correctly remains `unverified`.
+- **Country-count anomaly — investigated and root-caused, not "fixed to
+  pass"**: during Chromium testing, a local verification script reported
+  only 1 discoverable country (NG) against a `cc_countries` table
+  containing 54 rows. Per explicit instruction, the root cause was
+  established *before* touching anything:
+  - `src/lib/country.ts` has three genuinely distinct, **pre-existing**
+    (non-Stage-2A) query functions: `getAllCountries()` (no filter, all
+    54), `getLiveCountries()` (`WHERE status='LIVE'`, correctly returns
+    only NG — an honest reflection that Nigeria is the only country with
+    an actually-live seller/shipping market today, from the pre-existing
+    Marketplace Engine 2.1 "ship to" serviceability feature), and
+    `getDiscoverableCountries()` (`display_on_homepage=1 AND image_url
+    IS NOT NULL AND image_url NOT LIKE '/ph.svg%'`, correctly returns all
+    54 real-photographed countries).
+  - The route actually backing the `/countries` directory page and the
+    country-detail sweep is `getDiscoverableCountries()`, confirmed by
+    scraping the live rendered `/countries` HTML: exactly 54 unique
+    `href="/countries/xx"` links present.
+  - The **actual defect was in the verification test script**, not the
+    application: its `getAllIsoCodes()` helper called
+    `GET /api/catalog/countries`, a pre-existing endpoint that
+    intentionally calls `getLiveCountries()` for a different purpose
+    (seller shipping-destination selection) and correctly returns only
+    NG. This is not a bug, not a cache/runtime mismatch, and not a Stage
+    2A regression — it is the test script reading the wrong data source.
+  - **No application code was changed to "make the count become 54."**
+    Only the test script was corrected, to scrape the real `/countries`
+    page HTML (ground truth of what a visitor sees) instead of calling
+    the unrelated `getLiveCountries()`-backed endpoint. `getLiveCountries()`
+    and its `status='LIVE'` predicate remain untouched, exactly as found.
+- **Full verification, local then production** — both runs used the
+  same corrected method (scrape `/countries` for the real 54-ISO list,
+  then exercise 6 endpoints per country: detail page,
+  `/api/catalog/countries/:iso`, `.../products/available`,
+  `.../products/origin`, `.../vendors`, `.../brands`), with truthful
+  emptiness (e.g. `products/origin: []` for a country with zero verified
+  origins) accepted as a valid PASS, never required to be non-empty:
+  - **Local**: 54/54 countries found, 324/324 endpoint checks (6 × 54)
+    returned 2xx, 0 failures.
+  - **Production** (`https://naijadeals.com`, post-deploy): 54/54
+    countries found, 324/324 endpoint checks returned 2xx, 0 failures —
+    executed live, not inferred from the local result.
+  - **NG semantics, verified live in both environments**: `/countries/ng`
+    renders "Products a customer here can actually buy — not necessarily
+    made in Nigeria," `/shop?country=NG` shows 24 available products,
+    `/shop?origin_country=NG` honestly shows **0 results** (zero verified
+    origins exist yet — this is correct behavior, not a bug), and country
+    facts render empty (zero verified facts exist yet). Availability
+    (24) and origin (0) are confirmed numerically distinct in both
+    environments, proving the two concepts are not conflated anywhere in
+    the stack.
+- **Browser verification**: real Playwright/Chromium (not `curl`-only) at
+  1440×900 and 390×844, both against local dev and against production —
+  `/`, `/countries`, `/countries/ng`, `/shop?country=NG`,
+  `/shop?origin_country=NG`, plus representative country pages
+  (GH/KE/ZA/EG/MA). Screenshots captured for all URLs at both viewports
+  in both environments.
+- **Local gates, re-run clean immediately before commit**: `npm run
+  build` succeeds (903.82 kB / gzip 191.40 kB); `npx tsc --noEmit`
+  produces **zero net-new errors** — the only errors present are the 4
+  pre-existing baseline clusters, unrelated to Stage 2A and explicitly
+  not touched: `src/pages/auth.tsx` (TS2322), `src/pages/orders.tsx` +
+  `src/pages/product.tsx` (TS2554/TS18048), `src/renderer.tsx` (TS2345),
+  `src/routes/api-cart.ts` (7× TS2339 on a discriminated-union body
+  type), `src/routes/api-catalog.ts` (4× TS2339 on `.all()` result
+  typing — pre-existing, line numbers shifted by this stage's insertions
+  but the clusters themselves are unchanged). Two genuinely **new** TS
+  errors introduced by this stage's own code were found and fixed at the
+  time: an unguarded `c.req.param('iso')` in `country-detail.tsx`, and a
+  union-type inference issue on a `.json<T>().catch()` pattern in the
+  Control Center PATCH route.
+- **Commit, push, SHA alignment**: committed as `79c4cb3` ("feat(country):
+  Stage 2A - Africa Catalog & Country Architecture") — 14 files staged
+  explicitly by full path (`git add <file> <file> ...`, never `git add
+  .`): both migrations, the country/origin/page-cache/catalog library
+  changes, the 11 Control Center routes, the country pages, `types.ts`.
+  No unrelated files included. Verified identical across all three
+  sources: local `HEAD`, `origin/main`, and the GitHub API's
+  `refs/heads/main` object — all `79c4cb3e3c85b788dbdb1b8275daf0ccee839b94`.
+- **Production migration** (0069 + 0070 only, nothing else): baseline
+  recorded before touching production — catalog counts exactly
+  103 products / 254 categories / 41 brands / 35 vendors / 140 listings
+  / 0 country-facts, `/api/version` at 68/68 migrations, no
+  `cc_country_facts` table or `idx_vendors_country_iso` index yet. Both
+  migrations' DDL applied via `gsk hosted d1_execute` (each CREATE
+  TABLE/INDEX individually approved through the pending-action
+  handshake), then registered in `d1_migrations` (ids 69, 70) since raw
+  `d1_execute` bypasses wrangler's own migration runner. Post-migration,
+  before deploy: catalog counts unchanged (byte-identical to baseline),
+  `cc_country_facts` confirmed at 0 rows, targeted FK check confirmed 0
+  orphaned `vendors.country_iso` references against `cc_countries`. No
+  Stage 2 seed of any kind was run.
+- **Deploy**: `gsk hosted deploy` (approved via the pending-action
+  handshake), Version ID `4224bfb6-8d86-4512-8ff3-35441d591685`. Deploy
+  log confirms `GSK_MIGRATION_EXPECTED count=70` →
+  `GSK_MIGRATION_STATUS: applied`. Post-deploy, `/api/version` reports
+  `expected_migrations`/`applied_migrations` both = 70,
+  `missing_migrations: []`, `unexpected_migrations: []`, `in_sync: true`
+  (the pre-deploy transient `unexpected_migrations` entries for 0069/0070
+  resolved automatically once the redeployed worker's own hardcoded
+  expectation list caught up to 70). All 8 checklist routes (`/api/version`,
+  `/`, `/shop`, `/countries`, `/countries/ng`, `/shop?country=NG`,
+  `/shop?origin_country=NG`, `/control-center/login`) return HTTP 200 on
+  both the raw worker URL and `naijadeals.com`.
+- **Permanent caveat — SHA provenance (pre-existing since Stage 1, not
+  re-investigated per explicit instruction)**: production `/api/version`
+  reports a `git_sha` that does not correspond to a resolvable commit in
+  this repository (`304181669644...` pre-redeploy, `ccefc729...`
+  post-redeploy) — the hosted deployment pipeline builds in an isolated
+  environment that does not expose its own build-source SHA. Content
+  equivalence to the committed `79c4cb3` is established independently
+  through the migration-count reconciliation (`expected=applied=70,
+  in_sync=true`), the unchanged catalog counts, and the live 54-country/
+  324-endpoint production sweep — not through `git_sha`. Do not modify
+  `version.ts`/`vite.config.ts` to chase this value.
+- **Hard boundaries honored, unchanged**: no FTS5, no bulk origin
+  backfill, no parallel country system, no 68-product holdback import, no
+  product imagery sourcing, no country-of-origin inference from category
+  or brand names, `brands.is_nigerian` and `categories.country_iso`
+  semantics both left exactly as found.
+
 ### Unit D — Footer Social Links Activation (2026-09-18)
 - **What shipped**: activated 4 of 7 `src/lib/social-links.ts` placeholders
   with the real, official NaijaDeals accounts Pat explicitly supplied —
