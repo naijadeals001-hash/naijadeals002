@@ -80,8 +80,16 @@ servicesApi.get('/providers', async (c) => {
   return c.json(results)
 })
 
-// GET /api/providers/:id — spec section 45 (public provider profile)
-servicesApi.get('/providers/:id', async (c) => {
+// GET /api/providers/:id — spec section 45 (public provider profile).
+// Route param is constrained to digits ONLY ({[0-9]+}) so it never
+// intercepts providerApi's '/providers/me' (and '/providers/me/*') routes —
+// discovered live in production verification: servicesApi is mounted
+// BEFORE providerApi in src/index.tsx, so an unconstrained ':id' here
+// matched the literal string "me", parsed it as NaN, and returned a false
+// "Invalid id" 400 before providerApi's actual handler ever ran. Hono's
+// router correctly falls through to a later, more specific route when an
+// earlier pattern with a stricter constraint doesn't match (verified).
+servicesApi.get('/providers/:id{[0-9]+}', async (c) => {
   const id = Number(c.req.param('id'))
   if (Number.isNaN(id)) return c.json({ error: 'Invalid id' }, 400)
 
