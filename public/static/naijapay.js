@@ -111,8 +111,14 @@
 
   const addBtn = document.getElementById('np-add-money-btn');
   const quickAddBtn = document.getElementById('np-quick-add-btn');
+  // QA fix: sidebar "Add Money" item (previously mis-rendered as disabled —
+  // see naijapay.tsx SIDEBAR_ITEMS fix) now renders as a real <button>; wire
+  // it to the same real Add Money flow as the wallet-card and Quick Actions
+  // buttons — one real action, three real entry points, no separate logic.
+  const sidebarAddBtn = document.getElementById('np-sidebar-add-money-btn');
   if (addBtn) addBtn.addEventListener('click', openAddMoneySheet);
   if (quickAddBtn) quickAddBtn.addEventListener('click', openAddMoneySheet);
+  if (sidebarAddBtn) sidebarAddBtn.addEventListener('click', openAddMoneySheet);
 
   // Returning from Paystack after a NaijaPay top-up
   (function handleTopupReturn() {

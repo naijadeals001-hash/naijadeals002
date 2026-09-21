@@ -62,6 +62,10 @@ const SIDEBAR_ITEMS: { key: string; label: string; icon: string; href?: string; 
   { key: 'transactions', label: 'Transactions', icon: 'receipt_long', href: '/naijapay#transactions', implemented: true },
   { key: 'send', label: 'Send Money', icon: 'send', implemented: false },
   { key: 'withdraw', label: 'Withdraw', icon: 'account_balance', implemented: false },
+  // href intentionally omitted — "Add Money" isn't a separate page, it's a
+  // real action triggered via the bottom-sheet modal (openAddMoneySheet() in
+  // naijapay.js). It is real/implemented, so the sidebar item must NOT fall
+  // into the disabled/"Coming Soon" render branch — see QA fix below.
   { key: 'add', label: 'Add Money', icon: 'add_circle', implemented: true },
   { key: 'cards', label: 'Cards & Payment Methods', icon: 'credit_card', implemented: false },
   { key: 'rewards', label: 'Rewards', icon: 'redeem', implemented: false },
@@ -73,13 +77,20 @@ const SIDEBAR_ITEMS: { key: string; label: string; icon: string; href?: string; 
   { key: 'settings', label: 'Settings', icon: 'settings', href: '/account', implemented: true },
 ]
 
+// QA fix (post-checkpoint c823e2d): the previous map included 'refund',
+// 'payout', 'escrow_release' — none of which are actual reference_type
+// values ever written by creditWallet()/debitWallet() call sites (verified
+// via grep across src/lib + src/routes). Corrected to the real, exhaustive
+// set: topup, order_payment, booking_payment, booking_refund, order_refund,
+// order_additional_charge. Anything else falls back to the generic
+// credit/debit arrow icon below — never silently mismatched.
 const ENTRY_ICON: Record<string, string> = {
   topup: 'add_circle',
   order_payment: 'shopping_bag',
   booking_payment: 'calendar_month',
-  refund: 'undo',
-  payout: 'account_balance_wallet',
-  escrow_release: 'lock_open',
+  booking_refund: 'undo',
+  order_refund: 'undo',
+  order_additional_charge: 'receipt_long',
 }
 
 export async function naijapayPage(c: Context<AppEnv>) {
@@ -161,10 +172,21 @@ export async function naijapayPage(c: Context<AppEnv>) {
             <nav class="flex flex-col gap-0.5 mb-5 text-[13px] w-full">
               {SIDEBAR_ITEMS.map((item) =>
                 item.implemented && item.href ? (
+                  // Real page link (Overview, Transactions, Security, Settings).
                   <a href={item.href} class="flex items-center justify-center dt:justify-start dt:gap-3 px-0 dt:px-3 py-2 rounded-lg text-gray-200 hover:bg-white/5 hover:text-white transition" title={item.label}>
                     <span class="material-symbols-outlined text-[19px]">{item.icon}</span>
                     <span class="hidden dt:block">{item.label}</span>
                   </a>
+                ) : item.implemented ? (
+                  // QA fix: real action with NO dedicated page (currently only
+                  // "Add Money" — opens the real Paystack top-up sheet via
+                  // naijapay.js). Previously this fell into the disabled/
+                  // "coming soon" branch below purely because it lacked an
+                  // href, which was factually wrong (Add Money IS live).
+                  <button type="button" id="np-sidebar-add-money-btn" class="flex items-center justify-center dt:justify-start dt:gap-3 px-0 dt:px-3 py-2 rounded-lg text-gray-200 hover:bg-white/5 hover:text-white transition w-full text-left" title={item.label}>
+                    <span class="material-symbols-outlined text-[19px]">{item.icon}</span>
+                    <span class="hidden dt:block">{item.label}</span>
+                  </button>
                 ) : (
                   <span class="flex items-center justify-center dt:justify-between dt:gap-3 px-0 dt:px-3 py-2 rounded-lg text-gray-500 cursor-not-allowed" title={`${item.label} — coming soon`}>
                     <span class="flex items-center dt:gap-3">
@@ -197,7 +219,13 @@ export async function naijapayPage(c: Context<AppEnv>) {
                   <AfricaGlyph class="w-5 h-5 object-contain" opacity={1} />
                   <span class="font-serif italic font-bold text-[15px]">NaijaPay</span>
                 </div>
-                <a href="/notifications" class="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center" aria-label="Notifications">
+                {/* QA fix: /notifications is not a real route anywhere in
+                    this app (confirmed via grep of src/index.tsx) — aura.tsx
+                    and Layout.tsx both link their notifications bell to
+                    /account instead, since that's where the real unread
+                    state lives today. Matched that existing pattern rather
+                    than link to a page that would 404. */}
+                <a href="/account" class="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center" aria-label="Notifications">
                   <span class="material-symbols-outlined text-[18px]">notifications</span>
                 </a>
               </div>
@@ -448,11 +476,17 @@ export async function naijapayPage(c: Context<AppEnv>) {
             <span class="material-symbols-outlined text-[22px]">receipt_long</span>
             <span class="text-[10px] font-medium">Activity</span>
           </a>
-          <button type="button" id="np-quick-pay-btn" class="flex-1 flex flex-col items-center justify-center gap-0.5 py-1.5 -mt-3">
+          {/* QA fix: this button's real behavior (naijapay.js) is opening the
+              Add Money sheet — a "qr_code_scanner" icon + "Pay" label implied
+              a scan-to-pay capability that does not exist, which is exactly
+              the kind of misleading-signifier the zero-fabrication rule is
+              meant to catch even when the element IS technically wired up.
+              Relabeled to match what it actually does. */}
+          <button type="button" id="np-quick-pay-btn" class="flex-1 flex flex-col items-center justify-center gap-0.5 py-1.5 -mt-3" aria-label="Add Money">
             <span class="w-12 h-12 rounded-full bg-npPrimary flex items-center justify-center shadow-lg border-4 border-white">
-              <span class="material-symbols-outlined text-white text-[22px]">qr_code_scanner</span>
+              <span class="material-symbols-outlined text-white text-[22px]">add</span>
             </span>
-            <span class="text-[10px] font-bold text-npPrimary -mt-0.5">Pay</span>
+            <span class="text-[10px] font-bold text-npPrimary -mt-0.5">Add Money</span>
           </button>
           <a href="/naijapay" aria-current="page" class="flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-npPrimary">
             <span class="material-symbols-outlined text-[22px]">account_balance_wallet</span>
