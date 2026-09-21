@@ -80,8 +80,9 @@ import {
 import { accountPage } from './pages/account'
 import { organizationPage } from './pages/organization'
 import { controlCenterRoutes } from './routes/control-center'
+import { auraApi } from './routes/api-aura'
 
-type Bindings = AppEnv['Bindings'] & { PAYSTACK_SECRET_KEY?: string }
+type Bindings = AppEnv['Bindings'] & { PAYSTACK_SECRET_KEY?: string; OPENAI_API_KEY?: string; OPENAI_BASE_URL?: string }
 type Env = { Bindings: Bindings; Variables: AppEnv['Variables'] }
 
 const app = new Hono<Env>()
@@ -118,6 +119,17 @@ app.route('/api', versionRoute)
 // bare '*') is what actually governs its routes.
 app.route('/api', bookingsApi)
 app.route('/api', logisticsApi)
+// Aura AI Core (Phase 3A) — one shared endpoint for every Aura experience
+// (Luxe/Classic/Pulse/Executive). Deliberately NOT behind requireAuth (Aura
+// must work for guests — Aura Luxe's guest state is part of the locked UI).
+// MUST be registered here, alongside bookingsApi/logisticsApi, and BEFORE
+// servicesApi/serviceRequestsApi/providerApi below — those register a bare
+// `.use('*', requireAuth)` on the shared '/api' prefix, and Hono applies
+// wildcard middleware from every sub-app sharing a mount path in
+// REGISTRATION ORDER (see the bookingsApi comment above for the same bug,
+// first discovered there). Registering auraApi first means its own
+// intentionally-absent auth requirement is what actually governs it.
+app.route('/api/aura', auraApi)
 app.route('/api/catalog', catalogApi)
 app.route('/api/cart', cartApi)
 app.route('/api/auth', authApi)
