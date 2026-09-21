@@ -1,0 +1,4 @@
+/* NaijaPay — minimal overrides. Most styling is Tailwind utility classes inline in naijapay.tsx. */
+#naijapay-body { -webkit-font-smoothing: antialiased; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }

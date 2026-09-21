@@ -46,6 +46,7 @@ import { checkoutPage, checkoutCallbackPage } from './pages/checkout'
 import { loginPage, registerPage } from './pages/auth'
 import { ordersListPage, orderDetailPage } from './pages/orders'
 import { walletPage } from './pages/wallet'
+import { naijapayPage } from './pages/naijapay'
 import { wishlistPage } from './pages/wishlist'
 import { addressesPage } from './pages/addresses'
 import { ecosystemPage } from './pages/ecosystem'
@@ -184,6 +185,16 @@ app.get('/register', registerPage)
 app.get('/orders', requireAuthPage, ordersListPage)
 app.get('/orders/:orderNumber', requireAuthPage, orderDetailPage)
 app.get('/wallet', requireAuthPage, walletPage)
+// /naijapay — Phase 1 production rebrand of the wallet experience (see
+// src/pages/naijapay.tsx header comment). Built ALONGSIDE /wallet, not as a
+// replacement: /wallet above is intentionally untouched. Only real wallet
+// data (src/lib/naijapay-experience.ts -> wallet_ledger/wallet_accounts) is
+// rendered; every reference-image feature without real backend support
+// (Pending/Reserved/Rewards/Cashback/Cards/Business Wallet/etc.) is rendered
+// disabled with a "Coming Soon" badge. Do not cut over /wallet to this route
+// until full QA (dev/integration/financial/mobile/security/prod smoke test)
+// has explicitly been approved.
+app.get('/naijapay', requireAuthPage, naijapayPage)
 app.get('/account', requireAuthPage, accountPage)
 app.get('/account/wishlist', requireAuthPage, wishlistPage)
 app.get('/account/addresses', requireAuthPage, addressesPage)
