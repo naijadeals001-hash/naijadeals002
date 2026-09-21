@@ -249,7 +249,15 @@ export async function naijapayPage(c: Context<AppEnv>) {
               </div>
 
               {/* ================= PRIMARY WALLET CARD + BALANCE PANEL ================= */}
-              <div class="grid dt:grid-cols-[1fr_320px] gap-4 mb-5">
+              {/* QA fix (visual-qa pass): previously jumped straight from a
+                  single mobile column to the dt:1440px 2-col split, so at
+                  1024px (a real, common tablet width) the wallet-info panel
+                  stacked BELOW the wallet card, wasting ~950px of available
+                  tablet width. lg: (1024px, Tailwind's standard breakpoint,
+                  already available, simply unused before) now gives 1024px
+                  its own deliberately-tuned 2-col split (narrower info panel
+                  than desktop's 320px, since tablet has less room). */}
+              <div class="grid lg:grid-cols-[1fr_280px] dt:grid-cols-[1fr_320px] gap-4 mb-5">
                 {/* ---- Wallet card (REAL balance) ---- */}
                 <div class="relative overflow-hidden rounded-2xl bg-gradient-to-br from-npPrimaryDark via-npPrimary to-npDark text-white p-5 dt:p-6">
                   <div class="absolute -right-6 -bottom-10 text-npGold" style="width:220px;height:220px">
@@ -272,15 +280,24 @@ export async function naijapayPage(c: Context<AppEnv>) {
                     <p class="text-[30px] dt:text-[34px] font-bold mb-4" id="np-balance-display" data-real-balance={formatNaira(snapshot.available_balance_kobo)}>
                       {formatNaira(snapshot.available_balance_kobo)}
                     </p>
-                    <div class="flex items-center gap-2 mb-4 flex-wrap">
-                      <button type="button" id="np-add-money-btn" class="flex items-center gap-1.5 bg-white text-npPrimaryDark font-bold text-[12.5px] rounded-lg px-4 py-2">
-                        <span class="material-symbols-outlined text-[16px]">add</span>Add Money
+                    {/* QA fix (visual-qa pass): Add Money is the ONLY real
+                        action here — it previously rendered as one of three
+                        equal-weight pills that wrapped to 3 stacked lines on
+                        mobile, letting two disabled Coming Soon buttons visually
+                        compete with the one thing a user can actually do. Add
+                        Money is now a full-width, unmistakably primary CTA;
+                        Send Money/Withdraw are demoted to a smaller, muted,
+                        side-by-side secondary row underneath — present (so the
+                        roadmap is still visible), but never competing. */}
+                    <button type="button" id="np-add-money-btn" class="w-full flex items-center justify-center gap-1.5 bg-white text-npPrimaryDark font-bold text-[13.5px] rounded-lg px-4 py-2.5 mb-2 hover:bg-white/90 transition">
+                      <span class="material-symbols-outlined text-[18px]">add</span>Add Money
+                    </button>
+                    <div class="grid grid-cols-2 gap-2 mb-4">
+                      <button type="button" disabled class="flex items-center justify-center gap-1 bg-white/5 text-white/40 font-medium text-[11px] rounded-lg px-2 py-1.5 cursor-not-allowed" title="Send Money — coming soon">
+                        <span class="material-symbols-outlined text-[13px]">send</span>Send<ComingSoonBadge />
                       </button>
-                      <button type="button" disabled class="flex items-center gap-1.5 bg-white/10 text-white/50 font-semibold text-[12.5px] rounded-lg px-4 py-2 cursor-not-allowed" title="Send Money — coming soon">
-                        <span class="material-symbols-outlined text-[16px]">send</span>Send Money<ComingSoonBadge />
-                      </button>
-                      <button type="button" disabled class="flex items-center gap-1.5 bg-white/10 text-white/50 font-semibold text-[12.5px] rounded-lg px-4 py-2 cursor-not-allowed" title="Withdraw — coming soon">
-                        <span class="material-symbols-outlined text-[16px]">account_balance</span>Withdraw<ComingSoonBadge />
+                      <button type="button" disabled class="flex items-center justify-center gap-1 bg-white/5 text-white/40 font-medium text-[11px] rounded-lg px-2 py-1.5 cursor-not-allowed" title="Withdraw — coming soon">
+                        <span class="material-symbols-outlined text-[13px]">account_balance</span>Withdraw<ComingSoonBadge />
                       </button>
                     </div>
                     <div class="flex items-center gap-1.5 text-[10.5px] text-white/50">
@@ -327,7 +344,7 @@ export async function naijapayPage(c: Context<AppEnv>) {
               {/* ================= QUICK ACTIONS ================= */}
               <div class="bg-white border border-gray-100 rounded-2xl p-4 mb-5">
                 <p class="text-[12.5px] font-bold text-gray-800 mb-3">Quick Actions</p>
-                <div class="grid grid-cols-3 dt:grid-cols-6 gap-2.5">
+                <div class="grid grid-cols-3 lg:grid-cols-6 gap-2.5">
                   <button type="button" id="np-quick-add-btn" class="flex flex-col items-center gap-1.5 bg-npIvory border border-gray-100 rounded-xl p-3 hover:shadow-sm transition">
                     <span class="material-symbols-outlined text-npPrimary text-[20px]">add_circle</span>
                     <span class="text-[11px] font-medium text-gray-700">Top Up</span>
@@ -352,9 +369,21 @@ export async function naijapayPage(c: Context<AppEnv>) {
               </div>
 
               {/* ================= TRANSACTIONS + FINANCIAL ACTIVITY ================= */}
-              <div class="grid dt:grid-cols-[1fr_380px] gap-4 mb-5">
+              {/* QA fix (visual-qa pass): same tablet gap as the wallet-card
+                  grid above — transactions and the Financial Activity chart
+                  now sit side-by-side from 1024px up (narrower chart column
+                  than desktop's 380px) instead of stacking full-width and
+                  leaving the chart card's height mismatched with the much
+                  taller transaction list beneath it. */}
+              <div class="grid lg:grid-cols-[1fr_300px] dt:grid-cols-[1fr_380px] gap-4 mb-5">
                 {/* ---- Recent transactions (REAL wallet_ledger) ---- */}
-                <div class="bg-white border border-gray-100 rounded-2xl p-4 dt:p-5" id="transactions">
+                {/* QA fix (visual-qa pass): h-full on both grid-row siblings
+                    below forces them to genuinely match height at lg:/dt: —
+                    the reference screenshot showed the Financial Activity
+                    card visibly shorter than this 8-row transaction list,
+                    leaving dead ivory-background space beneath it before the
+                    Africa banner. */}
+                <div class="h-full bg-white border border-gray-100 rounded-2xl p-4 dt:p-5" id="transactions">
                   <div class="flex items-center justify-between mb-3">
                     <p class="text-[13px] font-bold text-gray-800">Recent Transactions</p>
                     <a href="/wallet" class="text-[11.5px] font-semibold text-npPrimary">See all</a>
@@ -384,7 +413,7 @@ export async function naijapayPage(c: Context<AppEnv>) {
                 </div>
 
                 {/* ---- Financial Activity chart (REAL money in/out, no fabricated Fees/Refunds series) ---- */}
-                <div class="bg-white border border-gray-100 rounded-2xl p-4 dt:p-5">
+                <div class="h-full flex flex-col bg-white border border-gray-100 rounded-2xl p-4 dt:p-5">
                   <div class="flex items-center justify-between mb-1">
                     <p class="text-[13px] font-bold text-gray-800">Financial Activity</p>
                     <span class="text-[11px] text-gray-400">Last 30 Days</span>
@@ -396,7 +425,7 @@ export async function naijapayPage(c: Context<AppEnv>) {
                   {snapshot.money_flow.length === 0 ? (
                     <p class="text-sm text-gray-400 text-center py-10">No activity in the last 30 days.</p>
                   ) : (
-                    <div style="height:180px">
+                    <div class="flex-1 min-h-[180px]">
                       <canvas id="np-activity-chart"></canvas>
                     </div>
                   )}
@@ -421,7 +450,7 @@ export async function naijapayPage(c: Context<AppEnv>) {
               <div class="bg-white border border-gray-100 rounded-2xl p-4 dt:p-5 mb-5">
                 <p class="text-[13px] font-bold text-gray-800 mb-1">Coming to NaijaPay <ComingSoonBadge /></p>
                 <p class="text-[11.5px] text-gray-500 mb-3">These are on the roadmap. They are not live yet — we'd rather tell you honestly than fake them.</p>
-                <div class="grid sm:grid-cols-2 dt:grid-cols-4 gap-2.5">
+                <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
                   {[
                     { label: 'Send Money (P2P)', icon: 'send', desc: 'Transfer to other NaijaDeals users' },
                     { label: 'Withdraw to Bank', icon: 'account_balance', desc: 'Cash out to your bank account' },
@@ -450,7 +479,7 @@ export async function naijapayPage(c: Context<AppEnv>) {
                   <a href="/" class="hidden dt:flex items-center gap-1 bg-npPrimary text-white text-[11.5px] font-semibold rounded-full px-3.5 py-1.5">Start Exploring <span class="material-symbols-outlined text-[14px]">arrow_forward</span></a>
                 </div>
                 <p class="text-[11px] text-gray-400 mb-3">Same wallet. Use it across every NaijaDeals service.</p>
-                <div class="flex md:grid overflow-x-auto md:overflow-visible no-scrollbar gap-2.5 md:grid-cols-4 dt:grid-cols-8 -mx-1 px-1">
+                <div class="flex md:grid overflow-x-auto md:overflow-visible no-scrollbar gap-2.5 md:grid-cols-4 lg:grid-cols-6 dt:grid-cols-8 -mx-1 px-1">
                   {ecosystemLinks.map((link) => (
                     <a href={link.href} class="flex flex-col items-center text-center gap-1.5 bg-npIvory border border-gray-100 rounded-xl p-3 hover:shadow-md hover:-translate-y-0.5 transition shrink-0 w-[84px] md:w-auto">
                       <span class="material-symbols-outlined text-npPrimary text-[22px]">{link.icon}</span>
