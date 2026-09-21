@@ -88,15 +88,15 @@ const DEMO_RECOMMENDATIONS: RecommendationCard[] = [
 ]
 
 const SHORTCUT_CARDS = [
-  { key: 'shop', label: 'Shop', sub: 'Products & electronics', icon: 'shopping_bag', color: 'text-emerald-600', href: '/shop', live: true },
-  { key: 'fresh', label: 'Fresh', sub: 'Groceries & farm produce', icon: 'nutrition', color: 'text-red-500', href: '/fresh', live: false },
-  { key: 'eats', label: 'Eats', sub: 'Restaurants & dining', icon: 'ramen_dining', color: 'text-orange-500', href: '/eats', live: false },
-  { key: 'gigs', label: 'Gigs', sub: 'Services & professionals', icon: 'construction', color: 'text-amber-500', href: '/gigs', live: true },
-  { key: 'stay', label: 'Stay', sub: 'Hotels & short stays', icon: 'bed', color: 'text-yellow-700', href: '/stay', live: true },
-  { key: 'drive', label: 'Drive', sub: 'Rides & transport', icon: 'directions_car', color: 'text-slate-800', href: '/drive', live: false },
-  { key: 'send', label: 'Send', sub: 'Deliveries & logistics', icon: 'local_shipping', color: 'text-orange-600', href: '/send', live: false },
-  { key: 'stream', label: 'Stream', sub: 'Movies, music & more', icon: 'headphones', color: 'text-gray-900', href: '/stream', live: false },
-  { key: 'more', label: 'More', sub: 'All NaijaDeals services', icon: 'apps', color: 'text-teal-600', href: '/', live: true },
+  { key: 'shop', label: 'Shop', sub: 'Products & electronics', icon: 'shopping_bag', color: 'text-emerald-600', bg: 'bg-emerald-50', href: '/shop', live: true },
+  { key: 'fresh', label: 'Fresh', sub: 'Groceries & farm produce', icon: 'nutrition', color: 'text-red-500', bg: 'bg-red-50', href: '/fresh', live: false },
+  { key: 'eats', label: 'Eats', sub: 'Restaurants & dining', icon: 'ramen_dining', color: 'text-orange-500', bg: 'bg-orange-50', href: '/eats', live: false },
+  { key: 'gigs', label: 'Gigs', sub: 'Services & professionals', icon: 'construction', color: 'text-amber-500', bg: 'bg-amber-50', href: '/gigs', live: true },
+  { key: 'stay', label: 'Stay', sub: 'Hotels & short stays', icon: 'bed', color: 'text-yellow-700', bg: 'bg-yellow-50', href: '/stay', live: true },
+  { key: 'drive', label: 'Drive', sub: 'Rides & transport', icon: 'directions_car', color: 'text-slate-700', bg: 'bg-slate-100', href: '/drive', live: false },
+  { key: 'send', label: 'Send', sub: 'Deliveries & logistics', icon: 'local_shipping', color: 'text-orange-600', bg: 'bg-orange-50', href: '/send', live: false },
+  { key: 'stream', label: 'Stream', sub: 'Movies, music & more', icon: 'headphones', color: 'text-gray-800', bg: 'bg-gray-100', href: '/stream', live: false },
+  { key: 'more', label: 'More', sub: 'All NaijaDeals services', icon: 'apps', color: 'text-teal-600', bg: 'bg-teal-50', href: '/', live: true },
 ]
 
 const QUICK_PROMPTS = [
@@ -194,16 +194,25 @@ export async function auraPage(c: Context<AppEnv>) {
 
             <div class="text-[10px] font-semibold tracking-wider text-[#6B8A76] uppercase px-3 mb-1.5 mt-2">NaijaDeals Ecosystem</div>
             <nav class="flex flex-col gap-0.5 mb-5 text-[13px]">
-              <a href="/shop" class="flex items-center gap-3 px-3 py-2 rounded-lg text-gray-200 hover:bg-white/5 transition"><span class="material-symbols-outlined text-[18px] text-emerald-400">storefront</span>NaijaShop</a>
-              <a href="/fresh" class="flex items-center gap-3 px-3 py-2 rounded-lg text-gray-200 hover:bg-white/5 transition"><span class="material-symbols-outlined text-[18px] text-red-400">nutrition</span>NaijaFresh</a>
-              <a href="/eats" class="flex items-center gap-3 px-3 py-2 rounded-lg text-gray-200 hover:bg-white/5 transition"><span class="material-symbols-outlined text-[18px] text-orange-400">ramen_dining</span>NaijaEats</a>
-              <a href="/gigs" class="flex items-center gap-3 px-3 py-2 rounded-lg text-gray-200 hover:bg-white/5 transition"><span class="material-symbols-outlined text-[18px] text-amber-400">construction</span>NaijaGigs</a>
-              <a href="/" class="flex items-center gap-3 px-3 py-2 rounded-lg text-gray-200 hover:bg-white/5 transition"><span class="material-symbols-outlined text-[18px] text-lime-400">cottage</span>NaijaHome</a>
-              <a href="/stay" class="flex items-center gap-3 px-3 py-2 rounded-lg text-gray-200 hover:bg-white/5 transition"><span class="material-symbols-outlined text-[18px] text-yellow-500">bed</span>NaijaStay</a>
-              <a href="/drive" class="flex items-center gap-3 px-3 py-2 rounded-lg text-gray-200 hover:bg-white/5 transition"><span class="material-symbols-outlined text-[18px] text-slate-300">directions_car</span>NaijaDrive</a>
-              <a href="/send" class="flex items-center gap-3 px-3 py-2 rounded-lg text-gray-200 hover:bg-white/5 transition"><span class="material-symbols-outlined text-[18px] text-orange-300">local_shipping</span>NaijaSend</a>
-              <a href="/stream" class="flex items-center gap-3 px-3 py-2 rounded-lg text-gray-200 hover:bg-white/5 transition"><span class="material-symbols-outlined text-[18px] text-gray-300">headphones</span>NaijaStream</a>
-              <a href="/" class="flex items-center gap-3 px-3 py-2 rounded-lg text-gray-200 hover:bg-white/5 transition"><span class="material-symbols-outlined text-[18px] text-teal-300">apps</span>More Services</a>
+              {[
+                { href: '/shop', label: 'NaijaShop', icon: 'storefront', bg: 'bg-emerald-500' },
+                { href: '/fresh', label: 'NaijaFresh', icon: 'nutrition', bg: 'bg-red-500' },
+                { href: '/eats', label: 'NaijaEats', icon: 'ramen_dining', bg: 'bg-orange-500' },
+                { href: '/gigs', label: 'NaijaGigs', icon: 'construction', bg: 'bg-amber-500' },
+                { href: '/', label: 'NaijaHome', icon: 'cottage', bg: 'bg-lime-600' },
+                { href: '/stay', label: 'NaijaStay', icon: 'bed', bg: 'bg-yellow-600' },
+                { href: '/drive', label: 'NaijaDrive', icon: 'directions_car', bg: 'bg-slate-500' },
+                { href: '/send', label: 'NaijaSend', icon: 'local_shipping', bg: 'bg-orange-600' },
+                { href: '/stream', label: 'NaijaStream', icon: 'headphones', bg: 'bg-gray-500' },
+                { href: '/', label: 'More Services', icon: 'apps', bg: 'bg-teal-600' },
+              ].map((eco) => (
+                <a href={eco.href} class="flex items-center gap-3 px-3 py-2 rounded-lg text-gray-200 hover:bg-white/5 transition">
+                  <span class={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${eco.bg}`}>
+                    <span class="material-symbols-outlined text-[13px] text-white">{eco.icon}</span>
+                  </span>
+                  {eco.label}
+                </a>
+              ))}
             </nav>
 
             <div class="text-[10px] font-semibold tracking-wider text-[#6B8A76] uppercase px-3 mb-1.5 mt-2">My Account</div>
@@ -251,15 +260,15 @@ export async function auraPage(c: Context<AppEnv>) {
                   )}
                 </button>
                 {user ? (
-                  <a href="/account" class="hidden md:flex items-center gap-2 shrink-0">
-                    <span class="w-8 h-8 rounded-full bg-gradient-to-br from-amber-700 to-amber-500 text-white text-[12px] font-bold flex items-center justify-center">
+                  <a href="/account" class="hidden md:flex items-center gap-2 shrink-0 max-w-[180px]">
+                    <span class="w-8 h-8 rounded-full bg-gradient-to-br from-amber-700 to-amber-500 text-white text-[12px] font-bold flex items-center justify-center shrink-0">
                       {user.name.split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase()}
                     </span>
-                    <span class="flex flex-col leading-tight">
-                      <span class="text-[12.5px] font-semibold text-gray-800">{user.name}</span>
+                    <span class="flex flex-col leading-tight min-w-0">
+                      <span class="text-[12.5px] font-semibold text-gray-800 truncate">{user.name}</span>
                       <span class="text-[10px] text-gray-400">Personal Account</span>
                     </span>
-                    <span class="material-symbols-outlined text-gray-400 text-[16px]">expand_more</span>
+                    <span class="material-symbols-outlined text-gray-400 text-[16px] shrink-0">expand_more</span>
                   </a>
                 ) : (
                   <a href="/login?next=/aura" class="hidden md:flex items-center gap-1.5 shrink-0 text-[12.5px] font-semibold text-auraPrimary bg-auraPrimary/10 rounded-full px-3.5 py-2">
@@ -273,8 +282,8 @@ export async function auraPage(c: Context<AppEnv>) {
               </div>
 
               {/* ---- Hero ---- */}
-              <section class="relative rounded-2xl overflow-hidden mb-5" style="height: 320px;">
-                <img src="/static/aura/hero-woman.jpg" alt="" class="absolute inset-0 w-full h-full object-cover" />
+              <section class="relative rounded-2xl overflow-hidden" style="height: 320px;">
+                <img src="/static/aura/hero-woman.jpg" alt="" class="absolute inset-0 w-full h-full object-cover" style="object-position: 22% center;" />
                 <div class="absolute inset-0" style="background: linear-gradient(90deg, rgba(2,31,19,0.92) 0%, rgba(2,31,19,0.55) 45%, rgba(2,31,19,0.15) 75%, rgba(2,31,19,0.05) 100%);"></div>
                 <div class="absolute top-6 right-6 text-right hidden md:block" style="transform: rotate(-4deg);">
                   <p class="font-serif italic text-auraGold text-[15px] leading-tight drop-shadow" style="text-shadow: 0 1px 3px rgba(0,0,0,0.5)">A Smarter Nigeria<br/>A Brighter Africa</p>
@@ -304,7 +313,7 @@ export async function auraPage(c: Context<AppEnv>) {
               {/* ---- Aura command bar ---- */}
               <form
                 id="aura-command-form"
-                class="flex items-center gap-3 bg-white rounded-full shadow-md border border-gray-100 pl-2 pr-2 py-2 mb-4 -mt-2 relative z-10"
+                class="flex items-center gap-3 bg-white rounded-full shadow-lg border border-gray-100 pl-2 pr-2 py-2.5 mb-4 -mt-7 relative z-10 mx-4"
                 data-aura-demo-mode="true"
               >
                 <span class="w-9 h-9 rounded-full bg-auraPrimary/10 flex items-center justify-center shrink-0">
@@ -347,7 +356,9 @@ export async function auraPage(c: Context<AppEnv>) {
               <div class="grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-9 gap-2.5 mb-7">
                 {SHORTCUT_CARDS.map((s) => (
                   <a href={s.href} class="flex flex-col items-center text-center gap-1.5 bg-white border border-gray-100 rounded-xl p-3 hover:shadow-md hover:-translate-y-0.5 transition">
-                    <span class={`material-symbols-outlined text-[22px] ${s.color}`}>{s.icon}</span>
+                    <span class={`w-10 h-10 rounded-full flex items-center justify-center ${s.bg}`}>
+                      <span class={`material-symbols-outlined text-[20px] ${s.color}`}>{s.icon}</span>
+                    </span>
                     <span class="text-[11.5px] font-semibold text-gray-800 leading-none">{s.label}{!s.live && <DemoBadge label="SOON" />}</span>
                     <span class="text-[9.5px] text-gray-400 leading-tight">{s.sub}</span>
                   </a>
