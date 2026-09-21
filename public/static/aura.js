@@ -113,5 +113,68 @@
         }
       });
     }
+
+    // ---- Mobile/tablet "Chat with Aura" bottom sheet ----
+    // Phase 2 responsive: the same Aura chat surface as the desktop floating
+    // panel above, just presented as a slide-up sheet on md..<dt widths
+    // (opened from the bottom-nav Aura pill on mobile, or the FAB on tablet).
+    var chatSheet = document.getElementById('aura-chat-sheet');
+    var chatSheetBackdrop = document.getElementById('aura-chat-sheet-backdrop');
+    var chatSheetOpenTriggers = [
+      document.getElementById('aura-bottom-nav-aura-btn'),
+      document.getElementById('aura-chat-fab'),
+    ].filter(Boolean);
+    var chatSheetCloseBtn = document.getElementById('aura-chat-sheet-close-btn');
+    var chatSheetInput = document.getElementById('aura-chat-sheet-input');
+    var chatSheetSendBtn = document.getElementById('aura-chat-sheet-send-btn');
+
+    function openChatSheet() {
+      if (!chatSheet) return;
+      chatSheet.classList.remove('hidden');
+      if (chatSheetBackdrop) chatSheetBackdrop.classList.remove('hidden');
+      document.body.style.overflow = 'hidden';
+    }
+    function closeChatSheet() {
+      if (!chatSheet) return;
+      chatSheet.classList.add('hidden');
+      if (chatSheetBackdrop) chatSheetBackdrop.classList.add('hidden');
+      document.body.style.overflow = '';
+    }
+
+    chatSheetOpenTriggers.forEach(function (btn) {
+      btn.addEventListener('click', openChatSheet);
+    });
+    if (chatSheetCloseBtn) chatSheetCloseBtn.addEventListener('click', closeChatSheet);
+    if (chatSheetBackdrop) chatSheetBackdrop.addEventListener('click', closeChatSheet);
+
+    document.querySelectorAll('.aura-chat-suggestion-sheet').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        if (chatSheetInput) {
+          chatSheetInput.value = btn.getAttribute('data-prompt') || '';
+          chatSheetInput.focus();
+        }
+      });
+    });
+
+    if (chatSheetSendBtn && chatSheetInput) {
+      var chatSheetNotice = ensureDemoNotice(chatSheetInput.closest('div'), 'chat-sheet');
+      chatSheetSendBtn.addEventListener('click', function () {
+        showDemoResponse(chatSheetNotice, chatSheetInput.value.trim());
+      });
+      chatSheetInput.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          showDemoResponse(chatSheetNotice, chatSheetInput.value.trim());
+        }
+      });
+    }
+
+    // Safety net: if the viewport crosses back to desktop (>=1440px) while
+    // the sheet is open (e.g. rotating a tablet or resizing a window), close
+    // it so it never gets stuck open behind/alongside the desktop floating
+    // chat panel.
+    window.addEventListener('resize', function () {
+      if (window.innerWidth >= 1440) closeChatSheet();
+    });
   });
 })();

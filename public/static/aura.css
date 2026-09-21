@@ -1,16 +1,13 @@
-/* Aura Luxe — Phase 1 desktop styles.
+/* Aura Luxe — Phase 1 (desktop) + Phase 2 (responsive) styles.
  *
  * Kept minimal and additive to the Tailwind CDN utility classes already
  * covering ~95% of this page's styling in src/pages/aura.tsx. Only things
  * that genuinely can't be expressed as a Tailwind utility (scrollbar
- * hiding, a couple of custom breakpoints for the responsive Phase 2
- * groundwork) live here.
- *
- * PHASE 2 NOTE: the .aura-* class names below are deliberately generic
- * (not "-desktop" suffixed) so Phase 2's tablet/mobile media queries can be
- * ADDED to this same file without renaming anything already in aura.tsx —
- * per the directive's "structure CSS so Phase 2 doesn't require a rebuild"
- * requirement (Section 12).
+ * hiding, safe-area insets) live here. All the actual responsive layout
+ * logic (sidebar rail vs. full, hero/command-bar reflow, bottom nav,
+ * chat sheet vs. floating panel) lives in aura.tsx as Tailwind utilities
+ * gated behind the `dt:` (1440px) breakpoint added to that page's inline
+ * tailwind.config — see the PROVENANCE comment at the top of aura.tsx.
  */
 
 .no-scrollbar::-webkit-scrollbar {
