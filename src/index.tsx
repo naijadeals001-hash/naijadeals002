@@ -50,6 +50,7 @@ import { wishlistPage } from './pages/wishlist'
 import { addressesPage } from './pages/addresses'
 import { ecosystemPage } from './pages/ecosystem'
 import { ecosystemPreviewPage } from './pages/ecosystem-preview'
+import { auraPage } from './pages/aura'
 import { helpPage } from './pages/help'
 import { aboutPage, careersPage, termsPage, privacyPage, sellerTermsPage } from './pages/company'
 import { sellerGatewayPage, sellerOnboardingPage } from './pages/seller'
@@ -211,7 +212,17 @@ app.get('/eats', ecosystemPreviewPage)
 app.get('/drive', ecosystemPreviewPage)
 app.get('/send', ecosystemPreviewPage)
 app.get('/stream', ecosystemPreviewPage)
-app.get('/aura', ecosystemPreviewPage)
+
+// ---------- Aura AI — Aura Experience Engine (Phase 1: Aura Luxe) ----------
+// /aura used to route to the static ecosystemPreviewPage placeholder above.
+// It now renders the real Aura Luxe desktop experience (src/pages/aura.tsx),
+// resolved via the Aura Experience Engine (src/lib/aura-experience.ts,
+// migration 0074). Deliberately NOT behind requireAuthPage — a guest can
+// browse the Aura Luxe shell (shortcuts, hero, recommendations) exactly like
+// /shop's guest-browsable pattern; only the account-specific right panel
+// (wallet/orders/bookings/deliveries) is gated inside the page itself on
+// `c.get('user')` being present.
+app.get('/aura', auraPage)
 
 // ---------- NaijaGigs — real UI on top of the pre-existing Service Engine 2.0 ----------
 // /gigs used to route to the static ecosystemPreviewPage placeholder above.

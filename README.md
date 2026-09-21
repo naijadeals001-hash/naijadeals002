@@ -169,6 +169,65 @@ live in production.** The sections above are historical/Phase-1 and are
 increasingly stale — do not trust "Not Yet Implemented" or "Open Questions"
 above without cross-checking here first.
 
+### Aura AI — Aura Luxe Desktop + Aura Experience Engine, Phase 1 (2026-09-21)
+- **What shipped**: `/aura` now renders **Aura Luxe** — a full desktop
+  reproduction of Pat's supplied reference screenshot (3-column layout: dark
+  emerald sidebar, hero + command bar + shortcuts + recommendations center
+  column, real-data right panel + floating "Chat with Aura" panel). Replaces
+  the previous `ecosystemPreviewPage` "coming soon" placeholder for this one
+  route only (the other 7 preview routes — /fresh, /eats, /drive, /send,
+  /stream — are unaffected).
+- **Aura Experience Engine (architecture, not just a page)**: migration
+  `0074_aura_experience_engine.sql` adds `aura_experiences` (registry: slug,
+  name, tagline, theme tokens, status, is_default — seeded with `classic`
+  (draft, default), `luxe` (active — this phase), `pulse` (draft), `executive`
+  (draft)) and `aura_experience_assignments` (per-user explicit override,
+  `UNIQUE(user_id)`, FK to `aura_experiences`). `src/lib/aura-experience.ts`
+  implements `resolveAuraExperience()` — the deterministic resolver
+  (Identity → explicit Assignment → default fallback), with documented
+  no-op slots for the account-type/preference/A-B-test/time-of-day links
+  Phase 4 will add. Only Aura Luxe has a real visual body
+  (`src/pages/aura.tsx`); Classic/Pulse/Executive exist today only as
+  configuration rows, per Pat's explicit "architect for multiple Auras now,
+  build their visuals later" directive — adding a new experience's visuals
+  later is a new body component + one branch in `aura.tsx`, never a rebuild
+  of the resolver or route.
+- **Real data, not fabricated**: `getAuraDashboardSnapshot()`
+  (`src/lib/aura-experience.ts`) computes wallet balance (`getWalletBalance`),
+  active orders count, upcoming bookings (`getBookingsForCustomer`), ongoing
+  NaijaSend deliveries, saved items, and unread notifications — all live D1
+  queries against the SAME tables/helpers every other authenticated page
+  already reads. Verified end-to-end against a real seeded account (wallet
+  ₦300, 3 processing orders, 4 unread notifications) — right panel and
+  wallet card render the actual figures.
+- **Explicitly labeled `[DEMO]`** (Section 8 discipline): "Recommended for
+  You" cards, "Trending on NaijaDeals", and the Aura command bar / floating
+  chat panel's response text — none of these have a backend yet (recommendation
+  engine + Aura's actual AI brain are both Phase 3). The command bar and chat
+  panel are fully built, production-quality UI (`public/static/aura.js`)
+  that responds honestly with "Aura isn't connected yet" instead of any
+  fabricated action/result — no fake "order placed" or invented availability
+  anywhere.
+- **Hero imagery**: original AI-generated assets (NOT scraped stock),
+  matching the reference's creative direction — `public/static/aura/
+  hero-woman.jpg` (Nigerian woman, gele headwrap, gold jewelry, Lagos
+  skyline at golden hour; model `nano-banana-pro`), `discover-africa.jpg`
+  (promo landscape; model `nano-banana-2-flash-lite`), and `africa-orb.png`
+  (transparent glowing African-continent mark reused for the logo/orb/chat
+  panel/promo card, background-removed via `fal-bria-rmbg`). "Recommended
+  for You" thumbnails reuse REAL existing product/vendor photography already
+  in `public/static/products/`, `vendor-photos/`, `stay/` rather than
+  fabricating new stock imagery for demo-only cards.
+- **Not yet done (explicitly deferred per Pat's own phasing)**: Phase 2
+  (tablet/mobile responsive — CSS is structured for it in `aura.css` but not
+  built), Phase 3 (real Aura AI backend + tool-calling), Phase 4 (activating
+  Classic/Pulse/Executive visuals + admin Aura Experience Manager + A/B
+  testing/rollout). Explicit visual QA against the reference screenshot
+  (Pat's Section 19 checklist) has NOT yet been performed as a dedicated
+  pass — recommended as the immediate next step before Phase 2 begins.
+  Not yet deployed to production (local dev + migration only, per "no
+  deploy yet" instruction); not yet applied to the production D1 database.
+
 ### Unit E Phase A / Stage 1 — Catalog Expansion CLOSED (2026-09-19)
 - **What shipped**: merged the 59 real-photographed products from the
   abandoned Phase 1a taxonomy into the live catalog, alongside their full
