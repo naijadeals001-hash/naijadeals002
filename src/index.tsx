@@ -31,6 +31,7 @@ import { notificationsApi } from './routes/api-notifications'
 import { bookingsApi } from './routes/api-bookings'
 import { logisticsApi } from './routes/api-logistics'
 import { apiControlCenterRoutes } from './routes/api-control-center'
+import { eatsApi } from './routes/api-eats'
 
 // SSR pages
 import { homePage } from './pages/home'
@@ -52,6 +53,16 @@ import { addressesPage } from './pages/addresses'
 import { ecosystemPage } from './pages/ecosystem'
 import { ecosystemPreviewPage } from './pages/ecosystem-preview'
 import { freshHomePage, freshProductPage } from './pages/fresh'
+import {
+  eatsHomePage,
+  eatsRestaurantsPage,
+  eatsRestaurantProfilePage,
+  eatsItemPage,
+  eatsCartPage,
+  eatsCheckoutPage,
+  eatsOrderDetailPage,
+  eatsAccountOrdersPage
+} from './pages/eats'
 import { auraPage } from './pages/aura'
 import { helpPage } from './pages/help'
 import { aboutPage, careersPage, termsPage, privacyPage, sellerTermsPage } from './pages/company'
@@ -158,6 +169,10 @@ app.route('/api/notifications', notificationsApi)
 // on '*', then per-route requireControlCenterPermission), never by anything
 // mounted here.
 app.route('/api/control-center', apiControlCenterRoutes)
+// NaijaEats Phase 1 cart/checkout mutation API — see src/routes/api-eats.ts's own header
+// comment. Public GETs (cart read/add/update/remove); /checkout and /orders/*/cancel are
+// gated internally via `eatsApi.use('/checkout', requireAuth)` etc., not by anything here.
+app.route('/api/eats', eatsApi)
 
 
 // ---------- SSR pages ----------
@@ -231,10 +246,31 @@ app.get('/affiliate', affiliatePage)
 // these from coming_soon -> live later is a data change (and, when a real
 // engine exists, simply repointing that one line to a different handler),
 // never a rebuild of this list.
-app.get('/eats', ecosystemPreviewPage)
 app.get('/drive', ecosystemPreviewPage)
 app.get('/send', ecosystemPreviewPage)
 app.get('/stream', ecosystemPreviewPage)
+
+// ---------- NaijaEats — real UI on top of the restaurants/menus schema (migrations 0078-0081) ----------
+// /eats used to route to the static ecosystemPreviewPage placeholder above.
+// Phase 1 (Pat's explicit authorization): homepage, discovery/search,
+// restaurant profile, item detail, cart, checkout, order detail, account
+// orders — customer-facing ordering only. Vendor dashboard, reservations,
+// catering, admin console, Aura AI are explicitly NOT built here (a future
+// phase). Dashboard/order routes require auth (an order belongs to a
+// specific customer); browse/profile/item routes are public, mirroring
+// /fresh's and /gigs' guest-browsable pattern — only checkout itself
+// requires sign-in. NOTE: ecosystem_verticals.eats.status remains
+// 'coming_soon' — this route is reachable directly but intentionally not
+// yet promoted in the header/footer ecosystem nav strip, exactly matching
+// /fresh's and /gigs' own "coming_soon but real" precedent.
+app.get('/eats', eatsHomePage)
+app.get('/eats/restaurants', eatsRestaurantsPage)
+app.get('/eats/restaurants/:slug', eatsRestaurantProfilePage)
+app.get('/eats/restaurants/:slug/item/:itemId', eatsItemPage)
+app.get('/eats/cart', eatsCartPage)
+app.get('/eats/checkout', requireAuthPage, eatsCheckoutPage)
+app.get('/eats/orders/:orderNumber', requireAuthPage, eatsOrderDetailPage)
+app.get('/eats/account/orders', requireAuthPage, eatsAccountOrdersPage)
 
 // ---------- NaijaFresh — real UI on top of the existing fresh-food(100) category tree ----------
 // /fresh used to route to the static ecosystemPreviewPage placeholder above.

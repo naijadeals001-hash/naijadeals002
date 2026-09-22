@@ -1698,3 +1698,200 @@ export interface CcAuditLogRow {
   success: number
   created_at: string
 }
+
+// ============================================================
+// NaijaEats — Phase 1 customer-facing ordering (migrations 0078-0081).
+// Restaurant/menu/cuisine/dish schema is 100% real (no fabricated columns
+// here) — see migrations/0078_naijaeats_taxonomy.sql (or equivalent) for the
+// authoritative CREATE TABLE statements this mirrors.
+// ============================================================
+
+export interface CuisineRow {
+  id: number
+  slug: string
+  name: string
+  region: string
+  description: string
+  icon: string | null
+  image_url: string | null
+  sort_order: number
+  created_at: string
+}
+
+export interface DishRow {
+  id: number
+  slug: string
+  name: string
+  cuisine_id: number
+  description: string
+  image_url: string | null
+  is_vegetarian: number
+  is_spicy: number
+  sort_order: number
+  created_at: string
+}
+
+/** A restaurant joined with its cuisine — the shape rendered on discovery/home rails and the profile header. */
+export interface RestaurantRow {
+  id: number
+  slug: string
+  owner_provider_profile_id: number
+  name: string
+  description: string
+  cuisine_id: number
+  cuisine_name?: string
+  cuisine_slug?: string
+  country_iso: string
+  city: string
+  address_line1: string | null
+  logo_url: string | null
+  cover_image_url: string | null
+  opening_time: string | null
+  closing_time: string | null
+  delivery_fee_kobo: number
+  min_order_kobo: number
+  avg_prep_minutes: number
+  delivery_zone_note: string | null
+  is_active: number
+  verification_status: 'pending' | 'verified' | 'rejected'
+  rating_avg: number
+  rating_count: number
+  created_at: string
+  updated_at: string
+  source_type: string
+}
+
+/** A menu item joined with its dish (for image/name fallback) and section — the shape rendered on the restaurant profile menu list and item detail page. */
+export interface MenuItemRow {
+  id: number
+  menu_section_id: number
+  restaurant_id: number
+  dish_id: number | null
+  name: string
+  description: string
+  image_url: string | null
+  /** Resolved image: menu_items.image_url if the restaurant has its own photo, else dishes.image_url — never a fabricated placeholder. */
+  resolved_image_url: string | null
+  base_price_kobo: number
+  is_available: number
+  is_vegetarian: number
+  is_spicy: number
+  prep_minutes: number | null
+  sort_order: number
+  created_at: string
+  updated_at: string
+  source_type: string
+  section_name?: string
+}
+
+export interface MenuSectionRow {
+  id: number
+  menu_id: number
+  name: string
+  sort_order: number
+  created_at: string
+}
+
+export interface MenuItemOptionGroupRow {
+  id: number
+  menu_item_id: number
+  name: string
+  is_required: number
+  min_select: number
+  max_select: number
+  sort_order: number
+}
+
+export interface MenuItemOptionRow {
+  id: number
+  option_group_id: number
+  name: string
+  price_delta_kobo: number
+  is_available: number
+  sort_order: number
+}
+
+/** A selection recorded in eats_cart_items.selected_options_json — one chosen option per entry, snapshotting name/price at add-to-cart time isn't needed here (that snapshot happens at ORDER time); this is the live, re-validatable selection shape. */
+export interface EatsSelectedOption {
+  option_group_id: number
+  option_id: number
+  name: string
+  price_delta_kobo: number
+}
+
+/** A cart item joined with its menu_item/dish/restaurant context — the shape rendered on /eats/cart. */
+export interface EatsCartItemRow {
+  id: number
+  cart_id: number
+  menu_item_id: number
+  restaurant_id: number
+  quantity: number
+  selected_options_json: string
+  special_instructions: string | null
+  created_at: string
+  // joined
+  name: string
+  image_url: string | null
+  base_price_kobo: number
+  is_available: number
+  restaurant_name: string
+  restaurant_slug: string
+  restaurant_delivery_fee_kobo: number
+  restaurant_min_order_kobo: number
+}
+
+export interface EatsOrderRow {
+  id: number
+  order_number: string
+  customer_user_id: number
+  restaurant_id: number
+  status: 'new' | 'accepted' | 'preparing' | 'ready' | 'handoff' | 'completed' | 'cancelled' | 'declined'
+  payment_status: 'unpaid' | 'escrow_held' | 'released' | 'refunded'
+  payment_provider: string | null
+  payment_reference: string | null
+  subtotal_kobo: number
+  delivery_fee_kobo: number
+  total_kobo: number
+  currency: string
+  shipping_name: string
+  shipping_phone: string
+  shipping_address: string
+  shipping_city: string
+  shipping_state: string
+  special_instructions: string | null
+  cancelled_reason: string | null
+  created_at: string
+  updated_at: string
+  // joined (optional)
+  restaurant_name?: string
+  restaurant_slug?: string
+  restaurant_logo_url?: string | null
+}
+
+export interface EatsOrderItemRow {
+  id: number
+  order_id: number
+  menu_item_id: number
+  name_snapshot: string
+  image_snapshot: string | null
+  unit_price_kobo: number
+  quantity: number
+  line_total_kobo: number
+  special_instructions: string | null
+}
+
+export interface EatsOrderItemOptionRow {
+  id: number
+  order_item_id: number
+  option_name_snapshot: string
+  price_delta_kobo_snapshot: number
+}
+
+export interface EatsOrderStatusEventRow {
+  id: number
+  order_id: number
+  status: string
+  actor_user_id: number | null
+  note: string | null
+  created_at: string
+}
