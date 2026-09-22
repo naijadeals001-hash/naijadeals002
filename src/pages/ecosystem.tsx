@@ -19,6 +19,14 @@ const STATUS_BADGE: Record<string, { label: string; cls: string }> = {
   live: { label: 'Live now', cls: 'bg-primary-light text-primary-dark' }
 }
 
+// Live verticals get an action-oriented CTA per Pat's explicit copy;
+// everything still 'coming_soon'/'in_development'/'beta' keeps "Preview".
+const LIVE_CTA_LABEL: Record<string, string> = {
+  gigs: 'Explore NaijaGigs',
+  stay: 'Explore NaijaStay',
+  aura: 'Open Aura',
+}
+
 const ICON_BG: Record<string, string> = {
   green: 'bg-green-500', amber: 'bg-amber-500', blue: 'bg-blue-500', purple: 'bg-purple-500',
   slate: 'bg-slate-500', orange: 'bg-orange-500', red: 'bg-red-500', indigo: 'bg-indigo-500'
@@ -36,7 +44,7 @@ export async function ecosystemPage(c: Context<AppEnv>) {
           <span class="material-symbols-outlined text-4xl text-primary-fixed">workspace_premium</span>
           <h1 class="text-3xl lg:text-4xl font-bold mt-3">One account. One ecosystem.</h1>
           <p class="text-white/80 mt-3 max-w-xl mx-auto">
-            NaijaShop is live today. Fresh food, eats, gigs, stays, mobility, delivery, entertainment and AI are all coming — under the same NaijaDeals account and wallet.
+            NaijaShop, NaijaGigs, NaijaStay and Aura AI are live today. Fresh food, eats, mobility and entertainment are coming next — all under the same NaijaDeals account and wallet.
           </p>
         </div>
       </section>
@@ -62,9 +70,15 @@ export async function ecosystemPage(c: Context<AppEnv>) {
                 </span>
                 <h2 class="text-lg font-bold text-gray-800 mb-1">{v.name}</h2>
                 <p class="text-sm text-gray-500 mb-5 flex-1">{v.description}</p>
-                <a href={v.route} class="text-center bg-white border border-gray-300 text-gray-700 font-semibold py-2.5 rounded-lg hover:bg-gray-50 transition">
-                  Preview {v.name}
-                </a>
+                {v.status === 'live' ? (
+                  <a href={v.route} class="text-center bg-primary text-white font-semibold py-2.5 rounded-lg hover:bg-primary-dark transition">
+                    {LIVE_CTA_LABEL[v.slug] || `Explore ${v.name}`}
+                  </a>
+                ) : (
+                  <a href={v.route} class="text-center bg-white border border-gray-300 text-gray-700 font-semibold py-2.5 rounded-lg hover:bg-gray-50 transition">
+                    Preview {v.name}
+                  </a>
+                )}
               </div>
             )
           })}
@@ -72,7 +86,7 @@ export async function ecosystemPage(c: Context<AppEnv>) {
 
         <div class="mt-10 bg-primary-light rounded-xl p-6 flex flex-col md:flex-row items-center justify-between gap-4">
           <div>
-            <h3 class="font-bold text-primary-dark">Want early access to NaijaEats, NaijaGigs &amp; NaijaStay?</h3>
+            <h3 class="font-bold text-primary-dark">Want early access to NaijaFresh, NaijaEats &amp; more?</h3>
             <p class="text-sm text-gray-600 mt-1">Join the waitlist below and we'll let you know the moment each service launches in your city.</p>
           </div>
           <button

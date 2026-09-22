@@ -393,7 +393,6 @@ export async function auraPage(c: Context<AppEnv>) {
               <form
                 id="aura-command-form"
                 class="flex items-center gap-2 md:gap-3 bg-white rounded-full shadow-lg border border-gray-100 pl-2 pr-2 py-2.5 mb-4 relative z-10 md:-mt-7 md:mx-4"
-                data-aura-demo-mode="true"
               >
                 <span class="w-9 h-9 rounded-full bg-auraPrimary/10 flex items-center justify-center shrink-0">
                   <img src="/static/aura/africa-orb.png" alt="" class="w-6 h-6 object-contain" />
@@ -414,7 +413,7 @@ export async function auraPage(c: Context<AppEnv>) {
                 <button type="button" id="aura-location-btn" class="hidden sm:flex shrink-0 w-8 h-8 rounded-full items-center justify-center text-gray-400 hover:bg-gray-100" aria-label="Share location (prepared UI — not yet wired to a backend)">
                   <span class="material-symbols-outlined text-[19px]">location_on</span>
                 </button>
-                <button type="submit" id="aura-send-btn" class="shrink-0 w-9 h-9 rounded-full bg-auraPrimary hover:bg-auraDark transition flex items-center justify-center" aria-label="Send to Aura (demo mode — Phase 3 will connect the real Aura backend)">
+                <button type="submit" id="aura-send-btn" class="shrink-0 w-9 h-9 rounded-full bg-auraPrimary hover:bg-auraDark transition flex items-center justify-center" aria-label="Send to Aura">
                   <span class="material-symbols-outlined text-white text-[18px]">send</span>
                 </button>
               </form>
@@ -669,7 +668,7 @@ export async function auraPage(c: Context<AppEnv>) {
         </nav>
 
         {/* ================= FLOATING CHAT WITH AURA PANEL (desktop only, >=dt — frozen v1.0 baseline) ================= */}
-        <div id="aura-chat-panel" class="fixed bottom-5 right-5 z-50 w-[320px] rounded-2xl bg-auraDark text-white shadow-2xl overflow-hidden hidden dt:block" data-aura-demo-mode="true">
+        <div id="aura-chat-panel" class="fixed bottom-5 right-5 z-50 w-[320px] rounded-2xl bg-auraDark text-white shadow-2xl overflow-hidden hidden dt:block">
           <div class="flex items-center justify-between px-4 py-3 border-b border-white/10">
             <span class="flex items-center gap-2 text-[13px] font-semibold">
               <span class="w-6 h-6 rounded-full bg-auraPrimary/30 flex items-center justify-center">
@@ -696,7 +695,7 @@ export async function auraPage(c: Context<AppEnv>) {
             <div class="flex items-center gap-2 bg-black/30 border border-white/10 rounded-full px-3 py-2 mb-2">
               <span class="material-symbols-outlined text-white/40 text-[16px]">mic</span>
               <input id="aura-chat-input" type="text" placeholder="Ask Aura anything..." class="flex-1 bg-transparent outline-none text-[12px] text-white placeholder:text-white/40 min-w-0" />
-              <button type="button" id="aura-chat-send-btn" class="w-7 h-7 rounded-full bg-auraPrimary flex items-center justify-center shrink-0" aria-label="Send (demo mode)">
+              <button type="button" id="aura-chat-send-btn" class="w-7 h-7 rounded-full bg-auraPrimary flex items-center justify-center shrink-0" aria-label="Send">
                 <span class="material-symbols-outlined text-white text-[14px]">send</span>
               </button>
             </div>
@@ -728,7 +727,6 @@ export async function auraPage(c: Context<AppEnv>) {
         <div
           id="aura-chat-sheet"
           class="hidden dt:!hidden fixed inset-x-0 bottom-0 z-[61] bg-auraDark text-white rounded-t-2xl shadow-2xl overflow-hidden max-h-[80vh] flex flex-col"
-          data-aura-demo-mode="true"
         >
           <div class="flex items-center justify-between px-4 py-3 border-b border-white/10 shrink-0">
             <span class="flex items-center gap-2 text-[13px] font-semibold">
@@ -755,7 +753,7 @@ export async function auraPage(c: Context<AppEnv>) {
             <div class="flex items-center gap-2 bg-black/30 border border-white/10 rounded-full px-3 py-2 mb-2">
               <span class="material-symbols-outlined text-white/40 text-[16px]">mic</span>
               <input id="aura-chat-sheet-input" type="text" placeholder="Ask Aura anything..." class="flex-1 bg-transparent outline-none text-[12px] text-white placeholder:text-white/40 min-w-0" />
-              <button type="button" id="aura-chat-sheet-send-btn" class="w-7 h-7 rounded-full bg-auraPrimary flex items-center justify-center shrink-0" aria-label="Send (demo mode)">
+              <button type="button" id="aura-chat-sheet-send-btn" class="w-7 h-7 rounded-full bg-auraPrimary flex items-center justify-center shrink-0" aria-label="Send">
                 <span class="material-symbols-outlined text-white text-[14px]">send</span>
               </button>
             </div>

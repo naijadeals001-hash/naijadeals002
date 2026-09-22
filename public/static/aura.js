@@ -1,39 +1,97 @@
 /**
- * Aura Luxe — Phase 1 command bar + chat panel interactivity.
+ * Aura Luxe — command bar + chat panel interactivity.
  *
- * EXPLICIT SCOPE (Pat's Section 10/11 directive): this is a "prepared UI
- * integration point", NOT a fake AI. Every interactive control below is
- * fully functional as a UI (text fills, buttons respond, panel opens/
- * closes) but nothing here pretends to search, book, order, or otherwise
- * take a real action — because there is no real Aura backend to call yet
- * (that is Phase 3). Submitting the command bar or the chat panel shows an
- * honest, clearly-labeled "Aura isn't connected yet" state instead of any
- * scripted fake response like "Your order has been placed" or a fabricated
- * search result. When Phase 3 wires the real backend, the ONLY change
- * needed here is replacing showDemoResponse()'s body with a real
- * fetch('/api/aura/...') call — the DOM structure, event wiring, and every
- * component in aura.tsx are already built to receive that swap without a
- * redesign.
+ * PHASE 3 WIRING (Workstream C): every interactive control below now calls
+ * the REAL, working Aura backend at POST /api/aura/chat (src/routes/api-aura.ts
+ * -> src/lib/aura-ai/orchestrator.ts + llm-client.ts) instead of the old
+ * showDemoResponse() canned "Aura isn't connected yet" placeholder. The
+ * backend itself was already live and verified working (curl-tested on both
+ * local and production) BEFORE this change — this file was the only piece
+ * standing between the real backend and the UI. The backend's own system
+ * prompt (see orchestrator.ts) is explicitly instructed to never fabricate
+ * marketplace data and to honestly disclose when it doesn't have access to
+ * live search/booking/order data yet — so no fake AI capability is being
+ * claimed here, only a real (if still limited) assistant being connected to
+ * the UI that was built for it.
+ *
+ * The mic / image / location buttons remain deliberately NOT wired — those
+ * are genuinely prepared-but-unbuilt integration points (Web Speech API /
+ * file picker / Geolocation API), so they keep their honest
+ * "not yet wired" notice rather than being falsely presented as live.
  */
 (function () {
   'use strict';
 
-  function showDemoResponse(targetEl, promptText) {
-    if (!targetEl) return;
-    targetEl.textContent =
-      'Aura isn\u2019t connected to live search or actions yet \u2014 this is a Phase 1 preview of the interface. ' +
-      (promptText ? ('You asked: \u201c' + promptText + '\u201d. ') : '') +
-      'Real answers arrive in Phase 3.';
-    targetEl.classList.remove('hidden');
+  var conversationId = null;
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
   }
 
-  function ensureDemoNotice(afterEl, idSuffix) {
-    var id = 'aura-demo-notice-' + idSuffix;
+  /**
+   * Sends `message` to the real Aura chat endpoint and renders the
+   * response (or an honest error) into targetEl. Disables sendBtn and
+   * shows a "Thinking..." state while the request is in flight so users
+   * get real feedback instead of an instant fake reply.
+   */
+  function sendToAura(targetEl, sendBtn, message) {
+    if (!targetEl || !message) return;
+    targetEl.classList.remove('hidden');
+    targetEl.textContent = 'Aura is thinking…';
+    if (sendBtn) sendBtn.disabled = true;
+
+    fetch('/api/aura/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        conversation_id: conversationId,
+        message: message,
+        experience: 'luxe',
+      }),
+    })
+      .then(function (res) {
+        return res.json().then(function (data) { return { ok: res.ok, data: data }; });
+      })
+      .then(function (result) {
+        if (sendBtn) sendBtn.disabled = false;
+        if (!result.ok) {
+          targetEl.textContent = (result.data && result.data.error) || 'Aura could not process that request right now. Please try again.';
+          return;
+        }
+        var resp = result.data;
+        if (resp && resp.conversation_id) conversationId = resp.conversation_id;
+        var text = (resp && resp.message) || "Aura didn't return a response. Please try again.";
+        targetEl.textContent = text;
+      })
+      .catch(function () {
+        if (sendBtn) sendBtn.disabled = false;
+        targetEl.textContent = 'Aura could not be reached right now. Please check your connection and try again.';
+      });
+  }
+
+  function ensureResponseArea(afterEl, idSuffix) {
+    var id = 'aura-response-' + idSuffix;
     var existing = document.getElementById(id);
     if (existing) return existing;
     var el = document.createElement('div');
     el.id = id;
-    el.className = 'hidden mt-2 text-[11px] leading-snug text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2';
+    el.className = 'hidden mt-2 text-[12px] leading-snug text-white/90 bg-black/25 border border-white/10 rounded-lg px-3 py-2 whitespace-pre-wrap';
+    afterEl.insertAdjacentElement('afterend', el);
+    return el;
+  }
+
+  // The command bar lives on a light background (white pill), so its
+  // response area needs light-surface styling instead of the dark chat
+  // panel's styling used by ensureResponseArea() above.
+  function ensureCommandResponseArea(afterEl) {
+    var id = 'aura-response-command';
+    var existing = document.getElementById(id);
+    if (existing) return existing;
+    var el = document.createElement('div');
+    el.id = id;
+    el.className = 'hidden mt-2 text-[12.5px] leading-snug text-gray-700 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5 whitespace-pre-wrap';
     afterEl.insertAdjacentElement('afterend', el);
     return el;
   }
@@ -42,16 +100,18 @@
     // ---- Command bar (main center column) ----
     var commandForm = document.getElementById('aura-command-form');
     var commandInput = document.getElementById('aura-command-input');
+    var commandSendBtn = document.getElementById('aura-send-btn');
     if (commandForm && commandInput) {
-      var commandNotice = ensureDemoNotice(commandForm, 'command');
+      var commandResponse = ensureCommandResponseArea(commandForm);
       commandForm.addEventListener('submit', function (e) {
         e.preventDefault();
-        showDemoResponse(commandNotice, commandInput.value.trim());
+        var msg = commandInput.value.trim();
+        if (!msg) return;
+        sendToAura(commandResponse, commandSendBtn, msg);
       });
     }
 
-    // Quick prompt chips fill the command bar input (real, functional UI —
-    // just doesn't trigger a fabricated AI answer on click).
+    // Quick prompt chips fill the command bar input (real, functional UI).
     document.querySelectorAll('.aura-quick-prompt').forEach(function (btn) {
       btn.addEventListener('click', function () {
         if (commandInput) {
@@ -61,15 +121,15 @@
       });
     });
 
-    // Mic / image / location buttons in the command bar — prepared
-    // integration points only. Phase 3 wires these to the Web Speech API /
-    // file picker / Geolocation API + the real Aura backend.
+    // Mic / image / location buttons in the command bar — still genuinely
+    // prepared-but-unbuilt integration points (Web Speech API / file
+    // picker / Geolocation API), honestly labeled as such.
     ['aura-mic-btn', 'aura-attach-image-btn', 'aura-location-btn'].forEach(function (id) {
       var btn = document.getElementById(id);
       if (!btn) return;
       btn.addEventListener('click', function () {
-        var notice = ensureDemoNotice(commandForm || btn, id);
-        notice.textContent = 'This control is a prepared UI integration point \u2014 not yet wired to a backend (Phase 3).';
+        var notice = ensureCommandResponseArea(commandForm || btn);
+        notice.textContent = 'This control is a prepared UI integration point — not yet wired to a backend.';
         notice.classList.remove('hidden');
       });
     });
@@ -102,22 +162,25 @@
     });
 
     if (chatSendBtn && chatInput) {
-      var chatNotice = ensureDemoNotice(chatInput.closest('div'), 'chat');
-      chatSendBtn.addEventListener('click', function () {
-        showDemoResponse(chatNotice, chatInput.value.trim());
-      });
+      var chatResponse = ensureResponseArea(chatInput.closest('div'), 'chat');
+      var sendChat = function () {
+        var msg = chatInput.value.trim();
+        if (!msg) return;
+        sendToAura(chatResponse, chatSendBtn, msg);
+      };
+      chatSendBtn.addEventListener('click', sendChat);
       chatInput.addEventListener('keydown', function (e) {
         if (e.key === 'Enter') {
           e.preventDefault();
-          showDemoResponse(chatNotice, chatInput.value.trim());
+          sendChat();
         }
       });
     }
 
     // ---- Mobile/tablet "Chat with Aura" bottom sheet ----
-    // Phase 2 responsive: the same Aura chat surface as the desktop floating
-    // panel above, just presented as a slide-up sheet on md..<dt widths
-    // (opened from the bottom-nav Aura pill on mobile, or the FAB on tablet).
+    // Same Aura chat surface as the desktop floating panel above, just
+    // presented as a slide-up sheet on md..<dt widths (opened from the
+    // bottom-nav Aura pill on mobile, or the FAB on tablet).
     var chatSheet = document.getElementById('aura-chat-sheet');
     var chatSheetBackdrop = document.getElementById('aura-chat-sheet-backdrop');
     var chatSheetOpenTriggers = [
@@ -157,14 +220,17 @@
     });
 
     if (chatSheetSendBtn && chatSheetInput) {
-      var chatSheetNotice = ensureDemoNotice(chatSheetInput.closest('div'), 'chat-sheet');
-      chatSheetSendBtn.addEventListener('click', function () {
-        showDemoResponse(chatSheetNotice, chatSheetInput.value.trim());
-      });
+      var chatSheetResponse = ensureResponseArea(chatSheetInput.closest('div'), 'chat-sheet');
+      var sendChatSheet = function () {
+        var msg = chatSheetInput.value.trim();
+        if (!msg) return;
+        sendToAura(chatSheetResponse, chatSheetSendBtn, msg);
+      };
+      chatSheetSendBtn.addEventListener('click', sendChatSheet);
       chatSheetInput.addEventListener('keydown', function (e) {
         if (e.key === 'Enter') {
           e.preventDefault();
-          showDemoResponse(chatSheetNotice, chatSheetInput.value.trim());
+          sendChatSheet();
         }
       });
     }
