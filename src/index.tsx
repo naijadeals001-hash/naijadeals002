@@ -143,6 +143,23 @@ app.route('/api', logisticsApi)
 // first discovered there). Registering auraApi first means its own
 // intentionally-absent auth requirement is what actually governs it.
 app.route('/api/aura', auraApi)
+// NaijaEats Phase 1 cart/checkout mutation API — MUST be registered here,
+// alongside bookingsApi/logisticsApi/auraApi, and BEFORE servicesApi/
+// serviceRequestsApi/providerApi below. Those three register a bare
+// `.use('*', requireAuth)` on the shared '/api' prefix, and Hono applies
+// wildcard middleware from every sub-app sharing a mount path in
+// REGISTRATION ORDER (see the bookingsApi comment above for the same bug,
+// first discovered there — this is the identical failure mode, confirmed
+// live during NaijaEats Phase 1 Browser QA: unauthenticated GET/POST to
+// /api/eats/cart* was returning 401 "Authentication required" even for a
+// nonexistent path like /api/eats/totally-made-up, proving requireAuth ran
+// before route matching). Registering eatsApi here means only its OWN
+// explicitly-scoped middleware (`eatsApi.use('/checkout', requireAuth)`,
+// `eatsApi.use('/orders/*', requireAuth)` in src/routes/api-eats.ts) governs
+// it — cart read/add/update/remove stay genuinely public for the guest-cart
+// flow (getOrSetGuestToken/nd_guest cookie), matching the code's own
+// original design intent.
+app.route('/api/eats', eatsApi)
 app.route('/api/catalog', catalogApi)
 app.route('/api/cart', cartApi)
 app.route('/api/auth', authApi)
@@ -169,10 +186,10 @@ app.route('/api/notifications', notificationsApi)
 // on '*', then per-route requireControlCenterPermission), never by anything
 // mounted here.
 app.route('/api/control-center', apiControlCenterRoutes)
-// NaijaEats Phase 1 cart/checkout mutation API — see src/routes/api-eats.ts's own header
-// comment. Public GETs (cart read/add/update/remove); /checkout and /orders/*/cancel are
-// gated internally via `eatsApi.use('/checkout', requireAuth)` etc., not by anything here.
-app.route('/api/eats', eatsApi)
+// eatsApi is registered earlier, alongside bookingsApi/logisticsApi/auraApi
+// — see the comment at that registration site (just before app.route('/api/catalog', ...))
+// for why it must NOT be registered down here, after servicesApi/serviceRequestsApi/providerApi's
+// bare '*' requireAuth.
 
 
 // ---------- SSR pages ----------
