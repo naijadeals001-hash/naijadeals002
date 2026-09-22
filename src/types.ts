@@ -227,6 +227,19 @@ export interface ProductRow {
   brand_slug?: string
   /** Marketplace Engine 2.0 (migration 0038): draft | pending_review | active | paused | rejected | archived */
   moderation_status?: string
+  /**
+   * NaijaFresh Foundation (migration 0077). NULL for every non-Fresh product
+   * (all ~290 pre-existing rows) and for Fresh products where freshness is
+   * not a meaningful signal (e.g. bottled palm oil, garri, honey — shelf-
+   * stable pantry items). Free-text, not a DB CHECK constraint, matching the
+   * existing convention on vendors.store_type / product_listings.unit_of_measure.
+   * Known values in use: harvested_today | harvested_this_week | fresh_daily |
+   * caught_today | baked_today | frozen. See src/pages/fresh.tsx's
+   * FRESHNESS_LABEL map for the human-readable badge text.
+   */
+  freshness_status?: string | null
+  /** NaijaFresh Foundation (migration 0077). ISO date string (YYYY-MM-DD). NULL when freshness_status is NULL or not date-based (e.g. 'frozen'). */
+  harvested_date?: string | null
 }
 
 /** One seller's offer on a product — the "buy box". This is what cart/order/comparison reference. */
@@ -272,6 +285,20 @@ export interface ProductWithListingRow extends ProductRow {
   delivery_days_max: number
   is_plus: number
   seller_count?: number
+  // --- NaijaFresh Foundation (migration 0077) — present when the caller's SELECT includes
+  // these listing columns (see src/lib/fresh.ts's FRESH_PRODUCT_CARD_SELECT). Optional
+  // because the base PRODUCT_CARD_SELECT in catalog.ts does not select them. ---
+  unit_of_measure?: string
+  unit_quantity?: number
+  is_variable_weight?: number
+  variable_weight_tolerance_pct?: number
+  /** Seller city/state — for the "seller location" line on Fresh product cards. Optional, same reason as above. */
+  vendor_city?: string | null
+  vendor_state?: string
+  /** Set only when the query joins product_pricing_tiers to detect wholesale availability (fresh.tsx/PDP). */
+  has_wholesale_pricing?: number
+  /** Slugs of collections this product belongs to, when the caller's query aggregates product_collections (comma-joined GROUP_CONCAT). Used for the collection badge on Fresh cards. */
+  collection_slugs?: string | null
 }
 
 /** One slide in the homepage Hero Campaign Carousel — see src/lib/hero-campaigns.ts. */

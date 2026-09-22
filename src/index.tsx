@@ -51,6 +51,7 @@ import { wishlistPage } from './pages/wishlist'
 import { addressesPage } from './pages/addresses'
 import { ecosystemPage } from './pages/ecosystem'
 import { ecosystemPreviewPage } from './pages/ecosystem-preview'
+import { freshHomePage, freshProductPage } from './pages/fresh'
 import { auraPage } from './pages/aura'
 import { helpPage } from './pages/help'
 import { aboutPage, careersPage, termsPage, privacyPage, sellerTermsPage } from './pages/company'
@@ -222,19 +223,33 @@ app.get('/seller-terms', sellerTermsPage)
 // load it and see the real landing page copy production serves.
 app.get('/affiliate', affiliatePage)
 
-// ---------- Ecosystem Preview Pages — one handler, 8 routes ----------
+// ---------- Ecosystem Preview Pages — one handler, remaining routes ----------
 // Every planned NaijaDeals vertical that isn't built yet gets a real, honest
-// product-preview page instead of a 404. Content for all 8 routes below is
+// product-preview page instead of a 404. Content for these routes is
 // 100% config-driven from ecosystem_verticals (migration 0010) via
 // ecosystemPreviewPage — there is no per-vertical page file. Flipping any of
 // these from coming_soon -> live later is a data change (and, when a real
 // engine exists, simply repointing that one line to a different handler),
 // never a rebuild of this list.
-app.get('/fresh', ecosystemPreviewPage)
 app.get('/eats', ecosystemPreviewPage)
 app.get('/drive', ecosystemPreviewPage)
 app.get('/send', ecosystemPreviewPage)
 app.get('/stream', ecosystemPreviewPage)
+
+// ---------- NaijaFresh — real UI on top of the existing fresh-food(100) category tree ----------
+// /fresh used to route to the static ecosystemPreviewPage placeholder above.
+// Migration 0077 (categories 400-405, demo vendors 36-41, demo products/
+// listings 600-621, wholesale pricing tier, collection tags) + this page file
+// make it a real, functional customer marketplace slice: homepage, category
+// browsing, search, PDP, cart, checkout — all built on the EXISTING buy-box/
+// cart/checkout/collections/pricing-tiers engine, zero parallel systems (see
+// fresh.tsx's own header comment). Public/guest-browsable, matching /shop's
+// and /gigs' pattern — no requireAuthPage guard; only checkout itself
+// (unmodified, pre-existing) requires sign-in. NOTE: ecosystem_verticals.
+// fresh.status remains 'coming_soon' — this route is reachable directly but
+// intentionally not yet promoted in the header/footer ecosystem nav strip.
+app.get('/fresh', freshHomePage)
+app.get('/fresh/:slug', freshProductPage)
 
 // ---------- Aura AI — Aura Experience Engine (Phase 1: Aura Luxe) ----------
 // /aura used to route to the static ecosystemPreviewPage placeholder above.
