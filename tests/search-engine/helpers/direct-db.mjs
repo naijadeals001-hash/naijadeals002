@@ -111,9 +111,8 @@ export async function createTestProduct(vendorId, label) {
 }
 
 /**
- * category_id=91 is a seeded 'service' category_type reference row
- * (confirmed present against sqlite_master this session; categories is
- * CONFIG data, always present in a production-seeded local D1).
+ * Resolves a seeded service category_type reference row dynamically. The
+ * numeric seed ID is not stable across local schema snapshots.
  */
 export async function createTestProviderProfile(label) {
   const db = await getTestDb()
