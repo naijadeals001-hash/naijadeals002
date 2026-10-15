@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import type { AppEnv } from '../types'
 import { requireAuth } from '../lib/auth'
 import {
+  EatsOperatorFilterError,
   EatsOperatorNotFoundError,
   EatsOperatorStateError,
   getEatsOperatorOrderEvents,
@@ -47,9 +48,15 @@ eatsOperatorApi.get('/operator/orders', async (c) => {
   const restaurantId = positiveInteger(c.req.query('restaurant_id'))
   const limit = positiveInteger(c.req.query('limit'))
   const offset = c.req.query('offset') ? Number(c.req.query('offset')) : undefined
-  const status = c.req.query('status')
-  const orders = await getEatsOrdersForOperator(c.env.DB, profile.id, { restaurantId, status, limit, offset })
-  return c.json({ orders })
+  const rawStatus = c.req.query('status')
+  const status = rawStatus?.trim() ? rawStatus.trim() : undefined
+  try {
+    const orders = await getEatsOrdersForOperator(c.env.DB, profile.id, { restaurantId, status, limit, offset })
+    return c.json({ orders })
+  } catch (err) {
+    if (err instanceof EatsOperatorFilterError) return c.json({ error: err.message, code: 'invalid_status_filter' }, 400)
+    throw err
+  }
 })
 
 eatsOperatorApi.get('/operator/orders/:id', async (c) => {

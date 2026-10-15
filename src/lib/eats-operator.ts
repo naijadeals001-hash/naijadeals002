@@ -19,6 +19,7 @@ export interface EatsOperatorProfile {
 export class EatsOperatorAccessError extends Error {}
 export class EatsOperatorNotFoundError extends Error {}
 export class EatsOperatorStateError extends Error {}
+export class EatsOperatorFilterError extends Error {}
 
 const OPERATOR_TRANSITIONS: Record<string, EatsOperatorStatus[]> = {
   new: ['accepted', 'declined'],
@@ -27,6 +28,8 @@ const OPERATOR_TRANSITIONS: Record<string, EatsOperatorStatus[]> = {
   ready: ['handoff'],
   handoff: ['completed'],
 }
+
+const ORDER_FILTER_STATUSES = ['new', 'accepted', 'preparing', 'ready', 'handoff', 'completed', 'declined', 'cancelled'] as const
 
 export async function resolveEatsOperatorProfile(db: D1Database, userId: number): Promise<EatsOperatorProfile | null> {
   return db.prepare(
@@ -75,10 +78,10 @@ export async function getEatsOrdersForOperator(
     conditions.push('eo.restaurant_id = ?')
     binds.push(options.restaurantId)
   }
-  if (options.status && Object.prototype.hasOwnProperty.call(OPERATOR_TRANSITIONS, options.status)) {
-    conditions.push('eo.status = ?')
-    binds.push(options.status)
-  } else if (options.status && ['completed', 'declined', 'cancelled'].includes(options.status)) {
+  if (options.status !== undefined) {
+    if (!ORDER_FILTER_STATUSES.includes(options.status as (typeof ORDER_FILTER_STATUSES)[number])) {
+      throw new EatsOperatorFilterError(`Unknown order status filter: ${options.status}`)
+    }
     conditions.push('eo.status = ?')
     binds.push(options.status)
   }
@@ -111,8 +114,20 @@ export async function getOwnedEatsOrderForOperator(db: D1Database, providerProfi
 export async function getEatsOrderItemsForOperator(db: D1Database, providerProfileId: number, orderId: number) {
   const order = await getOwnedEatsOrderForOperator(db, providerProfileId, orderId)
   if (!order) return null
-  const { results } = await db.prepare('SELECT * FROM eats_order_items WHERE order_id = ? ORDER BY id ASC').bind(orderId).all()
-  return results
+  const { results: items } = await db.prepare('SELECT * FROM eats_order_items WHERE order_id = ? ORDER BY id ASC').bind(orderId).all<any>()
+  if (items.length === 0) return items
+  const itemIds = items.map((item) => item.id)
+  const { results: options } = await db
+    .prepare(`SELECT * FROM eats_order_item_options WHERE order_item_id IN (${itemIds.map(() => '?').join(',')}) ORDER BY id ASC`)
+    .bind(...itemIds)
+    .all<any>()
+  const optionsByItem = new Map<number, any[]>()
+  for (const option of options) {
+    const itemOptions = optionsByItem.get(option.order_item_id) ?? []
+    itemOptions.push(option)
+    optionsByItem.set(option.order_item_id, itemOptions)
+  }
+  return items.map((item) => ({ ...item, options: optionsByItem.get(item.id) ?? [] }))
 }
 
 export async function getEatsOperatorOrderEvents(db: D1Database, providerProfileId: number, orderId: number) {
@@ -145,19 +160,23 @@ export async function transitionEatsOrderForOperator(
 
   // The old-status predicate makes a duplicate/concurrent request a no-op
   // failure rather than a second state event. No payment columns are touched.
-  const update = await db.prepare(
-    `UPDATE eats_orders SET status = ?, updated_at = datetime('now')
-     WHERE id = ? AND status = ?`
-  ).bind(newStatus, orderId, order.status).run()
+  // D1 batch() is the supported atomic unit: if either statement fails,
+  // Cloudflare rolls back the entire batch. Keep the CAS predicate on the
+  // status update so a duplicate/concurrent request cannot create an event.
+  const [update] = await db.batch([
+    db.prepare(
+      `UPDATE eats_orders SET status = ?, updated_at = datetime('now')
+       WHERE id = ? AND status = ?`
+    ).bind(newStatus, orderId, order.status),
+    db.prepare(
+      `INSERT INTO eats_order_status_events (order_id, status, actor_user_id, note)
+       SELECT ?, ?, ?, ? WHERE changes() = 1`
+    ).bind(orderId, newStatus, actorUserId, note?.trim() || null),
+  ])
   const rowsWritten = (update.meta as { changes?: number }).changes ?? update.meta.rows_written ?? 0
   if (Number(rowsWritten) !== 1) {
     throw new EatsOperatorStateError('Order changed before this request completed; reload and try again')
   }
-
-  await db.prepare(
-    `INSERT INTO eats_order_status_events (order_id, status, actor_user_id, note)
-     VALUES (?, ?, ?, ?)`
-  ).bind(orderId, newStatus, actorUserId, note?.trim() || null).run()
 
   return { ...order, status: newStatus }
 }
