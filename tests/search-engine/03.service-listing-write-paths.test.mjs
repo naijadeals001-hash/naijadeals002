@@ -11,10 +11,8 @@
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { getTestDb, createTestProviderProfile, queryOneD1, queryD1, disposeTestDb } from './helpers/direct-db.mjs'
+import { getTestDb, createTestProviderProfile, getServiceCategoryId, queryOneD1, queryD1, disposeTestDb } from './helpers/direct-db.mjs'
 import { createServiceListing, updateServiceListing } from '../../src/lib/services.ts'
-
-const SERVICE_CATEGORY_ID = 91
 
 test.after(async () => {
   await disposeTestDb()
@@ -23,9 +21,10 @@ test.after(async () => {
 test('createServiceListing: a real INSERT produces exactly one search_index_events upsert row for the new listing id', async () => {
   const db = await getTestDb()
   const { providerProfileId } = await createTestProviderProfile('create_svc')
+  const serviceCategoryId = await getServiceCategoryId()
 
   const listingId = await createServiceListing(db, providerProfileId, {
-    category_id: SERVICE_CATEGORY_ID,
+    category_id: serviceCategoryId,
     title: 'Search WritePath Test Service A',
     base_price_kobo: 500000,
   })
@@ -40,8 +39,9 @@ test('createServiceListing: a real INSERT produces exactly one search_index_even
 test('updateServiceListing: a genuine PRICE CHANGE (ownership-matched) produces a SECOND, DISTINCT search_index_events row', async () => {
   const db = await getTestDb()
   const { providerProfileId } = await createTestProviderProfile('update_svc_price')
+  const serviceCategoryId = await getServiceCategoryId()
   const listingId = await createServiceListing(db, providerProfileId, {
-    category_id: SERVICE_CATEGORY_ID,
+    category_id: serviceCategoryId,
     title: 'Search WritePath Test Service B',
     base_price_kobo: 500000,
   })
@@ -68,8 +68,9 @@ test('updateServiceListing: a 0-row UPDATE (wrong provider / cross-tenant mismat
   const db = await getTestDb()
   const { providerProfileId: ownerProviderId } = await createTestProviderProfile('svc_owner')
   const { providerProfileId: attackerProviderId } = await createTestProviderProfile('svc_attacker')
+  const serviceCategoryId = await getServiceCategoryId()
   const listingId = await createServiceListing(db, ownerProviderId, {
-    category_id: SERVICE_CATEGORY_ID,
+    category_id: serviceCategoryId,
     title: 'Search WritePath Test Service C',
     base_price_kobo: 500000,
   })
@@ -86,8 +87,9 @@ test('updateServiceListing: a 0-row UPDATE (wrong provider / cross-tenant mismat
 test('updateServiceListing: an empty input (fields.length===0 short-circuit) enqueues NO event', async () => {
   const db = await getTestDb()
   const { providerProfileId } = await createTestProviderProfile('svc_noop')
+  const serviceCategoryId = await getServiceCategoryId()
   const listingId = await createServiceListing(db, providerProfileId, {
-    category_id: SERVICE_CATEGORY_ID,
+    category_id: serviceCategoryId,
     title: 'Search WritePath Test Service D',
     base_price_kobo: 500000,
   })
@@ -102,8 +104,9 @@ test('updateServiceListing: an empty input (fields.length===0 short-circuit) enq
 test('base_price_kobo validation guard: an invalid create (no price for a fixed pricing_model) throws BEFORE any INSERT or event emission', async () => {
   const db = await getTestDb()
   const { providerProfileId } = await createTestProviderProfile('svc_invalid')
+  const serviceCategoryId = await getServiceCategoryId()
   await assert.rejects(
-    () => createServiceListing(db, providerProfileId, { category_id: SERVICE_CATEGORY_ID, title: 'Should Never Be Created' }),
+    () => createServiceListing(db, providerProfileId, { category_id: serviceCategoryId, title: 'Should Never Be Created' }),
     /base_price_kobo is required/,
   )
   const rows = await queryD1(`SELECT COUNT(*) as n FROM search_index_events WHERE entity_type='service_listing'`)

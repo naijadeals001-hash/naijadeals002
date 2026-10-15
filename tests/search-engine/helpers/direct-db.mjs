@@ -133,6 +133,16 @@ export async function createTestProviderProfile(label) {
   return { userId, providerProfileId: Number(provider.meta.last_row_id) }
 }
 
+/** Returns a seeded service-category parent rather than relying on a stale numeric ID. */
+export async function getServiceCategoryId() {
+  const db = await getTestDb()
+  const row = await db
+    .prepare(`SELECT id FROM categories WHERE category_type = 'service' ORDER BY id ASC LIMIT 1`)
+    .first()
+  if (!row) throw new Error('Search fixture requires at least one seeded service category')
+  return Number(row.id)
+}
+
 export async function createTestProductListing(productId, vendorId, priceKobo = 100000) {
   const db = await getTestDb()
   const result = await db

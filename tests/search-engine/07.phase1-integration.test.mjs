@@ -43,6 +43,7 @@ import {
   createTestProduct,
   createTestProductListing,
   createTestProviderProfile,
+  getServiceCategoryId,
   queryD1,
   queryOneD1,
   execD1,
@@ -55,8 +56,6 @@ import { createBookableListing, updateBookableListing } from '../../src/lib/book
 import { adjustStock } from '../../src/lib/inventory.ts'
 import { enqueueSearchIndexEvent } from '../../src/lib/search-index-events.ts'
 import { isEntitySearchEligible } from '../../src/lib/search-eligibility.ts'
-
-const SERVICE_CATEGORY_ID = 91
 
 test.after(async () => {
   await disposeTestDb()
@@ -96,8 +95,9 @@ test('INTEGRATED CREATE: all 4 create-capable write paths each produce exactly o
   assert.equal(listingEvt[0].operation, 'upsert')
 
   const { providerProfileId } = await createTestProviderProfile('p1_create_provider')
+  const serviceCategoryId = await getServiceCategoryId()
   const serviceListingId = await createServiceListing(db, providerProfileId, {
-    category_id: SERVICE_CATEGORY_ID,
+    category_id: serviceCategoryId,
     title: `Phase1 Integration Service ${RUN_NONCE}`,
     base_price_kobo: 500000,
   })
@@ -174,7 +174,8 @@ test('INTEGRATED STATUS CHANGE: changing moderation_status (product_listing) and
   assert.ok(listingRows.every((r) => r.operation === 'upsert'), 'a status/moderation change is represented as upsert — the future indexer decides eligibility by re-reading, not by a distinct event vocabulary word')
 
   const { providerProfileId } = await createTestProviderProfile('p1_status_provider')
-  const svcListingId = await createServiceListing(db, providerProfileId, { category_id: SERVICE_CATEGORY_ID, title: `Phase1 Status Svc ${RUN_NONCE}`, base_price_kobo: 500000 })
+  const serviceCategoryId = await getServiceCategoryId()
+  const svcListingId = await createServiceListing(db, providerProfileId, { category_id: serviceCategoryId, title: `Phase1 Status Svc ${RUN_NONCE}`, base_price_kobo: 500000 })
   await new Promise((r) => setTimeout(r, 1100))
   const svcUpdated = await updateServiceListing(db, providerProfileId, svcListingId, { status: 'active' })
   assert.equal(svcUpdated, true)
@@ -257,7 +258,8 @@ test('INTEGRATED DELETE (event-contract level): a delete operation for a product
 test('INTEGRATED IDEMPOTENCY: calling updateServiceListing twice with a payload that changes nothing enqueues NO additional event, and calling adjustStock twice with genuinely different deltas enqueues two DISTINCT events (not deduped incorrectly)', async () => {
   const db = await getTestDb()
   const { providerProfileId } = await createTestProviderProfile('p1_idem')
-  const listingId = await createServiceListing(db, providerProfileId, { category_id: SERVICE_CATEGORY_ID, title: `Phase1 Idem Svc ${RUN_NONCE}`, base_price_kobo: 500000 })
+  const serviceCategoryId = await getServiceCategoryId()
+  const listingId = await createServiceListing(db, providerProfileId, { category_id: serviceCategoryId, title: `Phase1 Idem Svc ${RUN_NONCE}`, base_price_kobo: 500000 })
 
   const afterCreate = await queryOneD1(`SELECT COUNT(*) as n FROM search_index_events WHERE entity_type='service_listing' AND entity_id=${listingId}`)
   // Empty-input update short-circuits to true without touching the row at all (existing pre-Engine-11 behavior).

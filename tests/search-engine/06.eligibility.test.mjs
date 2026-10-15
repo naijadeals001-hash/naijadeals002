@@ -17,7 +17,7 @@
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { getTestDb, createTestVendor, createTestProduct, createTestProductListing, createTestProviderProfile, disposeTestDb, RUN_NONCE } from './helpers/direct-db.mjs'
+import { getTestDb, createTestVendor, createTestProduct, createTestProductListing, createTestProviderProfile, getServiceCategoryId, disposeTestDb, RUN_NONCE } from './helpers/direct-db.mjs'
 import {
   checkProductEligibility,
   checkProductListingEligibility,
@@ -26,19 +26,18 @@ import {
   isEntitySearchEligible,
 } from '../../src/lib/search-eligibility.ts'
 
-const SERVICE_CATEGORY_ID = 91
-
 test.after(async () => {
   await disposeTestDb()
 })
 
 async function createTestServiceListing(db, providerProfileId, label) {
+  const serviceCategoryId = await getServiceCategoryId()
   const result = await db
     .prepare(
       `INSERT INTO service_listings (provider_profile_id, category_id, title, base_price_kobo, is_active, status)
        VALUES (?, ?, ?, 500000, 1, 'active')`
     )
-    .bind(providerProfileId, SERVICE_CATEGORY_ID, `SearchTest EligSvc ${label}`)
+    .bind(providerProfileId, serviceCategoryId, `SearchTest EligSvc ${label}`)
     .run()
   return Number(result.meta.last_row_id)
 }
