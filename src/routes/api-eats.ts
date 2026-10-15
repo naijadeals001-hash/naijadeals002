@@ -195,9 +195,23 @@ eatsApi.post('/checkout', async (c) => {
   }
   const { initializePaystackTransaction } = await import('../lib/paystack')
   const reference = `EATS-PAY-${orderId}-${Date.now()}`
+  // TASK A FIX (Paystack/table-mismatch defect): deliberately leave
+  // `order_id` NULL here. That column has a hard FK to `orders(id)`
+  // (migrations/0001_initial_schema.sql) — a NaijaShop-only table that an
+  // `eats_orders.id` value has no business satisfying. Writing orderId
+  // (the EATS order's id) into it either throws SQLITE_CONSTRAINT_FOREIGNKEY
+  // outright (no matching `orders` row — the common case), or, worse, if a
+  // NaijaShop order happens to exist at that same numeric id, succeeds and
+  // lets the webhook's OLD dispatch logic silently confirm payment on that
+  // unrelated NaijaShop order. The eats order id is instead recoverable
+  // from `provider_reference` itself (`EATS-PAY-${orderId}-...`, already
+  // the existing convention) via parseEatsPaymentReference() — see
+  // src/lib/eats-cart.ts and api-webhooks.ts's updated dispatch. This
+  // mirrors how wallet top-ups (api-wallet.ts) already insert with no
+  // `order_id` column at all.
   await c.env.DB.prepare(
-    'INSERT INTO payment_transactions (order_id, user_id, provider, provider_reference, amount_kobo, status) VALUES (?, ?, ?, ?, ?, ?)'
-  ).bind(orderId, user.id, 'paystack', reference, totalKobo, 'initiated').run()
+    'INSERT INTO payment_transactions (user_id, provider, provider_reference, amount_kobo, status) VALUES (?, ?, ?, ?, ?)'
+  ).bind(user.id, 'paystack', reference, totalKobo, 'initiated').run()
 
   const origin = new URL(c.req.url).origin
   const init = await initializePaystackTransaction(secretKey, {

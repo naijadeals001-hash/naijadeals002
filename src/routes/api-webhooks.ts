@@ -3,6 +3,7 @@ import type { AppEnv } from '../types'
 import { verifyPaystackWebhookSignature } from '../lib/paystack'
 import { confirmOrderPayment } from '../lib/orders'
 import { creditWallet } from '../lib/wallet'
+import { confirmEatsOrderPayment, parseEatsPaymentReference, EatsOrderNotFoundError } from '../lib/eats-cart'
 
 export const webhooksApi = new Hono<AppEnv & { Bindings: AppEnv['Bindings'] & { PAYSTACK_SECRET_KEY?: string } }>()
 
@@ -114,15 +115,27 @@ webhooksApi.post('/paystack', async (c) => {
     return c.text('OK', 200)
   }
 
+  const eatsOrderId = tx.order_id ? null : parseEatsPaymentReference(reference)
+
   if (tx.order_id) {
     await confirmOrderPayment(c.env.DB, tx.order_id, 'paystack', reference)
+  } else if (eatsOrderId !== null) {
+    try {
+      await confirmEatsOrderPayment(c.env.DB, eatsOrderId, 'paystack', reference)
+    } catch (err) {
+      if (err instanceof EatsOrderNotFoundError) {
+        console.error(`Paystack webhook: ${err.message}`)
+        return c.text('OK', 200)
+      }
+      throw err
+    }
   } else {
-    // No order_id means this was a wallet top-up transaction. Credit the
-    // TRUSTED, server-recorded amount (tx.amount_kobo) — already verified
-    // above to match the event payload, but tx.amount_kobo is what we
-    // actually promised to charge, so it is the correct value to credit
-    // even in the (should-be-impossible, now-rejected-above) case they
-    // ever diverged.
+    // Neither a NaijaShop order_id nor a recognizable NaijaEats reference
+    // shape — this was a wallet top-up transaction. Credit the TRUSTED,
+    // server-recorded amount (tx.amount_kobo) — already verified above to
+    // match the event payload, but tx.amount_kobo is what we actually
+    // promised to charge, so it is the correct value to credit even in the
+    // (should-be-impossible, now-rejected-above) case they ever diverged.
     await creditWallet(c.env.DB, tx.user_id, tx.amount_kobo, 'topup', reference, 'Wallet top-up via Paystack (webhook)')
   }
 
