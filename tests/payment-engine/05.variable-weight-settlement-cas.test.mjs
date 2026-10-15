@@ -188,7 +188,7 @@ test('settleVariableWeightItem: a legitimately-failed refund attempt (over-cap R
   await db
     .prepare(
       `INSERT INTO refunds (order_id, order_item_id, vendor_id, amount_kobo, reason, refund_type, status, initiated_by_user_id, initiated_by_role)
-       SELECT id, ?, vendor_id, ?, 'pre-claim to force over-cap', 'quantity', 'completed', ?, 'admin' FROM order_items WHERE id = ?`
+       SELECT order_id, ?, vendor_id, ?, 'pre-claim to force over-cap', 'quantity', 'completed', ?, 'admin' FROM order_items WHERE id = ?`
     )
     .bind(orderItemId, lineTotalKobo, userId, orderItemId)
     .run()
