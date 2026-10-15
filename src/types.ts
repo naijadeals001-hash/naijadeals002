@@ -29,6 +29,8 @@ export type AppEnv = {
      * the Service Engine (migration 0039).
      */
     providerProfile?: ProviderProfileRow
+    /** Set by the NaijaEats operator auth middleware after resolving provider_profiles from the authenticated user. */
+    eatsOperatorProfile?: import('./lib/eats-operator').EatsOperatorProfile
     /**
      * Set by requireControlCenterAuth / requireControlCenterApiAuth
      * (src/lib/control-center-rbac.ts) once the CALLER'S Control Center

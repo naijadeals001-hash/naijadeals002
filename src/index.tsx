@@ -32,6 +32,7 @@ import { bookingsApi } from './routes/api-bookings'
 import { logisticsApi } from './routes/api-logistics'
 import { apiControlCenterRoutes } from './routes/api-control-center'
 import { eatsApi } from './routes/api-eats'
+import { eatsOperatorApi } from './routes/api-eats-operator'
 
 // SSR pages
 import { homePage } from './pages/home'
@@ -63,6 +64,7 @@ import {
   eatsOrderDetailPage,
   eatsAccountOrdersPage
 } from './pages/eats'
+import { eatsOperatorOrdersPage, eatsOperatorOrderDetailPage } from './pages/eats-operator'
 import { auraPage } from './pages/aura'
 import { helpPage } from './pages/help'
 import { aboutPage, careersPage, termsPage, privacyPage, sellerTermsPage } from './pages/company'
@@ -160,6 +162,7 @@ app.route('/api/aura', auraApi)
 // flow (getOrSetGuestToken/nd_guest cookie), matching the code's own
 // original design intent.
 app.route('/api/eats', eatsApi)
+app.route('/api/eats', eatsOperatorApi)
 app.route('/api/catalog', catalogApi)
 app.route('/api/cart', cartApi)
 app.route('/api/auth', authApi)
@@ -288,6 +291,8 @@ app.get('/eats/cart', eatsCartPage)
 app.get('/eats/checkout', requireAuthPage, eatsCheckoutPage)
 app.get('/eats/orders/:orderNumber', requireAuthPage, eatsOrderDetailPage)
 app.get('/eats/account/orders', requireAuthPage, eatsAccountOrdersPage)
+app.get('/eats/operator/orders', requireAuthPage, eatsOperatorOrdersPage)
+app.get('/eats/operator/orders/:id', requireAuthPage, eatsOperatorOrderDetailPage)
 
 // ---------- NaijaFresh — real UI on top of the existing fresh-food(100) category tree ----------
 // /fresh used to route to the static ecosystemPreviewPage placeholder above.
