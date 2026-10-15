@@ -1,0 +1,47 @@
+[
+  {
+    "file": "src/pages/auth.tsx",
+    "code": "TS2322",
+    "message": "Type 'string' is not assignable to type 'number'."
+  },
+  {
+    "file": "src/pages/fresh.tsx",
+    "code": "TS18048",
+    "message": "'product.seller_count' is possibly 'undefined'."
+  },
+  {
+    "file": "src/pages/product.tsx",
+    "code": "TS18048",
+    "message": "'product.seller_count' is possibly 'undefined'."
+  },
+  {
+    "file": "src/renderer.tsx",
+    "code": "TS2345",
+    "message": "Argument of type '({ children }: PropsWithChildren<{ Layout: FC; }>) => Child' is not assignable to parameter of type 'ComponentWithChildren'."
+  },
+  {
+    "file": "src/routes/api-cart.ts",
+    "code": "TS2339",
+    "message": "Property 'buy_now' does not exist on type '{ coupon_code?: string | undefined; delivery_method?: DeliveryMethod | undefined; buy_now?: { listing_id: number; quantity: number; variant_id?: number | null | undefined; } | undefined; } | {}'."
+  },
+  {
+    "file": "src/routes/api-cart.ts",
+    "code": "TS2339",
+    "message": "Property 'delivery_method' does not exist on type '{ coupon_code?: string | undefined; delivery_method?: DeliveryMethod | undefined; buy_now?: { listing_id: number; quantity: number; variant_id?: number | null | undefined; } | undefined; } | {}'."
+  },
+  {
+    "file": "src/routes/api-cart.ts",
+    "code": "TS2339",
+    "message": "Property 'coupon_code' does not exist on type '{ coupon_code?: string | undefined; delivery_method?: DeliveryMethod | undefined; buy_now?: { listing_id: number; quantity: number; variant_id?: number | null | undefined; } | undefined; } | {}'."
+  },
+  {
+    "file": "src/routes/api-catalog.ts",
+    "code": "TS2339",
+    "message": "Property 'results' does not exist on type 'Record<string, unknown>[]'."
+  },
+  {
+    "file": "src/routes/api-catalog.ts",
+    "code": "TS2339",
+    "message": "Property 'results' does not exist on type 'Record<string, unknown>[] | { results: never[]; }'."
+  }
+]
