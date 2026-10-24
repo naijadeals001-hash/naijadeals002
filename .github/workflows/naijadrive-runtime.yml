@@ -1,0 +1,86 @@
+name: NaijaDrive runtime verification
+
+on:
+  push:
+    branches:
+      - feat/naijadrive-private-ride-foundation
+  pull_request:
+    branches:
+      - main
+      - feat/naijadrive-private-ride-foundation
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_DB: naijadrive
+          POSTGRES_USER: naijadrive
+          POSTGRES_PASSWORD: naijadrive_ci_only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U naijadrive -d naijadrive"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+      redis:
+        image: redis:7.4-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgres://naijadrive:naijadrive_ci_only@127.0.0.1:5432/naijadrive
+      REDIS_URL: redis://127.0.0.1:6379
+      NAIJADEAL_IDENTITY_URL: https://identity.invalid
+      NAIJADEAL_IDENTITY_SERVICE_TOKEN: ci-only-not-a-live-credential
+      RUN_INTEGRATION_TESTS: '1'
+      NAIJADRIVE_GIT_SHA: ${{ github.sha }}
+    steps:
+      - name: Check out the exact workflow revision
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - name: Verify source SHA
+        run: |
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+          test -z "$(git status --porcelain)"
+          echo "source_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+        id: source
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: services/naijadrive-runtime/package-lock.json
+      - name: Install runtime dependencies
+        working-directory: services/naijadrive-runtime
+        run: npm ci
+      - name: Build runtime and verify embedded metadata
+        working-directory: services/naijadrive-runtime
+        run: |
+          npm run build
+          node -e "const m=require('./dist/runtime-metadata.json'); if(m.git_sha !== process.env.GITHUB_SHA) throw new Error('runtime metadata SHA mismatch: '+m.git_sha)"
+      - name: Run unit tests
+        working-directory: services/naijadrive-runtime
+        run: npm test
+        env:
+          RUN_INTEGRATION_TESTS: '0'
+      - name: Run genuine PostGIS and Redis integration tests
+        working-directory: services/naijadrive-runtime
+        run: npm run test:integration
+      - name: Audit production dependencies
+        working-directory: services/naijadrive-runtime
+        run: npm audit --omit=dev --audit-level=high

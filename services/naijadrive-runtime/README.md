@@ -18,16 +18,20 @@ This package is the first production-oriented bounded context for NaijaDrive. It
 - Ride status audit-event persistence adapter.
 - NestJS HTTP and WebSocket composition using Fastify.
 - PostgreSQL foundation migrations.
-- Automated domain tests using an explicitly test-only in-memory repository.
+- Automated domain and fail-closed configuration tests using an explicitly test-only in-memory repository.
+- Numeric migration ordering, duplicate-prefix detection, advisory-lock coordination, bounded Redis TTLs, and corrupt-payload handling.
+- Disposable PostGIS/Redis integration tests and a public-repository GitHub Actions workflow; these tests are skipped locally unless `RUN_INTEGRATION_TESTS=1`.
+- Build metadata at `dist/runtime-metadata.json` containing the source Git SHA and build timestamp.
 
 ## Current limitations
 
-- PostgreSQL, PostGIS, Redis, and the NaijaDeal identity bridge are wired in code but could not be integration-tested in this sandbox because no PostgreSQL/PostGIS or Redis service is provisioned here.
+- PostgreSQL, PostGIS, Redis, and the NaijaDeal identity bridge are wired in code but could not be integration-tested in this sandbox because no PostgreSQL/PostGIS or Redis service is provisioned here. The Compose definition and CI workflow are reproducible scaffolding, not evidence that local infrastructure has run.
 - The production composition fails closed when `DATABASE_URL`, `REDIS_URL`, `NAIJADEAL_IDENTITY_URL`, or `NAIJADEAL_IDENTITY_SERVICE_TOKEN` is missing; it never falls back to the in-memory adapter.
 - Redis presence is implemented for heartbeats and assignment claims; GPS WebSocket ingestion, routing, offer expiry workers, payment reconciliation, and customer/driver clients remain incomplete.
 - Abuja geometry migration currently uses development circular geometries and must be replaced with approved FCT operating polygons before passenger operations.
 - No vehicle category is enabled in the PostgreSQL seed until regulatory and operational approval is recorded. The application-level car fare rule remains development configuration, not launch authorization.
-- Dependency audit still reports high-severity Fastify/optional Nest adapter advisories and requires a reviewed compatible upgrade before public exposure.
+- The latest production dependency audit in this workspace reports zero high-severity vulnerabilities; it must be rerun for every dependency change.
+- Authenticated trip rooms, GPS ingestion, road routing, payment reconciliation, notifications, and complete customer/driver workflows remain incomplete.
 
 ## Run
 
@@ -35,6 +39,11 @@ This package is the first production-oriented bounded context for NaijaDrive. It
 cp .env.example .env
 npm install
 npm test
+npm run test:integration # requires genuine PostgreSQL/PostGIS and Redis plus RUN_INTEGRATION_TESTS=1
 npm run build
 npm run start:dev
+
+# After committing the intended source revision:
+cd ../..
+node scripts/verify_naijadrive_preview.cjs <40-character-commit-sha>
 ```

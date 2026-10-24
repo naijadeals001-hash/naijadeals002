@@ -12,6 +12,15 @@ export interface DriverPresence {
   expiresAt: string
 }
 
+export const PRESENCE_TTL_SECONDS = { min: 5, max: 300 }
+export const ASSIGNMENT_TTL_SECONDS = { min: 5, max: 900 }
+
+export function assertTtlSeconds(value: number, range: { min: number; max: number }, label: string): void {
+  if (!Number.isInteger(value) || value < range.min || value > range.max) {
+    throw new Error(`${label} must be an integer between ${range.min} and ${range.max} seconds`)
+  }
+}
+
 export class RedisPresenceStore {
   private readonly redis: Redis
 
@@ -34,19 +43,30 @@ export class RedisPresenceStore {
   }
 
   async heartbeat(presence: DriverPresence, ttlSeconds = 45): Promise<void> {
+    assertTtlSeconds(ttlSeconds, PRESENCE_TTL_SECONDS, 'Presence TTL')
     if (!Number.isFinite(presence.latitude) || presence.latitude < -90 || presence.latitude > 90) throw new Error('Invalid driver latitude')
     if (!Number.isFinite(presence.longitude) || presence.longitude < -180 || presence.longitude > 180) throw new Error('Invalid driver longitude')
-    await this.redis.set(`naijadrive:presence:${presence.driverId}`, JSON.stringify(presence), 'EX', ttlSeconds)
-    await this.redis.sadd(`naijadrive:zone:${presence.zoneKey}:drivers`, String(presence.driverId))
-    await this.redis.expire(`naijadrive:zone:${presence.zoneKey}:drivers`, ttlSeconds)
+    const presenceKey = `naijadrive:presence:${presence.driverId}`
+    const zoneKey = `naijadrive:zone:${presence.zoneKey}:drivers`
+    await this.redis.multi()
+      .set(presenceKey, JSON.stringify(presence), 'EX', ttlSeconds)
+      .sadd(zoneKey, String(presence.driverId))
+      .expire(zoneKey, ttlSeconds)
+      .exec()
   }
 
   async get(driverId: number): Promise<DriverPresence | null> {
     const value = await this.redis.get(`naijadrive:presence:${driverId}`)
-    return value ? JSON.parse(value) as DriverPresence : null
+    if (!value) return null
+    try {
+      return JSON.parse(value) as DriverPresence
+    } catch {
+      throw new Error(`Invalid presence payload for driver ${driverId}`)
+    }
   }
 
   async claimAssignment(driverId: number, rideId: number, ttlSeconds = 120): Promise<boolean> {
+    assertTtlSeconds(ttlSeconds, ASSIGNMENT_TTL_SECONDS, 'Assignment TTL')
     const result = await this.redis.call('SET', `naijadrive:assignment:${driverId}`, String(rideId), 'NX', 'EX', ttlSeconds)
     return result === 'OK'
   }
@@ -63,6 +83,10 @@ export class RedisPresenceStore {
   }
 
   async isReady(): Promise<boolean> {
-    return (await this.redis.ping()) === 'PONG'
+    try {
+      return (await this.redis.ping()) === 'PONG'
+    } catch {
+      return false
+    }
   }
 }

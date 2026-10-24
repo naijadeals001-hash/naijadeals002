@@ -4,9 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && node scripts/write-runtime-metadata.mjs",
     "start:dev": "node --enable-source-maps dist/src/main.js",
-    "test": "npm run build && node --test dist/test/**/*.test.js"
+    "test": "npm run build && node --test dist/test/**/*.test.js",
+    "test:integration": "npm run build && node --test dist/test/**/*.integration.test.js"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.6",
