@@ -22,6 +22,7 @@ const STATUS_BADGE: Record<string, { label: string; cls: string }> = {
 // Live verticals get an action-oriented CTA per Pat's explicit copy;
 // everything still 'coming_soon'/'in_development'/'beta' keeps "Preview".
 const LIVE_CTA_LABEL: Record<string, string> = {
+  eats: 'Explore NaijaEats',
   gigs: 'Explore NaijaGigs',
   stay: 'Explore NaijaStay',
   aura: 'Open Aura',
@@ -44,7 +45,7 @@ export async function ecosystemPage(c: Context<AppEnv>) {
           <span class="material-symbols-outlined text-4xl text-primary-fixed">workspace_premium</span>
           <h1 class="text-3xl lg:text-4xl font-bold mt-3">One account. One ecosystem.</h1>
           <p class="text-white/80 mt-3 max-w-xl mx-auto">
-            NaijaShop, NaijaGigs, NaijaStay and Aura AI are live today. Fresh food, eats, mobility and entertainment are coming next — all under the same NaijaDeals account and wallet.
+            NaijaShop, NaijaEats, NaijaGigs, NaijaStay and Aura AI are live today. Fresh food, mobility and entertainment are coming next — all under the same NaijaDeals account and wallet.
           </p>
         </div>
       </section>
@@ -86,8 +87,8 @@ export async function ecosystemPage(c: Context<AppEnv>) {
 
         <div class="mt-10 bg-primary-light rounded-xl p-6 flex flex-col md:flex-row items-center justify-between gap-4">
           <div>
-            <h3 class="font-bold text-primary-dark">Want early access to NaijaFresh, NaijaEats &amp; more?</h3>
-            <p class="text-sm text-gray-600 mt-1">Join the waitlist below and we'll let you know the moment each service launches in your city.</p>
+            <h3 class="font-bold text-primary-dark">Want early access to NaijaFresh &amp; more?</h3>
+            <p class="text-sm text-gray-600 mt-1">Join the waitlist below and we'll let you know the moment each upcoming service launches in your city.</p>
           </div>
           <button
             type="button"

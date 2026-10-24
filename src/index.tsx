@@ -279,10 +279,9 @@ app.get('/stream', ecosystemPreviewPage)
 // phase). Dashboard/order routes require auth (an order belongs to a
 // specific customer); browse/profile/item routes are public, mirroring
 // /fresh's and /gigs' guest-browsable pattern — only checkout itself
-// requires sign-in. NOTE: ecosystem_verticals.eats.status remains
-// 'coming_soon' — this route is reachable directly but intentionally not
-// yet promoted in the header/footer ecosystem nav strip, exactly matching
-// /fresh's and /gigs' own "coming_soon but real" precedent.
+// requires sign-in. NaijaEats is promoted as live in ecosystem_verticals
+// because this customer ordering surface and its supporting order workflows
+// are functional.
 app.get('/eats', eatsHomePage)
 app.get('/eats/restaurants', eatsRestaurantsPage)
 app.get('/eats/restaurants/:slug', eatsRestaurantProfilePage)

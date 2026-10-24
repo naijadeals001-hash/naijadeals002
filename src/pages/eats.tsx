@@ -20,10 +20,9 @@
  * responsive pass. Vendor dashboard, reservations, catering, admin, Aura
  * AI are explicitly NOT built here.
  *
- * `ecosystem_verticals.eats.status` remains 'coming_soon' — reachable
- * directly at /eats, fully functional, but intentionally not yet promoted
- * in the header/footer ecosystem nav pill strip, mirroring /fresh's and
- * /gigs' own "coming_soon but real" precedent exactly.
+ * `ecosystem_verticals.eats.status` is promoted to 'live' now that this
+ * customer ordering surface and its supporting order workflows are functional.
+ * The navigation and ecosystem overview therefore present NaijaEats as live.
  */
 import type { Context } from 'hono'
 import { getCookie } from 'hono/cookie'
