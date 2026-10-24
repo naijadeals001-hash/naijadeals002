@@ -36,6 +36,7 @@
 - **Top Brands** merchandising strip on the homepage: DB-backed (`is_featured`/`display_order`/`status` columns, migration 0006), never hardcoded in TSX
 - **Saved Addresses** (`/account/addresses`): full CRUD, mobile bottom-sheet UX
 - **Hero Campaign Carousel**: DB-backed `hero_campaigns` table + service + homepage-feed cache integration + `<HeroCarousel>` component. **Live and wired into `home.tsx`** — `getActiveHeroCampaigns()` is registered as a `homepage-feed.ts` section loader, and `home.tsx` renders `<HeroCarousel campaigns={feed.hero_campaigns} />` directly (confirmed by code inspection and re-verified via the Engine 12 Legacy Remediation pass, see `docs/ENGINE-12-LEGACY-REMEDIATION.md`). Status-gated (`status='active'`) and schedule-gated (`starts_at`/`ends_at`) at the query level, so campaigns can be queued or retired without a code deploy. Auto-rotating, swipe/keyboard-accessible, `<picture>` art-directed responsive imagery, zero layout shift.
+- NaijaDrive visual preview at `/drive`: customer booking shell, cab-sharing entry point, driver hub and Control Center entry. It does not fabricate bookings, fares, ETAs, drivers or GPS; the booking endpoint returns an explicit runtime-unavailable response until the NestJS service has persistent hosting.
 - Ecosystem teaser page (NaijaEats/NaijaGigs/NaijaStay — "coming soon") and Help/FAQ page
 - All money handled as **integer kobo** end-to-end — no floating point currency bugs
 - Custom SVG placeholder image generator (`/ph.svg`) — used for products only; never used for hero/brand imagery (zero-placeholder rule)
@@ -61,7 +62,8 @@
 | `GET /wallet` | Yes | Balance, top-up, transaction history |
 | `GET /account/wishlist` | Yes | Saved products |
 | `GET /account/addresses` | Yes | Saved shipping addresses (CRUD) |
-| `GET /ecosystem` | No | Eats/Gigs/Stay teaser cards |
+| `GET /ecosystem` | No | Ecosystem overview |
+| `GET /drive` | No | NaijaDrive visual preview: customer, cab-sharing, driver and Control Center journeys |
 | `GET /help` | No | FAQ |
 
 ### API (JSON)
@@ -74,6 +76,7 @@
 | `GET /api/orders`, `/:orderNumber`, `POST /checkout`, `POST /verify-payment` | Orders (session-protected) |
 | `GET /api/wallet`, `POST /topup/initialize`, `POST /topup/verify` | Wallet (session-protected) |
 | `POST /api/webhooks/paystack` | Paystack webhook — authoritative payment confirmation, signature-verified |
+| `POST /api/drive/preview-booking` | Validates Abuja preview zones and returns `503 NAIJADRIVE_RUNTIME_UNAVAILABLE`; never creates a ride |
 | `GET /ph.svg?cat=&emoji=&label=` | Branded placeholder image generator |
 
 ## Data Architecture

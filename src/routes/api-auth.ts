@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import type { AppEnv } from '../types'
-import { hashPassword, verifyPassword, createSession, destroySession, setSessionCookie, clearSessionCookie, getSessionToken, isAccountStatusBlocked, requireAuth } from '../lib/auth'
+import { hashPassword, verifyPassword, createSession, destroySession, setSessionCookie, clearSessionCookie, getSessionToken, getUserFromToken, isAccountStatusBlocked, requireAuth } from '../lib/auth'
 import { mergeGuestCartIntoUser } from '../lib/cart'
 import { getOrSetGuestToken } from '../lib/guest'
 import { mergeVisitorBehaviorIntoUser } from '../lib/behavior-events'

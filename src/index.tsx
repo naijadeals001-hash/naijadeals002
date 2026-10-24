@@ -66,6 +66,7 @@ import {
 } from './pages/eats'
 import { eatsOperatorOrdersPage, eatsOperatorOrderDetailPage } from './pages/eats-operator'
 import { auraPage } from './pages/aura'
+import { drivePage } from './pages/drive'
 import { helpPage } from './pages/help'
 import { aboutPage, careersPage, termsPage, privacyPage, sellerTermsPage } from './pages/company'
 import { sellerGatewayPage, sellerOnboardingPage } from './pages/seller'
@@ -96,6 +97,7 @@ import { accountPage } from './pages/account'
 import { organizationPage } from './pages/organization'
 import { controlCenterRoutes } from './routes/control-center'
 import { auraApi } from './routes/api-aura'
+import { drivePreviewApi } from './routes/api-drive-preview'
 
 type Bindings = AppEnv['Bindings'] & { PAYSTACK_SECRET_KEY?: string; OPENAI_API_KEY?: string; OPENAI_BASE_URL?: string }
 type Env = { Bindings: Bindings; Variables: AppEnv['Variables'] }
@@ -145,6 +147,7 @@ app.route('/api', logisticsApi)
 // first discovered there). Registering auraApi first means its own
 // intentionally-absent auth requirement is what actually governs it.
 app.route('/api/aura', auraApi)
+app.route('/api/drive', drivePreviewApi)
 // NaijaEats Phase 1 cart/checkout mutation API — MUST be registered here,
 // alongside bookingsApi/logisticsApi/auraApi, and BEFORE servicesApi/
 // serviceRequestsApi/providerApi below. Those three register a bare
@@ -266,7 +269,7 @@ app.get('/affiliate', affiliatePage)
 // these from coming_soon -> live later is a data change (and, when a real
 // engine exists, simply repointing that one line to a different handler),
 // never a rebuild of this list.
-app.get('/drive', ecosystemPreviewPage)
+app.get('/drive', drivePage)
 app.get('/send', ecosystemPreviewPage)
 app.get('/stream', ecosystemPreviewPage)
 
