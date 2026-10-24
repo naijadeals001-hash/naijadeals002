@@ -44,6 +44,13 @@ export interface DriverEligibility {
   serviceZones: string[]
 }
 
+export interface RideGeographyInput {
+  pickup: GeoPoint
+  dropoff: GeoPoint
+  pickupZone: string
+  dropoffZone: string
+}
+
 export interface RideRequest {
   id: number
   customerUserId: number
@@ -74,8 +81,15 @@ export interface RideStatusEvent {
 export interface RideRepository {
   createRide(input: Omit<RideRequest, 'id' | 'status' | 'assignedDriverId' | 'cancellationReason' | 'createdAt' | 'updatedAt'>): Promise<RideRequest>
   getRide(rideId: number): Promise<RideRequest | null>
+  validateRideGeography(input: RideGeographyInput): Promise<void>
   transitionRide(rideId: number, expected: RideStatus, next: RideStatus, event: RideStatusEvent): Promise<RideRequest>
   assignDriver(rideId: number, driverId: number, event: RideStatusEvent): Promise<RideRequest>
+}
+
+export interface DriverPresencePort {
+  get(driverId: number): Promise<{ driverId: number; vehicleId: number; vehicleCategory: string; zoneKey: string; expiresAt: string; availabilityStatus?: string } | null>
+  claimAssignment(driverId: number, rideId: number): Promise<boolean>
+  releaseAssignment(driverId: number, rideId: number): Promise<boolean>
 }
 
 export interface AuditPort {

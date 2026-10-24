@@ -14,6 +14,63 @@ export const authApi = new Hono<AppEnv>()
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const PHONE_RE = /^(0|\+234)[789][01]\d{8}$/ // Nigerian mobile format
 
+async function secureTextEqual(left: string, right: string): Promise<boolean> {
+  const enc = new TextEncoder()
+  const [leftHash, rightHash] = await Promise.all([
+    crypto.subtle.digest('SHA-256', enc.encode(left)),
+    crypto.subtle.digest('SHA-256', enc.encode(right)),
+  ])
+  const a = new Uint8Array(leftHash)
+  const b = new Uint8Array(rightHash)
+  if (a.length !== b.length) return false
+  let difference = 0
+  for (let index = 0; index < a.length; index++) difference |= a[index] ^ b[index]
+  return difference === 0
+}
+
+/**
+ * Service-to-service identity bridge for NaijaDrive. The caller must present
+ * both a normal NaijaDeal session token and the private service token; user
+ * identity and Control Center permissions are resolved from D1 here, never
+ * accepted from request JSON or headers.
+ */
+authApi.post('/introspect', async (c) => {
+  const configuredServiceToken = c.env.NAIJADEAL_IDENTITY_SERVICE_TOKEN
+  const providedServiceToken = c.req.header('x-naijadeal-service-token')
+  const authorization = c.req.header('authorization')
+  const sessionToken = authorization?.startsWith('Bearer ') ? authorization.slice(7).trim() : ''
+  if (!configuredServiceToken || !providedServiceToken || !sessionToken || !(await secureTextEqual(configuredServiceToken, providedServiceToken))) {
+    return c.json({ error: 'Unauthorized' }, 401)
+  }
+
+  const user = await getUserFromToken(c.env.DB, sessionToken)
+  if (!user || isAccountStatusBlocked(user.status)) return c.json({ error: 'Unauthorized' }, 401)
+
+  let permissions: string[] = []
+  let driverProfileId: number | null = null
+  let driverStatus: string | null = null
+  try {
+    const { results } = await c.env.DB.prepare(
+      `SELECT DISTINCT p.key
+       FROM cc_user_roles ur
+       JOIN cc_roles r ON r.id = ur.role_id
+       JOIN cc_role_permissions rp ON rp.role_id = r.id
+       JOIN cc_permissions p ON p.id = rp.permission_id
+       WHERE ur.user_id = ?`
+    ).bind(user.id).all<{ key: string }>()
+    permissions = results.map((row) => row.key)
+    const driver = await c.env.DB.prepare('SELECT id, status FROM driver_profiles WHERE user_id = ?').bind(user.id).first<{ id: number; status: string }>()
+    driverProfileId = driver?.id ?? null
+    driverStatus = driver?.status ?? null
+  } catch {
+    // Older local databases may not yet have Control Center RBAC tables. Do
+    // not invent permissions; the runtime will fail closed for protected ops.
+    permissions = []
+  }
+
+  return c.json({ user: { ...user, permissions, driverProfileId, driverStatus } })
+})
+
 authApi.post('/register', async (c) => {
   const body = await c.req.json<{ name: string; email?: string; phone?: string; password: string }>().catch(() => null)
   if (!body?.name || !body?.password || (!body.email && !body.phone)) {

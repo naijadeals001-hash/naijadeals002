@@ -1,8 +1,10 @@
-import { Body, Controller, Get, Param, Patch, Post, Req } from '@nestjs/common'
+import { Body, Controller, Get, Param, Patch, Post, Req, UseGuards } from '@nestjs/common'
 import { RideService } from '../domain/ride.service.js'
+import { NaijaDealAuthGuard, RequireRidePermission, RidePermissionGuard } from './auth.guard.js'
 import type { DriverEligibility, RideStatus } from '../domain/types.js'
 
 @Controller('api/naijadrive/rides')
+@UseGuards(NaijaDealAuthGuard, RidePermissionGuard)
 export class RideController {
   constructor(private readonly rides: RideService) {}
 
@@ -31,6 +33,7 @@ export class RideController {
   }
 
   @Post(':id/assign')
+  @RequireRidePermission('rides.dispatch')
   assign(@Param('id') id: string, @Req() req: { user: { id: number } }, @Body() driver: DriverEligibility) {
     return this.rides.assignDriver(Number(id), req.user.id, driver)
   }

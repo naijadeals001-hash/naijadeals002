@@ -1,12 +1,13 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { RideService } from '../src/domain/ride.service.js'
-import { InMemoryAuditPort, InMemoryRideRepository } from '../src/infra/in-memory-ride.repository.js'
+import { InMemoryAuditPort, InMemoryPresencePort, InMemoryRideRepository } from '../src/infra/in-memory-ride.repository.js'
 
 function setup() {
   const repository = new InMemoryRideRepository()
   const audit = new InMemoryAuditPort()
-  return { service: new RideService(repository, audit), repository, audit }
+  const presence = new InMemoryPresencePort()
+  return { service: new RideService(repository, audit, presence), repository, audit, presence }
 }
 
 const rideInput = {
@@ -49,20 +50,23 @@ test('enforces lifecycle and customer authorization', async () => {
 })
 
 test('requires verified operational driver with matching zone and vehicle', async () => {
-  const { service } = setup()
+  const { service, presence } = setup()
   const ride = await service.createRide(rideInput)
   await service.transition(ride.id, 10, 'system', 'searching')
   await assert.rejects(() => service.assignDriver(ride.id, 99, { driverId: 20, vehicleId: 1, vehicleCategory: 'motorcycle', verified: true, operational: true, serviceZones: ['abuja-central'] }), /vehicle category/)
   await assert.rejects(() => service.assignDriver(ride.id, 99, { driverId: 20, vehicleId: 1, vehicleCategory: 'car', verified: true, operational: true, serviceZones: ['gwarinpa'] }), /pickup zone/)
+  presence.set(20, { vehicleId: 1, vehicleCategory: 'car', zoneKey: 'abuja-central', availabilityStatus: 'available', expiresAt: new Date(Date.now() + 60_000).toISOString() })
   const assigned = await service.assignDriver(ride.id, 99, { driverId: 20, vehicleId: 1, vehicleCategory: 'car', verified: true, operational: true, serviceZones: ['abuja-central'] })
   assert.equal(assigned.assignedDriverId, 20)
   assert.equal(assigned.status, 'driver_assigned')
 })
 
 test('prevents duplicate driver assignments and records assignment audit event', async () => {
-  const { service, audit } = setup()
+  const { service, audit, presence } = setup()
   const ride = await service.createRide(rideInput)
   await service.transition(ride.id, 10, 'system', 'searching')
+  presence.set(20, { vehicleId: 1, vehicleCategory: 'car', zoneKey: 'abuja-central', availabilityStatus: 'available', expiresAt: new Date(Date.now() + 60_000).toISOString() })
+  presence.set(21, { vehicleId: 2, vehicleCategory: 'car', zoneKey: 'abuja-central', availabilityStatus: 'available', expiresAt: new Date(Date.now() + 60_000).toISOString() })
   const attempts = await Promise.allSettled([
     service.assignDriver(ride.id, 99, { driverId: 20, vehicleId: 1, vehicleCategory: 'car', verified: true, operational: true, serviceZones: ['abuja-central'] }),
     service.assignDriver(ride.id, 99, { driverId: 21, vehicleId: 2, vehicleCategory: 'car', verified: true, operational: true, serviceZones: ['abuja-central'] }),

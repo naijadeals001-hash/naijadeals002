@@ -2,6 +2,7 @@ export type Bindings = {
   DB: D1Database
   SELLER_UPLOADS: R2Bucket
   PAYOUT_ENCRYPTION_KEY: string
+  NAIJADEAL_IDENTITY_SERVICE_TOKEN?: string
 }
 
 export type AppEnv = {

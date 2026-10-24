@@ -1,5 +1,5 @@
 import { estimateFareKobo } from './fare.service.js'
-import type { AuditPort, DriverEligibility, GeoPoint, RideRepository, RideRequest, RideStatus, VehicleCategory } from './types.js'
+import type { AuditPort, DriverEligibility, DriverPresencePort, GeoPoint, RideRepository, RideRequest, RideStatus, VehicleCategory } from './types.js'
 import { getAbujaFareRule, findAbujaZone } from '../config/abuja.js'
 
 const TRANSITIONS: Record<RideStatus, RideStatus[]> = {
@@ -25,10 +25,11 @@ export interface CreateRideInput {
 }
 
 export class RideService {
-  constructor(private readonly rides: RideRepository, private readonly audit: AuditPort) {}
+  constructor(private readonly rides: RideRepository, private readonly audit: AuditPort, private readonly presence: DriverPresencePort) {}
 
   async createRide(input: CreateRideInput): Promise<RideRequest> {
     if (!findAbujaZone(input.pickupZone) || !findAbujaZone(input.dropoffZone)) throw new Error('Pickup and drop-off must be inside active Abuja pilot zones')
+    await this.rides.validateRideGeography({ pickup: input.pickup, dropoff: input.dropoff, pickupZone: input.pickupZone, dropoffZone: input.dropoffZone })
     const fareRule = getAbujaFareRule(input.vehicleCategory)
     const ride = await this.rides.createRide({
       customerUserId: input.customerUserId,
@@ -74,9 +75,19 @@ export class RideService {
     if (!driver.verified || !driver.operational) throw new Error('Driver is not eligible')
     if (driver.vehicleCategory !== ride.vehicleCategory) throw new Error('Driver vehicle category is not eligible for this ride')
     if (!driver.serviceZones.includes(ride.pickupZone)) throw new Error('Driver is not eligible for the pickup zone')
+    const activePresence = await this.presence.get(driver.driverId)
+    if (!activePresence || activePresence.availabilityStatus !== 'available' || activePresence.vehicleId !== driver.vehicleId || activePresence.vehicleCategory !== driver.vehicleCategory || activePresence.zoneKey !== ride.pickupZone) {
+      throw new Error('Driver is not currently available for this ride')
+    }
+    if (!(await this.presence.claimAssignment(driver.driverId, rideId))) throw new Error('Driver is already claimed by another assignment')
     const event = { rideId, fromStatus: 'searching' as const, toStatus: 'driver_assigned' as const, actorUserId, actorRole: 'system' as const, note: 'Driver assigned atomically' }
-    const updated = await this.rides.assignDriver(rideId, driver.driverId, event)
-    await this.audit.record(event)
-    return updated
+    try {
+      const updated = await this.rides.assignDriver(rideId, driver.driverId, event)
+      await this.audit.record(event)
+      return updated
+    } catch (error) {
+      await this.presence.releaseAssignment(driver.driverId, rideId)
+      throw error
+    }
   }
 }

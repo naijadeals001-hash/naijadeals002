@@ -1,5 +1,5 @@
 import type { Pool } from 'pg'
-import type { RideRepository, RideRequest, RideStatus, RideStatusEvent } from '../domain/types.js'
+import type { RideGeographyInput, RideRepository, RideRequest, RideStatus, RideStatusEvent } from '../domain/types.js'
 
 /** Production adapter. The NaijaDeal user id is intentionally an external FK boundary. */
 export class PgRideRepository implements RideRepository {
@@ -25,6 +25,24 @@ export class PgRideRepository implements RideRepository {
         input.pickupZone, input.dropoffZone, input.vehicleCategory, input.estimatedDistanceKm, input.estimatedDurationMinutes, input.estimatedFareKobo],
     )
     return normalizeRide(result.rows[0])
+  }
+
+  async validateRideGeography(input: RideGeographyInput): Promise<void> {
+    const result = await this.pool.query<{ pickup_in_zone: boolean; dropoff_in_zone: boolean }>(
+      `SELECT
+         EXISTS (
+           SELECT 1 FROM naijadrive_service_zones
+           WHERE zone_key = $1 AND is_active = TRUE AND boundary IS NOT NULL
+             AND ST_Within(ST_SetSRID(ST_Point($2, $3), 4326), boundary)
+         ) AS pickup_in_zone,
+         EXISTS (
+           SELECT 1 FROM naijadrive_service_zones
+           WHERE zone_key = $4 AND is_active = TRUE AND boundary IS NOT NULL
+             AND ST_Within(ST_SetSRID(ST_Point($5, $6), 4326), boundary)
+         ) AS dropoff_in_zone`,
+      [input.pickupZone, input.pickup.longitude, input.pickup.latitude, input.dropoffZone, input.dropoff.longitude, input.dropoff.latitude],
+    )
+    if (!result.rows[0]?.pickup_in_zone || !result.rows[0]?.dropoff_in_zone) throw new Error('Pickup and drop-off coordinates are outside the configured service boundary')
   }
 
   async getRide(rideId: number): Promise<RideRequest | null> {
