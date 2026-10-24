@@ -41,11 +41,25 @@ function getExpectedMigrations(): string[] {
   }
 }
 
+function getProviderCommitSha(): string | null {
+  return process.env.GITHUB_SHA || process.env.CF_PAGES_COMMIT_SHA || null
+}
+
+const buildGitSha = getBuildGitSha()
+const providerCommitSha = getProviderCommitSha()
+const buildProvenance = {
+  source_sha: buildGitSha,
+  provider_commit_sha: providerCommitSha,
+  source_sha_match: providerCommitSha === null || providerCommitSha === buildGitSha,
+  build_environment: process.env.GITHUB_ACTIONS === 'true' ? 'github-actions' : providerCommitSha ? 'cloudflare-pages-context' : 'git-worktree'
+}
+
 export default defineConfig({
   define: {
-    __GIT_SHA__: JSON.stringify(getBuildGitSha()),
+    __GIT_SHA__: JSON.stringify(buildGitSha),
     __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
-    __EXPECTED_MIGRATIONS__: JSON.stringify(getExpectedMigrations())
+    __EXPECTED_MIGRATIONS__: JSON.stringify(getExpectedMigrations()),
+    __BUILD_PROVENANCE__: JSON.stringify(buildProvenance)
   },
   plugins: [
     build(),

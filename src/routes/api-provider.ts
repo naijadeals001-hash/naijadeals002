@@ -35,7 +35,15 @@ import { getOwnedOrderForProvider, getOrdersForProvider, getEventsForOrder, prov
 
 export const providerApi = new Hono<AppEnv>()
 
-providerApi.use('*', requireAuth)
+// Scope authentication to provider-owned route families. A bare '*' on the
+// shared /api mount would intercept unrelated public endpoints registered
+// before this sub-application.
+providerApi.use('/providers', requireAuth)
+providerApi.use('/providers/*', requireAuth)
+providerApi.use('/service-listings', requireAuth)
+providerApi.use('/service-listings/*', requireAuth)
+providerApi.use('/service-orders', requireAuth)
+providerApi.use('/service-orders/*', requireAuth)
 
 /** Resolves the acting provider profile from the AUTHENTICATED user only — mirrors api-seller.ts's resolveSellerVendor pattern exactly. */
 async function resolveProviderProfile(c: any): Promise<ProviderProfileRow | null> {

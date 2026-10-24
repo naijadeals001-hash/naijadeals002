@@ -47,6 +47,7 @@ versionRoute.get('/version', async (c) => {
   const body = {
     git_sha: __GIT_SHA__,
     build_time: __BUILD_TIME__,
+    build_provenance: __BUILD_PROVENANCE__,
     db: {
       reachable: dbError === null,
       error: dbError,

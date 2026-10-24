@@ -29,7 +29,15 @@ import { createServiceOrderFromQuote, getOwnedOrderForCustomer, getOrdersForCust
 
 export const serviceRequestsApi = new Hono<AppEnv>()
 
-serviceRequestsApi.use('*', requireAuth)
+// Scope authentication to this sub-application's own protected prefixes.
+// A bare '*' would leak across the shared /api mount and intercept unrelated
+// public endpoints registered before it, including the NaijaDrive preview
+// availability response.
+serviceRequestsApi.use('/service-requests', requireAuth)
+serviceRequestsApi.use('/service-requests/*', requireAuth)
+serviceRequestsApi.use('/service-orders', requireAuth)
+serviceRequestsApi.use('/service-orders/*', requireAuth)
+serviceRequestsApi.use('/quotes/*', requireAuth)
 
 // ---------- Service requests ----------
 

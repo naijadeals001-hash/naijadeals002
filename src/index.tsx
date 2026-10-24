@@ -147,6 +147,9 @@ app.route('/api', logisticsApi)
 // first discovered there). Registering auraApi first means its own
 // intentionally-absent auth requirement is what actually governs it.
 app.route('/api/aura', auraApi)
+// Public, non-persistent preview contract only. The scoped auth middleware in
+// serviceRequestsApi/providerApi must not intercept this endpoint; real ride
+// APIs remain behind the NestJS identity/RBAC boundary.
 app.route('/api/drive', drivePreviewApi)
 // NaijaEats Phase 1 cart/checkout mutation API — MUST be registered here,
 // alongside bookingsApi/logisticsApi/auraApi, and BEFORE servicesApi/

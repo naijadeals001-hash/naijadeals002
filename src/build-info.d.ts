@@ -6,3 +6,9 @@
 declare const __GIT_SHA__: string
 declare const __BUILD_TIME__: string
 declare const __EXPECTED_MIGRATIONS__: string[]
+declare const __BUILD_PROVENANCE__: {
+  source_sha: string
+  provider_commit_sha: string | null
+  source_sha_match: boolean
+  build_environment: string
+}

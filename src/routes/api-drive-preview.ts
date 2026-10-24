@@ -1,9 +1,8 @@
 import { Hono } from 'hono'
 import type { AppEnv } from '../types'
+import { validateDrivePreviewBooking } from '../lib/drive-preview'
 
 export const drivePreviewApi = new Hono<AppEnv>()
-
-const ACTIVE_ZONES = new Set(['abuja-central', 'gwarinpa', 'lokogoma'])
 
 /**
  * This endpoint is intentionally honest: it validates the preview form but
@@ -13,12 +12,8 @@ const ACTIVE_ZONES = new Set(['abuja-central', 'gwarinpa', 'lokogoma'])
  */
 drivePreviewApi.post('/preview-booking', async (c) => {
   const body = await c.req.json<{ pickupZone?: string; dropoffZone?: string; vehicleCategory?: string }>().catch(() => null)
-  if (!body?.pickupZone || !body.dropoffZone) {
-    return c.json({ error: 'Choose both a pickup and destination zone.' }, 400)
-  }
-  if (!ACTIVE_ZONES.has(body.pickupZone) || !ACTIVE_ZONES.has(body.dropoffZone)) {
-    return c.json({ error: 'That location is outside the active Abuja pilot zones.' }, 400)
-  }
+  const validation = validateDrivePreviewBooking(body)
+  if (!validation.ok) return c.json({ error: validation.error }, validation.status)
   return c.json({
     error: 'No booking was created. NaijaDrive dispatch is not connected to this Worker preview yet; the NestJS runtime still requires a persistent authorized host.',
     code: 'NAIJADRIVE_RUNTIME_UNAVAILABLE',
