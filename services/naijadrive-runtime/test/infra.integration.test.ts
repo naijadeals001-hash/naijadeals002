@@ -12,7 +12,7 @@ const config = enabled ? loadRuntimeConfig() : null
 integration('applies transactional migrations and enables PostGIS', async () => {
   const pool = new Pool({ connectionString: config!.databaseUrl })
   try {
-    await runMigrations(pool, new URL('../migrations/', import.meta.url).pathname)
+    await runMigrations(pool, new URL('../../migrations/', import.meta.url).pathname)
     const result = await pool.query<{ postgis_version: string; migration_count: string }>(`
       SELECT PostGIS_Version() AS postgis_version,
         (SELECT COUNT(*)::text FROM naijadrive_schema_migrations) AS migration_count
