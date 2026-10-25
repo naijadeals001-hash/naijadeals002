@@ -3,7 +3,7 @@ import type { AppEnv } from '../types'
 import { estimateDrivePreviewFare, type FareEstimateMode } from '../lib/drive-preview-fare'
 import { validateDrivePreviewBooking } from '../lib/drive-preview'
 import { requireAuth } from '../lib/auth'
-import { getRideForCustomer, transitionRide } from '../lib/drive-rides'
+import { getRideForCustomer, transitionRide, recoverExpiredRideOffers, reassignRideAfterOffer, DRIVER_OFFER_EXPIRY_MINUTES } from '../lib/drive-rides'
 
 export const drivePreviewApi = new Hono<AppEnv>()
 
@@ -84,10 +84,42 @@ drivePreviewApi.post('/rides/:id/offers', requireAuth, async (c) => {
   if (!driver || driver.status !== 'active' || !driver.is_online) return c.json({ error: 'Active online driver profile required' }, 403)
   const ride = await c.env.DB.prepare("SELECT id,status,vehicle_category FROM drive_ride_requests WHERE id = ?").bind(Number(c.req.param('id'))).first<any>()
   if (!ride || !['searching','offered'].includes(ride.status)) return c.json({ error: 'Ride is not accepting driver offers' }, 409)
-  try { const offer = await c.env.DB.prepare("INSERT INTO drive_ride_offers (ride_request_id,driver_profile_id) VALUES (?,?)").bind(ride.id, driver.id).run(); await c.env.DB.prepare("UPDATE drive_ride_requests SET status='offered',updated_at=datetime('now') WHERE id=? AND status='searching'").bind(ride.id).run(); return c.json({ id: Number(offer.meta.last_row_id), status: 'offered' }, 201) } catch { return c.json({ error: 'Driver already offered on this ride' }, 409) }
+  try { const offer = await c.env.DB.prepare("INSERT INTO drive_ride_offers (ride_request_id,driver_profile_id,expires_at) VALUES (?, ?, datetime('now', '+10 minutes'))").bind(ride.id, driver.id).run(); await c.env.DB.prepare("UPDATE drive_ride_requests SET status='offered',updated_at=datetime('now') WHERE id=? AND status='searching'").bind(ride.id).run(); return c.json({ id: Number(offer.meta.last_row_id), status: 'offered', expires_in_minutes: DRIVER_OFFER_EXPIRY_MINUTES }, 201) } catch { return c.json({ error: 'Driver already offered on this ride' }, 409) }
+})
+
+drivePreviewApi.get('/driver/offers', requireAuth, async (c) => {
+  const user = c.get('user')!
+  const driver = await c.env.DB.prepare("SELECT id,status FROM driver_profiles WHERE user_id=?").bind(user.id).first<any>()
+  if (!driver || driver.status !== 'active') return c.json({ error: 'Active driver profile required' }, 403)
+  await recoverExpiredRideOffers(c.env.DB)
+  const rows = await c.env.DB.prepare(`SELECT o.id,o.status,o.offered_at,o.expires_at,o.responded_at,r.id AS ride_id,r.pickup_zone,r.dropoff_zone,r.vehicle_category,r.fare_kobo,r.currency,r.status AS ride_status FROM drive_ride_offers o JOIN drive_ride_requests r ON r.id=o.ride_request_id WHERE o.driver_profile_id=? ORDER BY o.id DESC LIMIT 100`).bind(driver.id).all()
+  return c.json({ offers: rows.results, offer_expiry_minutes: DRIVER_OFFER_EXPIRY_MINUTES })
+})
+
+drivePreviewApi.post('/driver/offers/:id/reject', requireAuth, async (c) => {
+  const user = c.get('user')!
+  const driver = await c.env.DB.prepare("SELECT id,status FROM driver_profiles WHERE user_id=?").bind(user.id).first<any>()
+  if (!driver || driver.status !== 'active') return c.json({ error: 'Active driver profile required' }, 403)
+  const body = await c.req.json<{ reason?: string }>().catch(() => null)
+  const offer = await c.env.DB.prepare("SELECT o.id,o.ride_request_id,r.status AS ride_status FROM drive_ride_offers o JOIN drive_ride_requests r ON r.id=o.ride_request_id WHERE o.id=? AND o.driver_profile_id=? AND o.status='offered'").bind(Number(c.req.param('id')),driver.id).first<any>()
+  if (!offer) return c.json({ error: 'Pending offer not found or already handled' }, 409)
+  const changed = await c.env.DB.prepare("UPDATE drive_ride_offers SET status='rejected', rejection_reason=?, responded_at=datetime('now') WHERE id=? AND driver_profile_id=? AND status='offered' AND expires_at > datetime('now')").bind(body?.reason?.slice(0,200) || 'Driver rejected offer',offer.id,driver.id).run()
+  if (!changed.meta.rows_written) { await recoverExpiredRideOffers(c.env.DB, offer.ride_request_id); return c.json({ error: 'Offer expired before rejection' }, 409) }
+  await c.env.DB.prepare("INSERT INTO drive_ride_events (ride_request_id,from_status,to_status,actor_user_id,actor_role,note) VALUES (?,?,?,?,?,?)").bind(offer.ride_request_id,offer.ride_status,offer.ride_status,user.id,'driver','Offer rejected: '+(body?.reason || 'not available')).run()
+  await reassignRideAfterOffer(c.env.DB, offer.ride_request_id, offer.ride_status)
+  return c.json({ success: true, status: 'rejected' })
+})
+
+drivePreviewApi.post('/driver/offers/:id/expire', requireAuth, async (c) => {
+  const user = c.get('user')!
+  const driver = await c.env.DB.prepare("SELECT id FROM driver_profiles WHERE user_id=? AND status='active'").bind(user.id).first<any>()
+  if (!driver) return c.json({ error: 'Active driver profile required' }, 403)
+  await recoverExpiredRideOffers(c.env.DB)
+  return c.json({ success: true })
 })
 
 drivePreviewApi.post('/driver/offers/:id/accept', requireAuth, async (c) => {
+  await recoverExpiredRideOffers(c.env.DB)
   const user = c.get('user')!
   const offer = await c.env.DB.prepare('SELECT o.id,o.ride_request_id,o.driver_profile_id,r.status FROM drive_ride_offers o JOIN drive_ride_requests r ON r.id=o.ride_request_id JOIN driver_profiles d ON d.id=o.driver_profile_id WHERE o.id=? AND d.user_id=? AND o.status=\'offered\'').bind(Number(c.req.param('id')), user.id).first<any>()
   if (!offer) return c.json({ error: 'Offer not found or already handled' }, 404)

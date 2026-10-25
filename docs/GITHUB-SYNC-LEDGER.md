@@ -148,6 +148,15 @@
 - Build: `npm run build` passed (270 modules). Existing PM2 preview reused; `/drive` returned HTTP 200 after restart.
 - Registry: `DRIVE-001` is `PARTIAL`, not complete. Authenticated browser customer/driver acceptance, live routing/GPS, external payment and richer dispatch expiry/reassignment remain blocked or incomplete.
 
+## DRIVE-001 dispatch recovery and driver offer inbox
+
+- Added `migrations/0099_naijadrive_dispatch_recovery.sql`: server-side offer expiry timestamps, rejection reason and reassignment count.
+- Added driver offer inbox API `GET /api/drive/driver/offers`, authenticated reject action, server-enforced expiry processing and bounded reassignment/no-driver recovery. Existing atomic acceptance remains protected by conditional ride updates.
+- Updated `/drive` with a real refresh-based driver offer inbox showing pending, accepted, rejected and expired offers, plus accept/reject controls. The UI does not claim live GPS or push updates.
+- REA capability/version was rechecked at `6.7.0`; existing fresh evidence `ev_671bd4a782953eff4ae132ab24dfbd4afa7daeccc66d01aca32f7a4814484926` remains the only relevant Bolt capture. No private Bolt workflow was inferred or bypassed.
+- Build passed (270 modules). Dispatch recovery, private ride, carpool and Shop checkout regression tests passed: 6/6.
+- Existing PM2 preview reused; `/drive` returned HTTP 200. Authenticated driver browser acceptance remains unavailable without an authorized driver session and is recorded as a limitation. `DRIVE-001` remains `PARTIAL`.
+
 ## Known gates not green
 
 - Whole-repository `npm run test:node` has existing unrelated production waitlist and NestJS TypeScript source-loader failures.

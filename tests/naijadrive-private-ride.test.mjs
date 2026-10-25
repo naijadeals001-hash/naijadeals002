@@ -2,14 +2,15 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { registerUser, cleanupRunNonce, queryOneD1, execD1, RUN_NONCE } from './marketplace-engine/helpers/client.mjs'
 
-let customer, driver
+let customer, driver, driverTwo
 
 test.before(async () => {
   customer = await registerUser('ride-customer')
   driver = await registerUser('ride-driver')
-  await execD1(`INSERT INTO driver_profiles (user_id,license_number,country_iso,status,is_online) VALUES (${driver.userId}, 'LIC-${RUN_NONCE}', 'NG', 'active', 1)`)
+  driverTwo = await registerUser('ride-driver-two')
+  await execD1(`INSERT INTO driver_profiles (user_id,license_number,country_iso,status,is_online,operational_status) VALUES (${driver.userId}, 'LIC-${RUN_NONCE}-1', 'NG', 'active', 1, 'available'), (${driverTwo.userId}, 'LIC-${RUN_NONCE}-2', 'NG', 'active', 1, 'available')`)
 })
-test.after(async () => { await execD1(`DELETE FROM drive_ride_events; DELETE FROM drive_ride_offers; DELETE FROM drive_ride_requests; DELETE FROM driver_profiles WHERE license_number = 'LIC-${RUN_NONCE}';`); await cleanupRunNonce(RUN_NONCE) })
+test.after(async () => { await execD1(`DELETE FROM drive_ride_events; DELETE FROM drive_ride_offers; DELETE FROM drive_ride_requests; DELETE FROM driver_profiles WHERE license_number LIKE 'LIC-${RUN_NONCE}%';`); await cleanupRunNonce(RUN_NONCE) })
 
 test('private ride persists, retries idempotently, driver accepts, and lifecycle transitions are authorized', async () => {
   const payload = { pickupZone: 'abuja-central', dropoffZone: 'gwarinpa', vehicleCategory: 'car', idempotencyKey: `ride-${RUN_NONCE}` }
@@ -31,6 +32,27 @@ test('private ride persists, retries idempotently, driver accepts, and lifecycle
   const stored = await queryOneD1(`SELECT status,fare_kobo,fare_mode FROM drive_ride_requests WHERE id=${rideId}`)
   assert.equal(stored.status, 'completed')
   assert.equal(stored.fare_mode, 'simulated')
+})
+
+test('offer inbox, expiry, rejection and no-driver recovery are persisted', async () => {
+  const created = await customer.client.post('/api/drive/rides', { pickupZone: 'abuja-central', dropoffZone: 'lokogoma', vehicleCategory: 'car', idempotencyKey: `recovery-${RUN_NONCE}` })
+  assert.equal(created.status, 201, JSON.stringify(created.body))
+  const rideId = created.body.ride.id
+  const offered = await driver.client.post(`/api/drive/rides/${rideId}/offers`, {})
+  const inbox = await driver.client.get('/api/drive/driver/offers')
+  assert.equal(inbox.status, 200)
+  assert.ok(inbox.body.offers.some((o) => o.id === offered.body.id))
+  await execD1(`UPDATE drive_ride_offers SET expires_at = datetime('now','-1 minute') WHERE id = ${offered.body.id}`)
+  const recovered = await driverTwo.client.get('/api/drive/driver/offers')
+  assert.equal(recovered.status, 200)
+  const next = recovered.body.offers.find((o) => o.ride_id === rideId && o.status === 'offered')
+  assert.ok(next, JSON.stringify(recovered.body))
+  const rejected = await driverTwo.client.post(`/api/drive/driver/offers/${next.id}/reject`, { reason: 'Unavailable' })
+  assert.equal(rejected.status, 200, JSON.stringify(rejected.body))
+  const ride = await queryOneD1(`SELECT status FROM drive_ride_requests WHERE id = ${rideId}`)
+  assert.equal(ride.status, 'no_driver_available')
+  const events = await queryOneD1(`SELECT COUNT(*) AS count FROM drive_ride_events WHERE ride_request_id = ${rideId} AND note LIKE '%rejected%'`)
+  assert.equal(events.count, 1)
 })
 
 test('invalid zones and unauthenticated ride creation fail closed', async () => {

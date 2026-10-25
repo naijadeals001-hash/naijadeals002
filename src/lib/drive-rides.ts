@@ -16,4 +16,36 @@ export async function transitionRide(db: D1Database, rideId: number, fromStatuse
   await recordRideEvent(db, rideId, current.status, to, actorUserId, actorRole, note)
   return to
 }
+export const DRIVER_OFFER_EXPIRY_MINUTES = 10
+
+export async function recoverExpiredRideOffers(db: D1Database, rideId?: number) {
+  const rides = await db.prepare(`SELECT DISTINCT r.id,r.status FROM drive_ride_requests r JOIN drive_ride_offers o ON o.ride_request_id=r.id WHERE o.status='offered' AND o.expires_at <= datetime('now') ${rideId ? 'AND r.id = ?' : ''}`).bind(...(rideId ? [rideId] : [])).all<any>()
+  for (const ride of rides.results) {
+    const expired = await db.prepare("UPDATE drive_ride_offers SET status='expired',responded_at=datetime('now') WHERE ride_request_id=? AND status='offered' AND expires_at <= datetime('now')").bind(ride.id).run()
+    if (!expired.meta.rows_written) continue
+    const candidate = await db.prepare(`SELECT d.id FROM driver_profiles d WHERE d.status='active' AND d.is_online=1 AND d.operational_status='available' AND NOT EXISTS (SELECT 1 FROM drive_ride_offers o WHERE o.ride_request_id=? AND o.driver_profile_id=d.id AND o.status IN ('rejected','expired')) ORDER BY d.id LIMIT 1`).bind(ride.id).first<{id:number}>()
+    if (candidate) {
+      await db.prepare("INSERT OR IGNORE INTO drive_ride_offers (ride_request_id,driver_profile_id,status,expires_at) VALUES (?,?,'offered',datetime('now', '+10 minutes'))").bind(ride.id,candidate.id).run()
+      await db.prepare("UPDATE drive_ride_requests SET status='offered',reassignment_count=reassignment_count+1,updated_at=datetime('now') WHERE id=? AND status IN ('searching','offered')").bind(ride.id).run()
+      await recordRideEvent(db, ride.id, ride.status, 'offered', null, 'system', 'Expired offer reassigned to next eligible driver')
+    } else {
+      await db.prepare("UPDATE drive_ride_requests SET status='no_driver_available',updated_at=datetime('now') WHERE id=? AND status IN ('searching','offered')").bind(ride.id).run()
+      await recordRideEvent(db, ride.id, ride.status, 'no_driver_available', null, 'system', 'All eligible driver offers expired or were rejected')
+    }
+  }
+}
+
+export async function reassignRideAfterOffer(db: D1Database, rideId: number, fromStatus: string) {
+  const candidate = await db.prepare(`SELECT d.id FROM driver_profiles d JOIN drive_ride_requests r ON r.id=? WHERE d.status='active' AND d.is_online=1 AND d.operational_status='available' AND NOT EXISTS (SELECT 1 FROM drive_ride_offers o WHERE o.ride_request_id=? AND o.driver_profile_id=d.id AND o.status IN ('rejected','expired')) ORDER BY d.id LIMIT 1`).bind(rideId, rideId).first<{id:number}>()
+  if (candidate) {
+    await db.prepare("INSERT OR IGNORE INTO drive_ride_offers (ride_request_id,driver_profile_id,status,expires_at) VALUES (?,?,'offered',datetime('now', '+10 minutes'))").bind(rideId,candidate.id).run()
+    await db.prepare("UPDATE drive_ride_requests SET status='offered',reassignment_count=reassignment_count+1,updated_at=datetime('now') WHERE id=? AND status IN ('searching','offered')").bind(rideId).run()
+    await recordRideEvent(db, rideId, fromStatus, 'offered', null, 'system', 'Offer reassigned after driver rejection')
+    return 'offered'
+  }
+  await db.prepare("UPDATE drive_ride_requests SET status='no_driver_available',updated_at=datetime('now') WHERE id=? AND status IN ('searching','offered')").bind(rideId).run()
+  await recordRideEvent(db, rideId, fromStatus, 'no_driver_available', null, 'system', 'No eligible drivers remain after rejection')
+  return 'no_driver_available'
+}
+
 export async function getRideForCustomer(db: D1Database, rideId: number, userId: number) { return db.prepare('SELECT r.*, dp.user_id AS driver_user_id, dp.id AS driver_profile_id FROM drive_ride_requests r LEFT JOIN driver_profiles dp ON dp.id = r.accepted_driver_profile_id WHERE r.id = ? AND r.customer_user_id = ?').bind(rideId, userId).first() }
