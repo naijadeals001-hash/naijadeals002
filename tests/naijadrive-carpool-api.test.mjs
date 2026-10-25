@@ -36,4 +36,11 @@ test('carpool passenger requests and driver decisions use owned persisted APIs',
   assert.equal(decision.body.status, 'accepted')
   assert.equal((await queryOneD1(`SELECT status,seats_available FROM carpool_trips WHERE id=${trip.body.id}`)).seats_available, 0)
   assert.equal((await queryOneD1(`SELECT status FROM carpool_requests WHERE id=${request.body.id}`)).status, 'accepted')
+
+  const cancelled = await passenger.client.post(`/api/carpool/requests/${request.body.id}/cancel`, {})
+  assert.equal(cancelled.status, 200, JSON.stringify(cancelled.body))
+  assert.equal(cancelled.body.status, 'cancelled')
+  assert.deepEqual(await queryOneD1(`SELECT status,seats_available FROM carpool_trips WHERE id=${trip.body.id}`), { status: 'published', seats_available: 1 })
+  assert.equal((await queryOneD1(`SELECT status FROM carpool_requests WHERE id=${request.body.id}`)).status, 'cancelled')
+  assert.equal((await driver.client.post(`/api/carpool/requests/${request.body.id}/cancel`, {})).status, 404)
 })

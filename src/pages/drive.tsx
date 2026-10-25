@@ -149,6 +149,28 @@ export async function drivePage(c: Context<AppEnv>) {
                 const result = await requestResponse.json().catch(() => ({}));
                 if (!requestResponse.ok) throw new Error(result.error || 'Carpool request unavailable.');
                 button.textContent = 'Request submitted';
+                const cancelButton = document.createElement('button');
+                cancelButton.type = 'button';
+                cancelButton.className = 'ml-2 rounded-lg border border-red-200 px-3 py-2 text-xs font-bold text-red-700';
+                cancelButton.textContent = 'Cancel request';
+                cancelButton.addEventListener('click', async () => {
+                  if (cancelButton.disabled) return;
+                  cancelButton.disabled = true;
+                  cancelButton.setAttribute('aria-busy', 'true');
+                  try {
+                    const cancelResponse = await fetch('/api/carpool/requests/' + result.id + '/cancel', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({}) });
+                    const cancelResult = await cancelResponse.json().catch(() => ({}));
+                    if (!cancelResponse.ok) throw new Error(cancelResult.error || 'Carpool cancellation unavailable.');
+                    cancelButton.remove();
+                    button.textContent = 'Request cancelled';
+                    if (carpoolStatus) carpoolStatus.textContent = 'Seat request #' + result.id + ' was cancelled and inventory was restored.';
+                  } catch (error) {
+                    cancelButton.disabled = false;
+                    cancelButton.removeAttribute('aria-busy');
+                    if (carpoolStatus) carpoolStatus.textContent = error instanceof Error ? error.message : 'Carpool cancellation unavailable.';
+                  }
+                });
+                button.insertAdjacentElement('afterend', cancelButton);
                 if (carpoolStatus) carpoolStatus.textContent = 'Seat request #' + result.id + ' is awaiting the trip driver.';
               } catch (error) {
                 button.disabled = false;
@@ -272,6 +294,16 @@ export async function drivePage(c: Context<AppEnv>) {
         const cancelRideButton = document.getElementById('cancel-drive-ride');
         let activeRideId = null;
         let rideStatusRequest = 0;
+        let rideStatusTimer = null;
+        const terminalRideStatuses = new Set(['completed', 'cancelled', 'no_driver_available']);
+        function stopRidePolling() {
+          if (rideStatusTimer !== null) { window.clearInterval(rideStatusTimer); rideStatusTimer = null; }
+        }
+        function scheduleRidePolling(status) {
+          if (!activeRideId || terminalRideStatuses.has(status) || rideStatusTimer !== null) { if (terminalRideStatuses.has(status)) stopRidePolling(); return; }
+          rideStatusTimer = window.setInterval(() => { if (document.visibilityState === 'visible') loadRideStatus(); }, 15000);
+        }
+        document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && activeRideId) loadRideStatus(); });
         const heroFare = document.getElementById('hero-fare-estimate');
         const heroFareMode = document.getElementById('hero-fare-mode');
         const heroRouteStatus = document.getElementById('hero-route-status');
@@ -317,6 +349,7 @@ export async function drivePage(c: Context<AppEnv>) {
             const status = body.ride.status;
             rideStatus.textContent = 'Ride #' + body.ride.id + ' is ' + status.replaceAll('_', ' ') + '. Last updated ' + new Date(body.ride.updated_at).toLocaleString('en-NG') + '.';
             cancelRideButton?.classList.toggle('hidden', !['requested','searching','offered','accepted','driver_arriving','driver_arrived'].includes(status));
+            scheduleRidePolling(status);
           } catch (error) {
             if (requestId === rideStatusRequest) rideStatus.textContent = error instanceof Error ? error.message : 'Ride status unavailable.';
           }

@@ -98,6 +98,15 @@
 - Consolidated milestone checklist: customer request/persistence `PASS`; customer status refresh `PASS`; customer cancellation and valid transitions `PASS`; driver offer inbox and accept/reject lifecycle `PASS`; active online driver eligibility and availability persistence `PASS`; assignment/reassignment/expiry/concurrency `PASS`; authorization, ownership, validation and idempotency `PASS`; failed-request recovery and persisted refresh `PASS`; accessible status/busy controls implemented but browser-acceptance `BLOCKED`; authenticated customer/driver browser journey `BLOCKED` pending an authorized session; GPS, WebSocket dispatch, external routing and payment remain explicitly out of scope/unconfigured.
 - Focused NaijaDrive + CC-003 run: **28/28 passed** across registry normalization, unified registry assertions, private ride lifecycle, cancellation ownership, availability, carpool request/decision APIs, carpool inventory and preview checks. TypeScript and build also pass after this increment.
 
+## NaijaDrive real-time readiness and lifecycle reliability — local, pending push
+
+- Starting checkpoint verified at `bb38d38e026ea2491eef6bbe547725d1fe9dcc5d`; `/`, `/drive`, `/eats` remained HTTP 200; `.npm-cache-rea/` and `/home/user/webapp` were preserved.
+- Lifecycle reliability audit found two concrete gaps: ride status/event persistence used separate writes, and carpool passengers lacked a cancellation path. Ride transitions now update the request and append its event in one D1 batch with a post-update event guard; carpool cancellation safely restores seats with ownership, status and inventory guards. Focused lifecycle tests pass.
+- Real-time architecture decision: bounded, visibility-aware polling over the existing authenticated ride-status endpoint is the lowest-cost compatible preview foundation. SSE and WebSockets are deferred because durable replay, connection ownership, presence, backpressure and authenticated browser acceptance are not available in this environment. No real-time delivery claim is made.
+- Added `docs/ADR-NAIJADRIVE-REALTIME-READINESS.md` and `docs/NAIJADRIVE-API-CONTRACTS.md`. The Drive customer panel now polls only while a non-terminal ride is active and the document is visible; terminal statuses stop polling.
+- REA `6.7.0` artifact inspection passed with evidence `ev_24de7a6f7268f400db1818aec8ab30950c7d1e585fdf9830a3bb36deef6d80d0`. ECC remains `PASS`; REA and Soup remain `PARTIAL` for their previously documented provider/integration limitations.
+- Authenticated browser acceptance remains `BLOCKED`; no credentials were invented or authentication bypassed. Production deployment and production mutation remain unperformed.
+
 ## TS-001 — TypeScript diagnostic remediation and quality-gate recovery
 
 - Starting checkpoint verified: local and remote `210ad1c5b533d5c4f73e577956c773dda7d64e3c` on `feat/naijadrive-private-ride-foundation`; `.npm-cache-rea/` preserved and unrelated worktrees untouched.

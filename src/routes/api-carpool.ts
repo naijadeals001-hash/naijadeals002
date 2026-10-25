@@ -55,6 +55,22 @@ carpoolApi.get('/driver/requests', requireAuth, async (c) => {
   return c.json({ requests: results })
 })
 
+carpoolApi.post('/requests/:id/cancel', requireAuth, async (c) => {
+  const user = c.get('user')!
+  const requestId = Number(c.req.param('id'))
+  const request = await c.env.DB.prepare(`SELECT cr.id, cr.status, cr.seats_requested, cr.trip_id, ct.status AS trip_status FROM carpool_requests cr JOIN carpool_trips ct ON ct.id = cr.trip_id WHERE cr.id = ? AND cr.passenger_user_id = ?`).bind(requestId, user.id).first<any>()
+  if (!request) return c.json({ error: 'Request not found or not owned by this passenger' }, 404)
+  if (!['requested', 'accepted'].includes(request.status)) return c.json({ error: 'Request is no longer cancellable' }, 409)
+  const changed = await c.env.DB.prepare(`UPDATE carpool_requests SET status='cancelled', updated_at=datetime('now') WHERE id=? AND passenger_user_id=? AND status=?`).bind(requestId, user.id, request.status).run()
+  if (!changed.meta.rows_written) return c.json({ error: 'Request changed concurrently; retry' }, 409)
+  const restored = await c.env.DB.prepare(`UPDATE carpool_trips SET seats_available=seats_available + ?, status='published', updated_at=datetime('now') WHERE id=? AND status IN ('full','published') AND seats_available + ? <= seats_total`).bind(request.seats_requested, request.trip_id, request.seats_requested).run()
+  if (!restored.meta.rows_written) {
+    await c.env.DB.prepare(`UPDATE carpool_requests SET status=? WHERE id=? AND status='cancelled'`).bind(request.status, requestId).run()
+    return c.json({ error: 'Trip inventory changed concurrently; cancellation was not applied' }, 409)
+  }
+  return c.json({ success: true, id: requestId, status: 'cancelled', trip_id: request.trip_id })
+})
+
 carpoolApi.post('/requests/:id/decision', requireAuth, async (c) => {
   const user = c.get('user')!
   const requestId = Number(c.req.param('id'))
@@ -64,6 +80,6 @@ carpoolApi.post('/requests/:id/decision', requireAuth, async (c) => {
   if (!request) return c.json({ error: 'Request not found or not owned by this driver' }, 404)
   if (request.status !== 'requested') return c.json({ error: 'Request has already been decided' }, 409)
   await c.env.DB.prepare(`UPDATE carpool_requests SET status = ?, updated_at = datetime('now') WHERE id = ? AND status = 'requested'`).bind(body.status, requestId).run()
-  if (body.status === 'rejected') await c.env.DB.prepare(`UPDATE carpool_trips SET seats_available = seats_available + ?, status = 'published', updated_at = datetime('now') WHERE id = ? AND status = 'full'`).bind(request.seats_requested, request.trip_id).run()
+  if (body.status === 'rejected') await c.env.DB.prepare(`UPDATE carpool_trips SET seats_available = seats_available + ?, status = 'published', updated_at = datetime('now') WHERE id = ? AND status IN ('full','published') AND seats_available + ? <= seats_total`).bind(request.seats_requested, request.trip_id, request.seats_requested).run()
   return c.json({ success: true, id: requestId, status: body.status })
 })

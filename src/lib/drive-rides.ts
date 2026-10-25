@@ -11,9 +11,11 @@ export async function transitionRide(db: D1Database, rideId: number, fromStatuse
   const current = await db.prepare('SELECT status FROM drive_ride_requests WHERE id = ?').bind(rideId).first<{status: RideStatus}>()
   if (!current) throw new Error('Ride request not found')
   if (!fromStatuses.includes(current.status) || !transitions[current.status]?.includes(to)) throw new Error(`Invalid ride transition ${current.status} -> ${to}`)
-  const updated = await db.prepare(`UPDATE drive_ride_requests SET status = ?, updated_at = datetime('now'), accepted_at = CASE WHEN ? = 'accepted' THEN datetime('now') ELSE accepted_at END, completed_at = CASE WHEN ? = 'completed' THEN datetime('now') ELSE completed_at END, cancelled_at = CASE WHEN ? = 'cancelled' THEN datetime('now') ELSE cancelled_at END WHERE id = ? AND status = ?`).bind(to, to, to, to, rideId, current.status).run()
-  if (!updated.meta.rows_written) throw new Error('Ride changed concurrently; retry')
-  await recordRideEvent(db, rideId, current.status, to, actorUserId, actorRole, note)
+  const [updated, event] = await db.batch([
+    db.prepare(`UPDATE drive_ride_requests SET status = ?, updated_at = datetime('now'), accepted_at = CASE WHEN ? = 'accepted' THEN datetime('now') ELSE accepted_at END, completed_at = CASE WHEN ? = 'completed' THEN datetime('now') ELSE completed_at END, cancelled_at = CASE WHEN ? = 'cancelled' THEN datetime('now') ELSE cancelled_at END WHERE id = ? AND status = ?`).bind(to, to, to, to, rideId, current.status),
+    db.prepare(`INSERT INTO drive_ride_events (ride_request_id,from_status,to_status,actor_user_id,actor_role,note) SELECT ?,?,?,?,?,? WHERE EXISTS (SELECT 1 FROM drive_ride_requests WHERE id=? AND status=?)`).bind(rideId, current.status, to, actorUserId, actorRole, note, rideId, to),
+  ])
+  if (!updated.meta.rows_written || !event.meta.rows_written) throw new Error('Ride changed concurrently; retry')
   return to
 }
 export const DRIVER_OFFER_EXPIRY_MINUTES = 10
