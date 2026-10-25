@@ -21,6 +21,7 @@
 import { Hono } from 'hono'
 import type { AppEnv } from '../types'
 import { requireAuth } from '../lib/auth'
+import { assertVerticalTransactionAllowed, RolloutGuardError } from '../lib/control-center-rollout'
 import { resolveMembership } from '../lib/organizations'
 import { createLogisticsQuote, getQuoteForCustomer } from '../lib/logistics-pricing'
 import {
@@ -135,6 +136,12 @@ logisticsApi.post('/logistics/quotes', async (c) => {
   if (!body.origin_country_iso || !body.destination_country_iso || !body.vehicle_type_id || !body.speed_tier) {
     return c.json({ error: 'origin_country_iso, destination_country_iso, vehicle_type_id and speed_tier are required' }, 400)
   }
+  try {
+    await assertVerticalTransactionAllowed(c.env.DB, 'ecosystem.naijasend', body.origin_country_iso)
+  } catch (err) {
+    if (err instanceof RolloutGuardError) return c.json({ error: err.message, code: err.code }, err.status as any)
+    throw err
+  }
   const quote = await createLogisticsQuote(c.env.DB, user.id, {
     customerUserId: user.id,
     originCountryIso: body.origin_country_iso,
@@ -164,6 +171,7 @@ logisticsApi.post('/shipments', async (c) => {
     return c.json({ error: 'pickup, dropoff, vehicle_type_id, speed_tier and quoted_price_kobo are required' }, 400)
   }
   try {
+    await assertVerticalTransactionAllowed(c.env.DB, 'ecosystem.naijasend', body.origin_country_iso ?? 'NG')
     const result = await createStandaloneShipment(c.env.DB, user.id, {
       originCountryIso: body.origin_country_iso ?? 'NG',
       destinationCountryIso: body.destination_country_iso ?? 'NG',
@@ -187,6 +195,7 @@ logisticsApi.post('/shipments', async (c) => {
     })
     return c.json(result, 201)
   } catch (err) {
+    if (err instanceof RolloutGuardError) return c.json({ error: err.message, code: err.code }, err.status as any)
     if (err instanceof LogisticsShipmentError) return c.json({ error: err.message }, 400)
     throw err
   }

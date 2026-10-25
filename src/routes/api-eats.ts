@@ -9,6 +9,7 @@ import type { AppEnv } from '../types'
 import { getOrSetGuestToken } from '../lib/guest'
 import { getAddress } from '../lib/addresses'
 import { requireAuth } from '../lib/auth'
+import { assertVerticalTransactionAllowed, RolloutGuardError } from '../lib/control-center-rollout'
 import { getMenuItem } from '../lib/eats'
 import {
   getOrCreateEatsCartId,
@@ -160,11 +161,13 @@ eatsApi.post('/checkout', async (c) => {
 
   let orderId: number, orderNumber: string, totalKobo: number
   try {
+    await assertVerticalTransactionAllowed(c.env.DB, 'ecosystem.naijaeats', shipping.country ?? 'NG')
     const result = await createPendingEatsOrder(c.env.DB, user.id, items, shipping, body.special_instructions?.trim() || null)
     orderId = result.orderId
     orderNumber = result.orderNumber
     totalKobo = result.totalKobo
   } catch (err) {
+    if (err instanceof RolloutGuardError) return c.json({ error: err.message, code: err.code }, err.status as any)
     if (err instanceof EatsCheckoutError) return c.json({ error: err.message }, 400)
     throw err
   }

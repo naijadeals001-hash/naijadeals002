@@ -10,6 +10,7 @@
 import { Hono } from 'hono'
 import type { AppEnv } from '../types'
 import { requireAuth } from '../lib/auth'
+import { assertVerticalTransactionAllowed, RolloutGuardError } from '../lib/control-center-rollout'
 import {
   createServiceRequest,
   getOwnedServiceRequest,
@@ -48,9 +49,11 @@ serviceRequestsApi.post('/service-requests', async (c) => {
   if (!body?.category_id || !body?.title) return c.json({ error: 'category_id and title are required' }, 400)
 
   try {
+    await assertVerticalTransactionAllowed(c.env.DB, 'ecosystem.naijagigs', body.country_iso ?? 'NG')
     const requestId = await createServiceRequest(c.env.DB, user.id, body)
     return c.json({ id: requestId }, 201)
   } catch (err: any) {
+    if (err instanceof RolloutGuardError) return c.json({ error: err.message, code: err.code }, err.status as any)
     return c.json({ error: err.message ?? 'Failed to create service request' }, 400)
   }
 })
@@ -111,11 +114,16 @@ serviceRequestsApi.post('/quotes/:id/accept', async (c) => {
   const quoteId = Number(c.req.param('id'))
 
   try {
+    const quoteForGuard = await getQuoteForCustomer(c.env.DB, user.id, quoteId)
+    if (!quoteForGuard) return c.json({ error: 'Quote not found' }, 404)
+    const requestForGuard = await c.env.DB.prepare('SELECT country_iso FROM service_requests WHERE id = ?').bind(quoteForGuard.service_request_id).first<{ country_iso: string }>()
+    await assertVerticalTransactionAllowed(c.env.DB, 'ecosystem.naijagigs', requestForGuard?.country_iso ?? 'NG')
     const quote = await acceptQuote(c.env.DB, user.id, quoteId)
     const orderId = await createServiceOrderFromQuote(c.env.DB, quote, user.id)
     return c.json({ success: true, quote, service_order_id: orderId })
   } catch (err) {
     if (err instanceof NotOwnedError) return c.json({ error: err.message }, 404)
+    if (err instanceof RolloutGuardError) return c.json({ error: err.message, code: err.code }, err.status as any)
     if (err instanceof QuoteStateError || err instanceof OrderStateError) return c.json({ error: err.message }, 400)
     throw err
   }
@@ -127,10 +135,15 @@ serviceRequestsApi.post('/quotes/:id/reject', async (c) => {
   const quoteId = Number(c.req.param('id'))
 
   try {
+    const quoteForGuard = await getQuoteForCustomer(c.env.DB, user.id, quoteId)
+    if (!quoteForGuard) return c.json({ error: 'Quote not found' }, 404)
+    const requestForGuard = await c.env.DB.prepare('SELECT country_iso FROM service_requests WHERE id = ?').bind(quoteForGuard.service_request_id).first<{ country_iso: string }>()
+    await assertVerticalTransactionAllowed(c.env.DB, 'ecosystem.naijagigs', requestForGuard?.country_iso ?? 'NG')
     const ok = await rejectQuote(c.env.DB, user.id, quoteId)
     if (!ok) return c.json({ error: 'Quote not found' }, 404)
     return c.json({ success: true })
   } catch (err) {
+    if (err instanceof RolloutGuardError) return c.json({ error: err.message, code: err.code }, err.status as any)
     if (err instanceof QuoteStateError) return c.json({ error: err.message }, 400)
     throw err
   }

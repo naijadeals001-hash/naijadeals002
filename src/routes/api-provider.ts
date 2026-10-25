@@ -14,6 +14,7 @@
 import { Hono } from 'hono'
 import type { AppEnv, ProviderProfileRow } from '../types'
 import { requireAuth } from '../lib/auth'
+import { assertVerticalTransactionAllowed, RolloutGuardError } from '../lib/control-center-rollout'
 import { resolveProviderStatus, resolveOrganizationProvider, createProviderProfile } from '../lib/providers'
 import {
   createServiceListing,
@@ -220,10 +221,14 @@ providerApi.post('/providers/me/requests/:id/quotes', async (c) => {
   if (!body?.price_kobo) return c.json({ error: 'price_kobo is required' }, 400)
 
   try {
+    const request = await c.env.DB.prepare('SELECT country_iso FROM service_requests WHERE id = ?').bind(requestId).first<{ country_iso: string }>()
+    if (!request) return c.json({ error: 'Service request not found' }, 404)
+    await assertVerticalTransactionAllowed(c.env.DB, 'ecosystem.naijagigs', request.country_iso ?? 'NG')
     const quoteId = await createQuote(c.env.DB, provider.id, requestId, body)
     return c.json({ id: quoteId }, 201)
   } catch (err: any) {
     if (err instanceof NotOwnedError) return c.json({ error: err.message }, 404)
+    if (err instanceof RolloutGuardError) return c.json({ error: err.message, code: err.code }, err.status as any)
     if (err instanceof QuoteStateError) return c.json({ error: err.message }, 400)
     return c.json({ error: err.message ?? 'Failed to create quote' }, 400)
   }

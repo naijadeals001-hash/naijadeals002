@@ -2,6 +2,19 @@ import type { EcosystemCapabilityState } from './control-center-ecosystem'
 
 export type CountryRolloutStatus = 'PLANNED' | 'PRE-LAUNCH' | 'BETA' | 'LIVE' | 'PAUSED' | 'SUSPENDED'
 
+export type RolloutGuardCode = 'VERTICAL_NOT_CONFIGURED' | 'VERTICAL_DISABLED' | 'COUNTRY_NOT_OPERATIONAL' | 'VERTICAL_DISABLED_IN_COUNTRY'
+
+export class RolloutGuardError extends Error {
+  readonly code: RolloutGuardCode
+  readonly status = 409
+
+  constructor(code: RolloutGuardCode, message: string) {
+    super(message)
+    this.name = 'RolloutGuardError'
+    this.code = code
+  }
+}
+
 export type RolloutCountry = {
   id: number
   isoCode: string
@@ -86,18 +99,45 @@ export async function isCountryOperational(db: D1Database, isoCode: string): Pro
 export async function isVerticalEnabledInCountry(db: D1Database, verticalKey: string, isoCode: string): Promise<boolean> {
   const key = verticalKey.startsWith('ecosystem.') ? verticalKey : `ecosystem.${verticalKey}`
   const row = await db.prepare(`
-    SELECT CASE
-      WHEN override.enabled IS NOT NULL THEN override.enabled
-      WHEN countryRow.status IN ('LIVE', 'BETA') THEN cap.enabled
-      ELSE 0
-    END AS enabled
+    SELECT cap.enabled AS globally_enabled,
+           cap.status AS capability_status,
+           countryRow.status AS country_status,
+           override.enabled AS country_override
     FROM cc_capabilities cap
     LEFT JOIN cc_countries countryRow ON countryRow.iso_code = ?
     LEFT JOIN cc_capability_country_overrides override
       ON override.capability_id = cap.id AND override.country_id = countryRow.id
     WHERE cap.key = ?
-  `).bind(isoCode.toUpperCase(), key).first<{ enabled: number }>()
-  return row?.enabled === 1
+  `).bind(isoCode.toUpperCase(), key).first<{ globally_enabled: number; capability_status: string; country_status: CountryRolloutStatus | null; country_override: number | null }>()
+  return !!row && row.globally_enabled === 1 && row.capability_status === 'ACTIVE' && !!row.country_status && OPERATIONAL_COUNTRY_STATUSES.has(row.country_status) && (row.country_override === null ? true : row.country_override === 1)
+}
+
+/**
+ * Transaction-boundary guard. Unlike the discovery helper, this fails closed
+ * when the capability, country, configuration status, or global switch is
+ * missing. Global disablement is evaluated before country overrides, so a
+ * country cannot re-enable a globally disabled vertical.
+ */
+export async function assertVerticalTransactionAllowed(db: D1Database, verticalKey: string, isoCode: string): Promise<void> {
+  const key = verticalKey.startsWith('ecosystem.') ? verticalKey : `ecosystem.${verticalKey}`
+  const country = isoCode.trim().toUpperCase()
+  const row = await db.prepare(`
+    SELECT cap.enabled AS globally_enabled,
+           cap.status AS capability_status,
+           countryRow.status AS country_status,
+           override.enabled AS country_override
+    FROM cc_capabilities cap
+    LEFT JOIN cc_countries countryRow ON countryRow.iso_code = ?
+    LEFT JOIN cc_capability_country_overrides override
+      ON override.capability_id = cap.id AND override.country_id = countryRow.id
+    WHERE cap.key = ?
+  `).bind(country, key).first<{ globally_enabled: number; capability_status: string; country_status: CountryRolloutStatus | null; country_override: number | null }>()
+
+  if (!row) throw new RolloutGuardError('VERTICAL_NOT_CONFIGURED', `Vertical capability ${key} is not configured for transactions`)
+  if (row.globally_enabled !== 1) throw new RolloutGuardError('VERTICAL_DISABLED', `Vertical ${key} is globally disabled`)
+  if (row.capability_status !== 'ACTIVE') throw new RolloutGuardError('VERTICAL_NOT_CONFIGURED', `Vertical ${key} is not operationally configured`)
+  if (!row.country_status || !OPERATIONAL_COUNTRY_STATUSES.has(row.country_status)) throw new RolloutGuardError('COUNTRY_NOT_OPERATIONAL', `Country ${country} is not operational for new transactions`)
+  if (row.country_override === 0) throw new RolloutGuardError('VERTICAL_DISABLED_IN_COUNTRY', `Vertical ${key} is disabled in country ${country}`)
 }
 
 export async function setCountryStatus(db: D1Database, countryId: number, status: CountryRolloutStatus): Promise<RolloutCountry | null> {

@@ -217,10 +217,9 @@ export async function customerTransitionOrder(db: D1Database, customerUserId: nu
     }
   }
   if (newStatus === 'customer_confirmed') {
-    // Customer-confirmed completion is the trigger point where a real
-    // Payment Engine would release escrow to the provider (spec section 25)
-    // — out of scope here beyond recording the payment_status transition.
-    extra.push(`payment_status = 'released'`)
+    // Completion confirmation is recorded separately from settlement. No
+    // payment provider has been charged in this lifecycle, so payment_status
+    // must remain 'unpaid' until a real payment/escrow release operation runs.
   }
 
   await db

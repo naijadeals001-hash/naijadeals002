@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import type { AppEnv, OrderRow, CartItemRow } from '../types'
 import { requireAuth } from '../lib/auth'
+import { assertVerticalTransactionAllowed, RolloutGuardError } from '../lib/control-center-rollout'
 import { getOrCreateCartId, getCartItems, removeCartItemsByListingIds, getBuyNowItem } from '../lib/cart'
 import { getAddress } from '../lib/addresses'
 import { createPendingOrder, payOrderFromWallet, InsufficientFundsError, OrderPaymentError, type DeliveryMethod } from '../lib/orders'
@@ -189,6 +190,13 @@ ordersApi.post('/checkout', async (c) => {
   }
 
   const deliveryMethod: DeliveryMethod = body.delivery_method === 'express' ? 'express' : 'standard'
+
+  try {
+    await assertVerticalTransactionAllowed(c.env.DB, 'ecosystem.naijashop', shipping.country)
+  } catch (err) {
+    if (err instanceof RolloutGuardError) return c.json({ error: err.message, code: err.code }, err.status as any)
+    throw err
+  }
 
   // ---------- Resolve items ----------
   let items: CartItemRow[]
