@@ -95,6 +95,21 @@
 - Build passed after adding the route; local migration `0093_naijasend_freight_marketplace_foundation.sql` applied successfully.
 - No production deployment or remote D1 mutation performed.
 
+## Fresh REA evidence-driven workflow batch (pending commit)
+
+- Fresh REA preflight executed before application edits: `rea --version` returned `6.7.0`; `rea doctor --format json` reported the audit-wide native-engine limitation but the browser provider was available; `rea capabilities --format json` enumerated the catalog; active MCP configuration was verified at `/home/user/.config/opencode/opencode.jsonc`.
+- Fresh REA browser captures, not reused evidence:
+  - Bolt Food `https://food.bolt.eu` via `capture_browser_scenario`: `ev_1a85796f4ca99ff5076eedc38c0f565e9fa6b04ba39ef826115e21f54d15c4c8`.
+  - Uber Eats `https://www.ubereats.com` via `capture_browser_scenario`: `ev_3eb588fb13b08025f9dda66896ff65f1ff5d093b898244fcb1df76b47dbb34fd`; Cloudflare security verification prevented legitimate workflow inspection and was not bypassed.
+  - uShip `https://www.uship.com` via `capture_browser_scenario`: `ev_325ec44471ac7070c19430ac1974cb54ccd016bfe5b0393dd8ec8aed2ad241d8`.
+- Full research record: `docs/REFERENCE-EVIDENCE-2026-10-25.md`.
+- Evidence-mapped NaijaEats change: destination-first city input and city-preserving restaurant discovery at `/eats`, based on Bolt Food's observed address boundary.
+- Evidence-mapped NaijaSend change: authenticated freight-load form at `/send`, posting real persisted loads to `/api/freight/loads` with route, mode, cargo and weight; no carrier or price is fabricated.
+- Browser acceptance: existing preview, desktop `1440x900` and mobile `390x844`, `/eats?city=Lagos&q=rice` and `/send`; screenshots `qa-screenshots/eats-reference-batch-{desktop,mobile}.png` and `qa-screenshots/send-reference-batch-{desktop,mobile}.png`.
+- Failed-request investigation: public pages initially showed an unrelated guest `/api/cart` 401; `public/static/app.js` now skips the cart badge request for guests, matching the existing wallet/wishlist guest guards. Re-run showed no failed requests and no application console errors; only the known Tailwind CDN production warning remained.
+- Build: `npm run build` passed (267 modules). Regression: `tests/naijaeats-operator.test.mjs` — 10 passed, 0 failed.
+- This batch is accepted only for Bolt/uShip-mapped behavior. Uber Eats remains inaccessible; no Uber-specific parity claim is made.
+
 ## Known gates not green
 
 - Whole-repository `npm run test:node` has existing unrelated production waitlist and NestJS TypeScript source-loader failures.

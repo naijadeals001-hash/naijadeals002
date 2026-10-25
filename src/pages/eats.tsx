@@ -121,20 +121,21 @@ export async function eatsHomePage(c: Context<AppEnv>) {
 
   const cuisine = c.req.query('cuisine')
   const q = c.req.query('q')
+  const city = c.req.query('city')
   const sort = c.req.query('sort') || undefined
   const page = Math.max(1, Number(c.req.query('page') || '1'))
 
-  const isBrowseMode = !!(cuisine || q)
+  const isBrowseMode = !!(cuisine || q || city)
   const cuisines = await getCuisines(db)
 
   if (isBrowseMode) {
-    const result = await browseRestaurants(db, { cuisine, q, sort, page, perPage: PER_PAGE })
+    const result = await browseRestaurants(db, { cuisine, q, city, sort, page, perPage: PER_PAGE })
     const activeCuisineObj = cuisines.find((cu) => cu.slug === cuisine)
     const pageTitle = q ? `Search NaijaEats: ${q}` : activeCuisineObj ? `${activeCuisineObj.name} restaurants` : 'All restaurants'
 
     function buildQuery(overrides: Record<string, string | undefined>): string {
       const params = new URLSearchParams()
-      const current: Record<string, string | undefined> = { cuisine, q, sort, page: String(page) }
+      const current: Record<string, string | undefined> = { cuisine, q, city, sort, page: String(page) }
       const merged = { ...current, ...overrides }
       for (const [k, v] of Object.entries(merged)) {
         if (v !== undefined && v !== '' && !(k === 'page' && v === '1')) params.set(k, v)
@@ -171,6 +172,7 @@ export async function eatsHomePage(c: Context<AppEnv>) {
               <form method="get" class="flex items-center gap-2 shrink-0">
                 {cuisine && <input type="hidden" name="cuisine" value={cuisine} />}
                 {q && <input type="hidden" name="q" value={q} />}
+              {city && <input type="hidden" name="city" value={city} />}
                 <label class="text-sm text-gray-500 hidden sm:inline">Sort by</label>
                 <select name="sort" onchange="this.form.submit()" class="text-sm border border-gray-300 rounded-lg px-3 py-1.5">
                   <option value="rating" selected={sort === 'rating' || !sort}>Top Rated</option>
@@ -237,9 +239,15 @@ export async function eatsHomePage(c: Context<AppEnv>) {
           </span>
           <h1 class="text-2xl md:text-3xl font-bold max-w-xl">Real food, real restaurants, delivered fast.</h1>
           <p class="text-white/70 text-sm mt-2 max-w-lg">Nigerian, Ghanaian, Senegalese, Ivorian and Moroccan kitchens near you — escrow-protected payment, order tracking from kitchen to your door.</p>
-          <form method="get" action="/eats" class="relative mt-5 max-w-md">
-            <input type="text" name="q" placeholder="Search restaurants or dishes..." class="w-full border-0 rounded-lg pl-10 pr-4 py-3 text-sm text-gray-800 outline-none" />
-            <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg">search</span>
+          <form method="get" action="/eats" class="mt-5 max-w-md space-y-2" id="eats-destination-search">
+            <label class="sr-only" for="eats-city">Delivery destination</label>
+            <input id="eats-city" type="text" name="city" value={selectedCity} placeholder="Enter delivery city" class="w-full border-0 rounded-lg px-4 py-3 text-sm text-gray-800 outline-none" />
+            <div class="relative">
+              <label class="sr-only" for="eats-query">Restaurant or dish</label>
+              <input id="eats-query" type="text" name="q" placeholder="Search restaurants or dishes..." class="w-full border-0 rounded-lg pl-10 pr-4 py-3 text-sm text-gray-800 outline-none" />
+              <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg">search</span>
+            </div>
+            <button type="submit" class="w-full rounded-lg bg-white/15 border border-white/20 py-2.5 text-sm font-semibold hover:bg-white/20">Find food near me</button>
           </form>
         </section>
 
@@ -295,17 +303,18 @@ export async function eatsRestaurantsPage(c: Context<AppEnv>) {
 
   const cuisine = c.req.query('cuisine')
   const q = c.req.query('q')
+  const city = c.req.query('city')
   const sort = c.req.query('sort') || undefined
   const page = Math.max(1, Number(c.req.query('page') || '1'))
 
   const cuisines = await getCuisines(db)
-  const result = await browseRestaurants(db, { cuisine, q, sort, page, perPage: PER_PAGE })
+  const result = await browseRestaurants(db, { cuisine, q, city, sort, page, perPage: PER_PAGE })
   const activeCuisineObj = cuisines.find((cu) => cu.slug === cuisine)
   const pageTitle = q ? `Search NaijaEats: ${q}` : activeCuisineObj ? `${activeCuisineObj.name} restaurants` : 'All restaurants'
 
   function buildQuery(overrides: Record<string, string | undefined>): string {
     const params = new URLSearchParams()
-    const current: Record<string, string | undefined> = { cuisine, q, sort, page: String(page) }
+    const current: Record<string, string | undefined> = { cuisine, q, city, sort, page: String(page) }
     const merged = { ...current, ...overrides }
     for (const [k, v] of Object.entries(merged)) {
       if (v !== undefined && v !== '' && !(k === 'page' && v === '1')) params.set(k, v)
@@ -345,6 +354,7 @@ export async function eatsRestaurantsPage(c: Context<AppEnv>) {
             <form method="get" class="flex items-center gap-2 shrink-0">
               {cuisine && <input type="hidden" name="cuisine" value={cuisine} />}
               {q && <input type="hidden" name="q" value={q} />}
+              {city && <input type="hidden" name="city" value={city} />}
               <label class="text-sm text-gray-500 hidden sm:inline">Sort by</label>
               <select name="sort" onchange="this.form.submit()" class="text-sm border border-gray-300 rounded-lg px-3 py-1.5">
                 <option value="rating" selected={sort === 'rating' || !sort}>Top Rated</option>

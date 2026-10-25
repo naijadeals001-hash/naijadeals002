@@ -400,6 +400,7 @@
 
   // ---------- Cart count on initial load (covers guest + logged-in) ----------
   (function initCartCount() {
+    if (document.body.dataset.authenticated !== 'true') return;
     api('/api/cart').then(function (res) {
       if (res.ok && res.data) updateCartBadges(res.data.count);
     }).catch(function () {});
