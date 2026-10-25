@@ -16,8 +16,8 @@ Candidate: `https://github.com/southwind-ai/soup`
 | Native OpenCode adapter | NOT RUN / NOT FOUND | No native adapter was documented or present in the inspected release |
 | NaijaDeals integration | NOT RUN | Intentionally isolated; no application or OpenCode integration performed |
 | Production readiness | NOT READY | Routing quality and security governance still require caller-owned controls |
-| Required-skill validation gate | PARTIAL | The caller-owned fallback preserves mandatory context and handles missing/unavailable/unsafe selection, but the six-task benchmark still has only 5/6 required-skill recall in the direct provider run |
-| Adoption decision | BLOCKED | Fresh 12-task benchmark has mean required-skill recall `0.90`, but security recall misses, irrelevant context, and no supported OpenCode adapter still fail the adoption gate |
+| Required-skill validation gate | PASS | Fresh 25-task benchmark applies dependency closure and fixed-context fallback; final required-skill recall was 25/25 and selection was deterministic |
+| Adoption decision | BLOCKED | Raw BM25 recall was only `0.607` and required fallback on 18/25 tasks; no supported OpenCode adapter and no LLM quality evaluation |
 
 ## Project verification
 
@@ -90,6 +90,31 @@ Important misses and risks:
 - This measures context assembly only; no LLM output quality, tool-call quality or currency cost was claimed.
 
 The benchmark confirms measurable context reduction and deterministic routing, but required-skill omission remains unacceptable for security- or migration-sensitive workflows. Soup stays isolated and must be wrapped with a required-skill gate plus fixed-context fallback before any future integration consideration.
+
+## Fresh 25-task dependency-aware benchmark
+
+A fresh benchmark was run from `/tmp/soup-golden-benchmark.py` with 25 tasks spanning authentication, authorization, payments, migrations, rollback, security review, QA, UI, API integration, booking, dispatch, deployment, incident diagnosis, documentation, REA evidence and cross-project work.
+
+The benchmark added:
+
+- Explicit dependency closure for payment, booking, rollout and migration skills.
+- A mandatory-skill gate that rejects incomplete Soup selection.
+- Fixed approved-context fallback when any required skill is omitted.
+- Five repeated selections per task for determinism.
+- Separate raw BM25 recall from post-gate final recall.
+
+```text
+Tasks: 25
+Raw perfect recall: 7/25
+Raw mean recall: 0.607
+Fallbacks: 18/25 (72.0%)
+Final recall after gate: 25/25
+Mean irrelevant-context ratio after gate: 0.080
+Deterministic selection: 25/25
+Context accounting reduction after fallback: 58.10%
+```
+
+This is a safety improvement, not proof that Soup itself is reliable. The fallback gate prevents required-skill omission, but it also removes much of the claimed efficiency when routing is uncertain. Soup remains isolated and is not approved for OpenCode or NaijaDeals integration.
 
 ## Failure and security tests
 

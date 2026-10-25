@@ -21,6 +21,8 @@ Branch: `feat/naijadrive-private-ride-foundation`
 | Latest deterministic rerun | PASS | Doctor exited 0; the combined shell returned non-zero because the subsequent plan invocation did not complete cleanly; prior saved deterministic plan evidence remains valid |
 | Provider-backed recovery | BLOCKED | Fresh isolated `opencode run --pure -m opencode/beam-free` timed out at 45s with exit `124`, zero output, and logs stopped at `init` before provider/request markers |
 | Current deterministic doctor | PARTIAL | ECC doctor exited `1` in the current environment while the deterministic plan exited `0`; the prior successful plan/consult evidence remains preserved |
+| OpenCode headless server startup | PASS | `opencode serve --pure --hostname 127.0.0.1 --port 4096` became ready; `/`, `/health`, `/api/health`, and `/global/health` returned 200 with version `1.18.18` |
+| OpenCode attached model request | BLOCKED | `opencode run --attach http://127.0.0.1:4096 --pure --auto -m opencode/beam-free ...` timed out after 30 seconds with no output; server had no configured credentials |
 
 ## Installation and configuration evidence
 
@@ -78,7 +80,7 @@ Last log stage: init
 Provider/request markers: 0
 ```
 
-This isolates the current blocker to OpenCode initialization or session dispatch before a provider request. It is not evidence of a model response, and ECC LLM-backed acceptance remains BLOCKED.
+The supported `--auto` flag exists but did not change the baseline: it timed out after 30 seconds at `init` with no provider markers. The supported headless server path initializes successfully and exposes healthy endpoints, but an attached model request still timed out. `opencode auth list` showed zero stored credentials; environment credential names were present but values were not read. This isolates two separate boundaries: CLI/run and attached model dispatch remain blocked, while server initialization is healthy. ECC LLM-backed acceptance remains BLOCKED.
 
 ## AgentShield investigation
 

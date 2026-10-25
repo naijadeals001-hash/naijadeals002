@@ -25,15 +25,15 @@ No NaijaDeals production behavior, deployment configuration, secrets, D1/R2 data
 | Soup official tests | PASS | 141 passed |
 | Soup isolated POC | PASS | Six tasks, five repeated selections each |
 | Soup production integration | NOT RUN | Deliberately not integrated |
-| REA version/config preservation | PARTIAL | OpenCode MCP registration is aligned, but the current preserved cache does not provide a runnable REA CLI offline; optional native engines remain unavailable |
+| REA version/config preservation | PARTIAL | REA 6.7.0 ran from both preserved and isolated caches; doctor exited 1 because optional native engines and Claude registration are missing; a local artifact inspection command exited 0 |
 | REA full doctor | PARTIAL | Optional native engines and unrelated Claude registration unavailable |
 | Production readiness | NOT READY | Outstanding provider and security governance blockers |
 | D1-001 booking fixture follow-up | PASS | `ecosystem.naijastay` supplied by isolated fixtures; 20/20 booking workflows passed against local D1; no new PM2 binding error |
 | ECC provider recovery follow-up | BLOCKED | Deterministic doctor remains healthy, but no usable provider-backed OpenCode/ECC output was obtained |
-| Soup adoption gate | BLOCKED | Fresh 12-task benchmark: 9/12 perfect recall, mean recall 0.90, mean irrelevant ratio 0.216; required-skill omissions remain and no supported adapter exists |
-| Fresh OpenCode probe | BLOCKED | Disposable `--pure` probe timed out at 45s with exit 124 at `init`, zero output and no provider markers |
+| Soup adoption gate | BLOCKED | Fresh 25-task benchmark: raw recall 0.607 with fallback on 18/25 tasks; final gated recall 25/25, but efficiency depends heavily on fallback and no supported adapter exists |
+| Fresh OpenCode probe | BLOCKED | `--auto` timed out at 30s; `serve --pure` initialized and health endpoints returned 200, but attached model request timed out at 30s with no output |
 | Fresh AgentShield scan | PARTIAL | Grade D `(58/100)`, 134 findings; 32 critical matches remain npm integrity false positives; no auto-fix |
-| Fresh Soup golden benchmark | PARTIAL | Official tests 141/141; deterministic 12-task context benchmark completed, but no LLM quality or cost claim |
+| Fresh Soup golden benchmark | PARTIAL | Official tests 141/141; 25-task dependency-aware benchmark completed with mandatory fallback gates; no LLM quality or cost claim |
 
 ## Evidence and commands
 

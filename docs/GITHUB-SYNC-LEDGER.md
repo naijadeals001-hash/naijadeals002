@@ -63,6 +63,16 @@
 - Updated the shared verification helper outside the repository to discover the approved current Soup environment `/tmp/soup-bench-venv/bin/python` while retaining `SOUP_PYTHON` override and the prior POC path. Reverification now reports Soup `PARTIAL` for both accessible projects instead of a false `BLOCKED` caused by an expired temp path.
 - No production deployment, production mutation, DNS change, force-push, or application source change was made in this re-verification batch. Documentation changes are local and pending commit.
 
+## Master execution recovery — local, pending push
+
+- Current audit verified local/remote `26cfa102a9f9cdac223e58018e63dbedace04f5c`, branch `feat/naijadrive-private-ride-foundation`, and preserved `.npm-cache-rea/`. `/home/user/webapp` remains untouched with its existing dirty files.
+- OpenCode 1.18.18 help confirmed `--auto`, `serve`, `--attach`, `--pure`, and `--model`. Baseline and `--auto` CLI runs timed out at `init` with exit `124` and no output. `serve --pure` initialized successfully; `/`, `/health`, `/api/health`, and `/global/health` returned 200/version 1.18.18. An attached `run --attach` model request still timed out after 30 seconds. No provider-backed acceptance; ECC remains `BLOCKED`.
+- Fresh AgentShield scan from official `v1.6.0` source reproduced Grade D `(58/100)`, 134 findings, 32 critical, 49 medium, 46 low and 7 info. Critical lockfile matches are npm `sha512` integrity metadata. Active config has the REA MCP registration and ECC plugins; `mcp-configs/mcp-servers.json` is a template file. PM2 initially inherited platform/provider credential names; `ecosystem.config.cjs` now applies PM2 `filter_env` for `GSK_`, `GENSPARK_`, `OPENAI_` and `ANTHROPIC_`. After deleting/restarting the local PM2 app from the updated config, those names were absent from the preview process and `/` returned 200.
+- Fresh Soup official tests: `141/141`. Fresh 25-task dependency-aware benchmark: raw recall `0.607`, fallback `18/25`, final gated recall `25/25`, deterministic `25/25`, context accounting reduction `58.10%`. Soup remains isolated because the fallback rate is high and no supported OpenCode adapter or LLM quality evaluation exists.
+- REA `6.7.0` ran from the preserved cache and a fresh isolated cache. `rea doctor --format json` exited `1` because optional native engines and Claude registration are missing. A real local `inspect-artifact dist/_worker.js` command exited `0`; browser reference capture was not claimed because no browser executable was available.
+- Final acceptance after PM2 hardening: booking matrix `20/20`, CC-003 `4/4`, TypeScript current/new diagnostics `0/0`, build `272` modules, preview `/`, `/drive`, `/eats` all `200`, PM2 error-log delta `0` during booking. Browser-authenticated acceptance remains unavailable.
+- Production deployment, production mutation, DNS change and force-push were not performed. This batch contains the PM2 hardening and updated evidence documentation only.
+
 ## TS-001 — TypeScript diagnostic remediation and quality-gate recovery
 
 - Starting checkpoint verified: local and remote `210ad1c5b533d5c4f73e577956c773dda7d64e3c` on `feat/naijadrive-private-ride-foundation`; `.npm-cache-rea/` preserved and unrelated worktrees untouched.
