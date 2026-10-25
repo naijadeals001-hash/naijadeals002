@@ -72,7 +72,18 @@ drivePreviewApi.get('/rides/:id', requireAuth, async (c) => {
 })
 
 drivePreviewApi.post('/rides/:id/cancel', requireAuth, async (c) => {
-  try { await transitionRide(c.env.DB, Number(c.req.param('id')), ['requested','searching','offered','accepted','driver_arriving','driver_arrived'], 'cancelled', c.get('user')!.id, 'customer', 'Cancelled by customer'); return c.json({ success: true, status: 'cancelled' }) } catch (err) { return c.json({ error: err instanceof Error ? err.message : 'Unable to cancel ride' }, 409) }
+  const user = c.get('user')!
+  const rideId = Number(c.req.param('id'))
+  const ride = await getRideForCustomer(c.env.DB, rideId, user.id)
+  if (!ride) return c.json({ error: 'Ride not found' }, 404)
+  try { await transitionRide(c.env.DB, rideId, ['requested','searching','offered','accepted','driver_arriving','driver_arrived'], 'cancelled', user.id, 'customer', 'Cancelled by customer'); return c.json({ success: true, status: 'cancelled' }) } catch (err) { return c.json({ error: err instanceof Error ? err.message : 'Unable to cancel ride' }, 409) }
+})
+
+drivePreviewApi.get('/driver/availability', requireAuth, async (c) => {
+  const user = c.get('user')!
+  const driver = await c.env.DB.prepare("SELECT status,is_online,operational_status FROM driver_profiles WHERE user_id = ?").bind(user.id).first<any>()
+  if (!driver || driver.status !== 'active') return c.json({ error: 'Active driver profile required' }, 403)
+  return c.json({ online: driver.is_online === 1, operational_status: driver.operational_status })
 })
 
 drivePreviewApi.post('/driver/availability', requireAuth, async (c) => {

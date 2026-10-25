@@ -88,6 +88,7 @@ test('offer inbox, expiry, rejection and no-driver recovery are persisted', asyn
 })
 
 test('customer can refresh and cancel a persisted ride without bypassing ownership', async () => {
+  assert.notEqual(customer.userId, driver.userId)
   const created = await customer.client.post('/api/drive/rides', { pickupZone: 'abuja-central', dropoffZone: 'lokogoma', vehicleCategory: 'car', idempotencyKey: `cancel-${RUN_NONCE}` })
   assert.equal(created.status, 201, JSON.stringify(created.body))
   const rideId = created.body.ride.id
@@ -103,6 +104,22 @@ test('customer can refresh and cancel a persisted ride without bypassing ownersh
   assert.equal(after.body.ride.status, 'cancelled')
   assert.equal((await customer.client.post(`/api/drive/rides/${rideId}/cancel`, {})).status, 409)
   assert.equal((await driver.client.get(`/api/drive/rides/${rideId}`)).status, 404)
+  const crossUserCancel = await driver.client.post(`/api/drive/rides/${rideId}/cancel`, {})
+  assert.equal(crossUserCancel.status, 404, JSON.stringify(crossUserCancel.body))
+})
+
+test('active driver availability is authenticated and persisted', async () => {
+  const online = await driver.client.post('/api/drive/driver/availability', { online: false })
+  assert.equal(online.status, 200, JSON.stringify(online.body))
+  assert.equal(online.body.online, false)
+  const offline = await queryOneD1(`SELECT is_online,operational_status FROM driver_profiles WHERE user_id=${driver.userId}`)
+  assert.equal(offline.is_online, 0)
+  assert.equal(offline.operational_status, 'offline')
+  const restored = await driver.client.post('/api/drive/driver/availability', { online: true })
+  assert.equal(restored.status, 200, JSON.stringify(restored.body))
+  assert.equal(restored.body.online, true)
+  assert.equal((await queryOneD1(`SELECT is_online FROM driver_profiles WHERE user_id=${driver.userId}`)).is_online, 1)
+  assert.equal((await customer.client.post('/api/drive/driver/availability', { online: true })).status, 403)
 })
 
 test('invalid zones and unauthenticated ride creation fail closed', async () => {

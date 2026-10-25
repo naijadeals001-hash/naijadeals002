@@ -88,6 +88,15 @@
 - Implemented the smallest vertical slice in `src/pages/drive.tsx`: after a persisted request, the customer can refresh status, see the current server state, and cancel only while the existing state machine permits cancellation. Failed requests preserve actionable status feedback and controls recover.
 - Added focused coverage for persisted status reads, customer cancellation, terminal-state rejection, and cross-user access denial in `tests/naijadrive-private-ride.test.mjs`. Browser acceptance remains pending authorized test access.
 
+## Autonomous NaijaDrive milestone increment — local, pending push
+
+- Reverified starting local/remote `cb441a75c864386bb4d435e90d800e68b1f9fa60`; branch and preview remained healthy; `.npm-cache-rea/` and `/home/user/webapp` were preserved.
+- Corrected a demonstrated authorization defect in customer cancellation: cross-user cancellation now returns `404 Ride not found` before lifecycle evaluation instead of exposing a `409` transition response. Added a regression assertion.
+- Added the dependency-ready driver availability slice using the existing persisted `driver_profiles` model and APIs: authenticated `GET/POST /api/drive/driver/availability`, online/offline controls, active-driver enforcement, and focused persistence/authorization coverage.
+- Updated the Drive page copy and Development Registry seed descriptions to reflect persisted ride/offer behavior honestly. Added `DRIVE-003` registry metadata for persisted customer ride controls; browser acceptance remains `PARTIAL/BLOCKED` pending an authorized session.
+- Consolidated milestone checklist: customer request/persistence `PASS`; customer status refresh `PASS`; customer cancellation and valid transitions `PASS`; driver offer inbox and accept/reject lifecycle `PASS`; active online driver eligibility and availability persistence `PASS`; assignment/reassignment/expiry/concurrency `PASS`; authorization, ownership, validation and idempotency `PASS`; failed-request recovery and persisted refresh `PASS`; accessible status/busy controls implemented but browser-acceptance `BLOCKED`; authenticated customer/driver browser journey `BLOCKED` pending an authorized session; GPS, WebSocket dispatch, external routing and payment remain explicitly out of scope/unconfigured.
+- Focused NaijaDrive + CC-003 run: **27/27 passed** across registry normalization, unified registry assertions, private ride lifecycle, cancellation ownership, availability, carpool and preview checks. TypeScript and build also pass after this increment.
+
 ## TS-001 — TypeScript diagnostic remediation and quality-gate recovery
 
 - Starting checkpoint verified: local and remote `210ad1c5b533d5c4f73e577956c773dda7d64e3c` on `feat/naijadrive-private-ride-foundation`; `.npm-cache-rea/` preserved and unrelated worktrees untouched.
