@@ -52,6 +52,7 @@ export const NAV_GROUPS: ControlCenterNavGroup[] = [
       { key: 'analytics', label: 'Analytics & Reports', icon: 'monitoring', implemented: false },
       { key: 'system_health', label: 'System Health', icon: 'health_and_safety', href: '/control-center/system-health', permission: 'system_health.read', implemented: true },
       { key: 'audit', label: 'Audit & Governance', icon: 'gavel', href: '/control-center/audit', permission: 'audit.read', implemented: true },
+      { key: 'development', label: 'Development Registry', icon: 'schema', href: '/control-center/development', permission: 'development.read', implemented: true },
     ],
   },
   {

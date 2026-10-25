@@ -18,6 +18,18 @@
 - Production deployment: not performed
 - Production merge/release: not performed
 
+## Control Center development registry batch — current local checkpoint
+
+- Added `migrations/0095_control_center_development_registry.sql` with persisted `cc_development_tasks` and append-only `cc_development_events`, readiness milestones, dependency metadata, REA evidence fields, preview/commit verification fields and development permissions.
+- Added `src/lib/control-center-development.ts` with idempotent backlog seeding from actual current gaps, summary metrics, task/event reads and audited task updates.
+- Added protected APIs under `/api/control-center/development/{summary,tasks}` using existing Control Center RBAC and `cc_audit_logs`; no client-supplied identity is trusted.
+- Added `/control-center/development` with truthful distinctions for code, tests, preview, external integration, sandbox E2E and production readiness; added navigation entry.
+- REA preflight: `rea-agents@6.7.0`; MCP registration aligned at `/home/user/.config/opencode/opencode.jsonc`; `rea doctor` reports browser provider not exposed in the CLI doctor result and native analysis engines unavailable. No new reference-dependent implementation was claimed in this schema/dashboard batch; existing evidence IDs remain explicitly attached to seeded tasks.
+- Local migration `0095_control_center_development_registry.sql`: passed. `npm run build`: passed (269 modules).
+- Regression: public `/api/auth/register` returned 200 after route wiring; unauthenticated development API returned 401; NaijaGigs, NaijaDrive carpool and NaijaStay tests passed (3/3).
+- Existing PM2 preview was restarted in place; `/control-center/development` correctly redirects unauthenticated visitors to the existing Control Center login boundary. Authenticated dashboard/API acceptance requires an existing authorized Control Center session and was not fabricated.
+- Known gates: baseline TypeScript diagnostics remain in pre-existing NestJS/route files; no production deployment, remote D1 mutation, merge, DNS or force-push performed.
+
 ## Checkpoint contents
 
 - Full ecosystem registry expansion.

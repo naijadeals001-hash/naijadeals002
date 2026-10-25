@@ -107,6 +107,7 @@ import { invalidateEcosystemNavCache } from '../lib/ecosystem-nav'
 import { getCategoryPillNav, invalidateCategoryPillNavCache } from '../lib/category-pill-nav'
 import { getUnifiedEcosystemRegistry } from '../lib/control-center-ecosystem'
 import { listRolloutCountries, listRolloutVerticals, getCountryRollout, setCountryStatus, setVerticalCountryOverride, type CountryRolloutStatus } from '../lib/control-center-rollout'
+import { ensureDevelopmentBacklog, getDevelopmentSummary, listDevelopmentTasks, getDevelopmentTask, listDevelopmentEvents, updateDevelopmentTask, DEVELOPMENT_STATUSES } from '../lib/control-center-development'
 
 export const apiControlCenterRoutes = new Hono<AppEnv>()
 
@@ -1540,4 +1541,31 @@ apiControlCenterRoutes.delete('/product-origins/:id', requireControlCenterPermis
     ipAddress: getClientIp(c.req.header('cf-connecting-ip') ?? null),
   })
   return c.json({ success: true })
+})
+
+// ---------- Development registry: persisted, permission-scoped progress ----------
+apiControlCenterRoutes.get('/development/summary', requireControlCenterPermission('development.read'), async (c) => {
+  await ensureDevelopmentBacklog(c.env.DB)
+  return c.json(await getDevelopmentSummary(c.env.DB))
+})
+apiControlCenterRoutes.get('/development/tasks', requireControlCenterPermission('development.read'), async (c) => {
+  await ensureDevelopmentBacklog(c.env.DB)
+  return c.json({ tasks: await listDevelopmentTasks(c.env.DB, { vertical: c.req.query('vertical'), status: c.req.query('status') }) })
+})
+apiControlCenterRoutes.get('/development/tasks/:key', requireControlCenterPermission('development.read'), async (c) => {
+  await ensureDevelopmentBacklog(c.env.DB)
+  const task = await getDevelopmentTask(c.env.DB, c.req.param('key') ?? '')
+  if (!task) return c.json({ error: 'Development task not found' }, 404)
+  return c.json({ task, events: await listDevelopmentEvents(c.env.DB, task.id) })
+})
+apiControlCenterRoutes.patch('/development/tasks/:key', requireControlCenterPermission('development.manage'), async (c) => {
+  await ensureDevelopmentBacklog(c.env.DB)
+  const body = await c.req.json<Record<string, any>>().catch(() => null)
+  if (!body) return c.json({ error: 'JSON body required' }, 400)
+  if (body.status && !DEVELOPMENT_STATUSES.includes(body.status)) return c.json({ error: 'Invalid development status' }, 400)
+  const admin = c.get('user')!
+  const task = await updateDevelopmentTask(c.env.DB, c.req.param('key'), body, admin.id)
+  if (!task) return c.json({ error: 'Development task not found' }, 404)
+  await recordControlCenterAction(c.env.DB, { actorUserId: admin.id, actorName: admin.name, action: 'development_task_updated', entityType: 'cc_development_task', entityId: String(task.id), afterState: { task_key: task.task_key, status: task.status, checkpoint: task.checkpoint, commit_sha: task.commit_sha, remote_sha: task.remote_sha }, context: { fields: Object.keys(body) }, success: true, ipAddress: getClientIp(c.req.header('cf-connecting-ip') ?? null) })
+  return c.json({ success: true, task })
 })

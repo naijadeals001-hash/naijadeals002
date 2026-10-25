@@ -82,6 +82,7 @@ import { getCategoryNavTreeForAdmin, getEcosystemNavConfigForAdmin, type Categor
 import { getUnifiedEcosystemRegistry, ECOSYSTEM_STATE_LABELS } from '../lib/control-center-ecosystem'
 import { listRolloutVerticals } from '../lib/control-center-rollout'
 import { listNaijaPayProviders } from '../lib/naijapay-data'
+import { ensureDevelopmentBacklog, getDevelopmentSummary, listDevelopmentTasks } from '../lib/control-center-development'
 
 export const controlCenterRoutes = new Hono<AppEnv>()
 
@@ -3686,6 +3687,38 @@ controlCenterRoutes.get('/categories', requireControlCenterPermission('catalog.r
         })();
         `
       }}></script>
+    </ControlCenterLayout>
+  )
+})
+
+// ---------- Persisted development registry ----------
+controlCenterRoutes.get('/development', async (c) => {
+  const user = c.get('user')!
+  const ccAccess = c.get('ccAccess')!
+  if (!ccAccess.permissionKeys.has('development.read')) return c.redirect('/control-center')
+  await ensureDevelopmentBacklog(c.env.DB)
+  const [summary, tasks] = await Promise.all([getDevelopmentSummary(c.env.DB), listDevelopmentTasks(c.env.DB)])
+  const badge = (value: string, tone: string) => <span class={`inline-flex rounded-full px-2 py-1 text-[10px] font-bold ${tone}`}>{value}</span>
+  return c.render(
+    <ControlCenterLayout title="Development Registry" user={user} ccAccess={ccAccess} active="development">
+      <section class="max-w-[110rem] mx-auto px-4 md:px-8 py-6 md:py-8">
+        <div class="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-6">
+          <div><div class="text-[11px] uppercase tracking-widest text-ccaccent font-bold">Authoritative progress ledger</div><h1 class="text-2xl md:text-3xl font-extrabold text-white mt-1">Ecosystem Development</h1><p class="text-sm text-gray-500 mt-2 max-w-3xl">Persisted implementation evidence, not a roadmap pretending to be production. Each milestone is tracked independently.</p></div>
+          <a href="/api/control-center/development/summary" class="text-xs text-ccaccent border border-ccaccent/30 rounded-lg px-3 py-2">JSON summary ↗</a>
+        </div>
+        <div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
+          <div class="bg-ccpanel border border-ccborder rounded-xl p-4"><div class="text-2xl font-bold text-white">{summary.registeredVerticals}</div><div class="text-[11px] text-gray-500">Tracked verticals</div></div>
+          <div class="bg-ccpanel border border-ccborder rounded-xl p-4"><div class="text-2xl font-bold text-white">{summary.totalTasks}</div><div class="text-[11px] text-gray-500">Registered tasks</div></div>
+          <div class="bg-ccpanel border border-ccborder rounded-xl p-4"><div class="text-2xl font-bold text-ccaccent">{summary.byStatus.COMPLETE}</div><div class="text-[11px] text-gray-500">Complete</div></div>
+          <div class="bg-ccpanel border border-ccborder rounded-xl p-4"><div class="text-2xl font-bold text-amber-400">{summary.byStatus.PARTIAL}</div><div class="text-[11px] text-gray-500">Partial</div></div>
+          <div class="bg-ccpanel border border-ccborder rounded-xl p-4"><div class="text-2xl font-bold text-red-400">{summary.byStatus.BLOCKED + summary.byStatus.FAILED}</div><div class="text-[11px] text-gray-500">Blocked / failed</div></div>
+        </div>
+        <div class="grid lg:grid-cols-3 gap-4 mb-6">
+          <div class="lg:col-span-2 bg-ccpanel border border-ccborder rounded-2xl p-5"><div class="text-xs uppercase tracking-widest text-gray-500 font-bold">Next eligible task</div>{summary.nextEligibleTask ? <><h2 class="text-lg font-bold text-white mt-2">{summary.nextEligibleTask.title}</h2><p class="text-xs text-gray-500 mt-1">{summary.nextEligibleTask.task_key} · {summary.nextEligibleTask.vertical} · priority {summary.nextEligibleTask.priority}</p><p class="text-sm text-gray-400 mt-3">{summary.nextEligibleTask.description}</p></> : <p class="text-sm text-gray-500 mt-3">No queued or ready task is currently eligible.</p>}</div>
+          <div class="bg-ccpanel border border-ccborder rounded-2xl p-5"><div class="text-xs uppercase tracking-widest text-gray-500 font-bold">Latest verification</div>{summary.lastVerified ? <><div class="text-sm text-white mt-3">{summary.lastVerified.task_key}</div><div class="text-[11px] text-gray-500 mt-2">Remote SHA: {summary.lastVerified.remote_sha ?? 'not recorded'}</div><div class="text-[11px] text-gray-500">{summary.lastVerified.last_verified_at}</div></> : <p class="text-sm text-gray-500 mt-3">No verification checkpoint recorded yet.</p>}</div>
+        </div>
+        <div class="bg-ccpanel border border-ccborder rounded-2xl overflow-hidden"><div class="px-5 py-4 border-b border-ccborder flex items-center justify-between"><h2 class="font-bold text-white">Task registry</h2><span class="text-[11px] text-gray-500">Refresh page for latest persisted state</span></div><div class="overflow-x-auto"><table class="w-full text-left text-xs"><thead class="text-gray-500 uppercase tracking-wider"><tr><th class="px-5 py-3">Task</th><th class="px-5 py-3">Vertical</th><th class="px-5 py-3">Status</th><th class="px-5 py-3">Readiness</th><th class="px-5 py-3">Checkpoint</th></tr></thead><tbody>{tasks.map((task) => <tr class="border-t border-ccborder/70 hover:bg-white/[0.02]"><td class="px-5 py-3 min-w-[18rem]"><div class="font-bold text-white">{task.title}</div><div class="text-[10px] text-gray-600 mt-1">{task.task_key} · P{task.priority}</div></td><td class="px-5 py-3 text-gray-400">{task.vertical}</td><td class="px-5 py-3">{badge(task.status, task.status === 'COMPLETE' ? 'bg-ccaccent/15 text-ccaccent' : task.status === 'PARTIAL' ? 'bg-amber-500/15 text-amber-400' : task.status === 'BLOCKED' || task.status === 'FAILED' ? 'bg-red-500/15 text-red-400' : 'bg-white/10 text-gray-300')}</td><td class="px-5 py-3 text-gray-500">Code: {task.implementation_state}<br/>Tests: {task.automated_test_state}<br/>Preview: {task.preview_state}</td><td class="px-5 py-3 text-gray-500 max-w-sm">{task.checkpoint || 'No checkpoint recorded'}</td></tr>)}</tbody></table></div></div>
+      </section>
     </ControlCenterLayout>
   )
 })
