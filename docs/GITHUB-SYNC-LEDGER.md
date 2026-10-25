@@ -70,6 +70,7 @@
 
 ## Batch 0 audit + NaijaEats fulfillment bridge (local verification)
 
+- Commit: `6bfe5d0fa842bade7fc17d20347c0816c9b897b3` (`feat(eats): bridge ready orders to logistics dispatch`); remote SHA verified on `origin/feat/naijadrive-private-ride-foundation`.
 - Audit added: `docs/PRODUCT-REALITY-AUDIT.md` with current route/API/schema gaps, truthful limitations and the reference-to-feature matrix.
 - REA re-verified locally at `6.7.0`; `rea doctor` confirmed aligned MCP registration and available browser provider. Native Hopper/Ghidra/IDA/JADX/Kuna engines remain unavailable; no protected workflow was bypassed.
 - Added `migrations/0092_naijaeats_fulfillment_bridge.sql`: one-to-one `eats_order_fulfillments` bridge to existing `shipments`, with dispatch status and ownership-safe indexes.
