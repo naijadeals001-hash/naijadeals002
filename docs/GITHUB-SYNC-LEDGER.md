@@ -13,6 +13,16 @@
 - Production merge/release: not performed
 - Untracked `.npm-cache-rea/` preserved and intentionally excluded from commits
 
+## ECC 2.2.3 + Soup skill-routing tooling checkpoint — local, not yet pushed
+
+- Starting checkpoint verified at local `950171589a11574a99a52d24d816062b6a929ff6` on `feat/naijadrive-private-ride-foundation`; remote remains `210ad1c5b533d5c4f73e577956c773dda7d64e3c`. `.npm-cache-rea/` remains preserved and unstaged.
+- ECC official source/version verified: `affaan-m/ECC`, `v2.2.3`, commit `c05b2d6614f62f6db0047669aa4eefb223d478f9`. Doctor passed; deterministic plan and consultation passed. The real OpenCode planner was reproduced twice against a disposable fixture, reached initialization, then timed out with exit `124` and zero model output. LLM-backed implementation, testing, code review and security review are therefore `BLOCKED`, not claimed.
+- AgentShield dependency installation initially failed with npm `Cannot read properties of null (reading 'edgesOut')`; an isolated-prefix dependency install succeeded. The scan ran but returned Grade D `(59/100)` with 133 findings, including 32 critical package-lock Azure-key pattern matches. No auto-fix was applied; manual validation remains required.
+- REA `6.7.0` was verified from the preserved `.npm-cache-rea/`; OpenCode MCP registration remains aligned in `/home/user/.config/opencode/opencode.jsonc`. REA doctor remains partial because optional native analysis engines are unavailable; no new reference capture was claimed.
+- Soup official repository verified at `v0.2.1`, commit `ba8d72e3a4f3283d0c06a9df6154e6b3af7892e6`, MIT, Python `>=3.12`. Isolated official test suite passed `141/141`. A disposable six-task POC achieved 100% required-skill recall, deterministic five-run selection, and mandatory-security preservation; one cross-cutting task included irrelevant related skills. No native OpenCode adapter was found and no integration was performed.
+- Documentation added: `docs/DEVELOPMENT-TOOLS-ECC-223.md`, `docs/DEVELOPMENT-TOOLS-SOUP.md`, and `docs/DEVELOPMENT-TOOLS-ECC-SOUP-CHECKPOINT.md`. The Control Center registry was not changed because this is an isolated tooling evaluation with blocked/partial acceptance; no fake completion event was created.
+- No production deployment, remote D1 mutation, DNS/secrets change, merge, force-push or application behavior change performed. This documentation batch is local and pending commit/push decision.
+
 ## TS-001 — TypeScript diagnostic remediation and quality-gate recovery
 
 - Starting checkpoint verified: local and remote `210ad1c5b533d5c4f73e577956c773dda7d64e3c` on `feat/naijadrive-private-ride-foundation`; `.npm-cache-rea/` preserved and unrelated worktrees untouched.
