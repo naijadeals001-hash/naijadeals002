@@ -1068,6 +1068,12 @@ export async function eatsOrderDetailPage(c: Context<AppEnv>) {
           <p class="text-xs text-gray-400 mt-2">Payment status: {order.payment_status.replace('_', ' ')}</p>
         </div>
 
+        <section id="eats-fulfillment-panel" data-order-number={order.order_number} class="bg-white border border-gray-200 rounded-xl p-4 mb-4">
+          <div class="flex items-center justify-between gap-3"><h2 class="text-sm font-bold text-gray-500 uppercase tracking-wide">Fulfillment status</h2><button id="eats-fulfillment-refresh" type="button" class="text-xs font-semibold text-primary hover:underline">Refresh</button></div>
+          <p id="eats-fulfillment-status" class="text-sm text-gray-500 mt-3">Checking persisted delivery fulfillment…</p>
+          <div id="eats-fulfillment-details" class="hidden mt-3 grid gap-1 text-xs text-gray-600"></div>
+        </section>
+
         <div class="bg-white border border-gray-200 rounded-xl p-4 mb-4">
           <h2 class="text-sm font-bold text-gray-500 uppercase tracking-wide mb-3">Delivery address</h2>
           <p class="text-sm text-gray-700">{order.shipping_name} &middot; {order.shipping_phone}</p>

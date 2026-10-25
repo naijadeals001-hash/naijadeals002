@@ -165,6 +165,14 @@
 - Final relevant suite: 7 passed, 0 failed; build passed (270 modules). Existing preview `/drive` was refreshed through the existing PM2 process.
 - `DRIVE-001` remains `PARTIAL`: authenticated browser customer/driver evidence is still unavailable; live GPS, real-time push, external routing and external payments remain intentionally unconfigured.
 
+## Post-Drive continuation — authenticated browser attempt and NaijaEats fulfillment visibility
+
+- REA `6.7.0` and MCP registration were rechecked. No fresh private Bolt workflow evidence was claimed; existing Drive evidence remains the authoritative public capture.
+- Attempted legitimate Playwright customer/driver browser acceptance using real `/register` flows and real session cookies. The browser fixture timed out in the sandbox before completing the authenticated journey; no bypass was used and no authenticated browser acceptance was claimed.
+- Advanced the next eligible product workstream, `EATS-001`, by adding a customer order-detail Fulfillment Status card backed by the existing ownership-protected `/api/eats/orders/:orderNumber/fulfillment` endpoint. The UI distinguishes not-dispatched, dispatch-requested, shipment, pickup-job and delivery-job states and supports refresh.
+- Build passed (270 modules). NaijaEats operator suite (10), Drive lifecycle/recovery and carpool regressions passed. Existing preview restarted through PM2 and `/eats` returned HTTP 200.
+- `EATS-001` remains `PARTIAL`: courier assignment, proof of delivery and authenticated order-detail browser acceptance remain incomplete. `DRIVE-001` remains `PARTIAL` because the legitimate browser fixture timed out and live GPS/push/routing/payment are not configured.
+
 ## Known gates not green
 
 - Whole-repository `npm run test:node` has existing unrelated production waitlist and NestJS TypeScript source-loader failures.

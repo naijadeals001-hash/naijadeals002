@@ -233,6 +233,26 @@
     });
   })();
 
+  // ---------- Order detail page: persisted fulfillment refresh ----------
+  (function initFulfillmentPanel() {
+    const panel = qs('#eats-fulfillment-panel');
+    if (!panel) return;
+    const orderNumber = panel.getAttribute('data-order-number');
+    const statusEl = qs('#eats-fulfillment-status', panel);
+    const detailsEl = qs('#eats-fulfillment-details', panel);
+    async function refresh() {
+      const res = await api('/api/eats/orders/' + encodeURIComponent(orderNumber) + '/fulfillment');
+      if (res.status === 404) { statusEl.textContent = 'Fulfillment has not been dispatched yet. Restaurant preparation and courier assignment remain separate persisted steps.'; detailsEl.classList.add('hidden'); return; }
+      if (!res.ok) { statusEl.textContent = (res.data && res.data.error) || 'Fulfillment status unavailable.'; return; }
+      const f = res.data;
+      statusEl.textContent = 'Fulfillment: ' + (f.dispatch_status || 'dispatch_requested').replaceAll('_', ' ');
+      detailsEl.innerHTML = '<div>Shipment: ' + (f.shipment_status || 'not created') + '</div><div>Pickup job: ' + (f.pickup_job_status || 'unassigned') + '</div><div>Delivery job: ' + (f.delivery_job_status || 'unassigned') + '</div>';
+      detailsEl.classList.remove('hidden');
+    }
+    qs('#eats-fulfillment-refresh', panel)?.addEventListener('click', refresh);
+    refresh();
+  })();
+
   // ---------- Order detail page: cancel action ----------
   (function initOrderDetailPage() {
     const page = qs('#eats-order-detail-page');
