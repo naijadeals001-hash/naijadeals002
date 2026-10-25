@@ -162,7 +162,7 @@ eatsApi.post('/checkout', async (c) => {
 
   let orderId: number, orderNumber: string, totalKobo: number
   try {
-    await assertVerticalTransactionAllowed(c.env.DB, 'ecosystem.naijaeats', shipping.country ?? 'NG')
+    await assertVerticalTransactionAllowed(c.env.DB, 'ecosystem.naijaeats', shipping.country ?? 'NG', shipping.city)
     const result = await createPendingEatsOrder(c.env.DB, user.id, items, shipping, body.special_instructions?.trim() || null)
     orderId = result.orderId
     orderNumber = result.orderNumber

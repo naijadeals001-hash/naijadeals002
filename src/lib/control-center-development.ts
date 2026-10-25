@@ -31,10 +31,46 @@ export async function ensureDevelopmentBacklog(db: D1Database): Promise<void> {
     ['STAY-001','NaijaStay','host-operations','Host management and adversarial availability','Add host onboarding/property management, calendar and double-booking acceptance.',25,'[]','EVIDENCED','["rea-stay-airbnb"]','["https://www.airbnb.com/"]','PARTIAL','booking','Guest search/availability and E2E pass; host workspace and adversarial test remain.','PARTIAL','PASSED','PREVIEW_VERIFIED','NOT_CONFIGURED','PASSED','NOT_ASSESSED','NOT_DEPLOYED','NOT_VERIFIED','Stay availability E2E passed','/stay,/api/bookable-listings','Host UI and concurrent booking test pending'],
     ['FREIGHT-002','NaijaSend','dispatch','Dispatch offers, expiry, fallback and POD','Persist dispatch offers with eligibility filters, expiry/rejection/fallback and proof of delivery.',30,'["SEND-001"]','NEEDED','[]','[]','QUEUED','logistics-dispatch','Depends on carrier capability and award-to-shipment conversion.','NOT_STARTED','NOT_RUN','NOT_RUN','NOT_CONFIGURED','NOT_RUN','NOT_ASSESSED','NOT_DEPLOYED','NOT_VERIFIED','','','',''],
     ['MOBILITY-003','NaijaDrive','delivery','Grocery delivery workflow','Connect real store/catalog/order records to substitutions, preparation and delivery.',31,'["EATS-001"]','NEEDED','[]','[]','QUEUED','fresh/logistics','Depends on existing NaijaFresh order and logistics boundaries.','NOT_STARTED','NOT_RUN','NOT_RUN','NOT_CONFIGURED','NOT_RUN','NOT_ASSESSED','NOT_DEPLOYED','NOT_VERIFIED','','','',''],
+    ['CC-003','Control Center','authenticated-acceptance','Authenticated acceptance and RBAC hardening','Verify role permissions, city controls and registry consistency.',2,'[]','NOT_REQUIRED','[]','[]','IMPLEMENTING','control-center-rbac','Role-matrix and city-enforcement verification is the active Control Center checkpoint.','IN_PROGRESS','PARTIAL','PREVIEW_VERIFIED','NOT_CONFIGURED','PARTIAL','NOT_ASSESSED','NOT_DEPLOYED','NOT_VERIFIED','','Authenticated API/browser acceptance and city transaction guards are pending verification.','/control-center,/control-center/development',''],
     ['VERTICAL-001','Ecosystem','vertical-registry','Inventory all registered verticals','Derive every registered vertical and assign truthful workflow, dependency and acceptance tasks.',40,'[]','NOT_REQUIRED','[]','[]','READY','control-center-ecosystem','Use actual ecosystem_verticals and routes; no decorative status claims.','NOT_STARTED','NOT_RUN','NOT_RUN','NOT_CONFIGURED','NOT_RUN','NOT_ASSESSED','NOT_DEPLOYED','NOT_VERIFIED','','','',''],
   ]
+  // Historical defect guard: older versions supplied fewer values than the
+  // 26-column INSERT, producing opaque D1 errors such as "18 values for 17
+  // columns". Normalize legacy seed rows explicitly, then fail loudly if a
+  // future edit introduces another mismatch.
+  const normalizedRows = rows.map((row) => {
+    // The original seed literals omitted the optional description value after
+    // title; insert it before priority, then pad the optional screenshot field.
+    const withDescription = row.length < 26 ? [...row.slice(0, 5), '', ...row.slice(5)] : row
+    const padded = withDescription.length === 26 ? withDescription : [...withDescription, ...new Array(26 - withDescription.length).fill('')]
+    if (typeof padded[24] === 'string' && padded[24] && !padded[24].trim().startsWith('[')) padded[24] = JSON.stringify(padded[24].split(',').map((value) => value.trim()).filter(Boolean))
+    if (typeof padded[25] === 'string' && padded[25] && !padded[25].trim().startsWith('[')) padded[25] = JSON.stringify(padded[25].split(',').map((value) => value.trim()).filter(Boolean))
+    return padded
+  })
+  for (const row of normalizedRows) {
+    if (row.length !== 26) throw new Error(`Development Registry seed row ${String(row[0])} has ${row.length} values; expected 26`)
+  }
   const sql = `INSERT OR IGNORE INTO cc_development_tasks (task_key,workstream,vertical,feature,title,description,priority,dependency_task_keys_json,rea_state,rea_evidence_ids_json,reference_urls_json,status,assigned_subsystem,checkpoint,implementation_state,automated_test_state,preview_state,external_integration_state,sandbox_e2e_state,production_prerequisites_state,production_deployment_state,production_verification_state,build_result,test_result,preview_routes_json,screenshot_refs_json) VALUES (${new Array(26).fill('?').join(',')})`
-  for (const row of rows) await db.prepare(sql).bind(...row).run()
+  for (const row of normalizedRows) await db.prepare(sql).bind(...row).run()
+
+  // Repair rows created by the historical malformed seed without touching
+  // healthy/operator-edited rows. A non-JSON route/screenshot field is the
+  // precise signature of the old shifted-value defect.
+  for (const row of normalizedRows) {
+    const repaired = await db.prepare(`
+      UPDATE cc_development_tasks SET
+        description=?, priority=?, dependency_task_keys_json=?, rea_state=?,
+        rea_evidence_ids_json=?, reference_urls_json=?, assigned_subsystem=?,
+        checkpoint=?, implementation_state=?, automated_test_state=?, preview_state=?,
+        external_integration_state=?, sandbox_e2e_state=?, production_prerequisites_state=?,
+        production_deployment_state=?, production_verification_state=?, build_result=?,
+        test_result=?, preview_routes_json=?, screenshot_refs_json=?, updated_at=datetime('now')
+      WHERE task_key=? AND (preview_routes_json NOT LIKE '[%' OR screenshot_refs_json NOT LIKE '[%')
+    `).bind(row[5], row[6], row[7], row[8], row[9], row[10], row[12], row[13], row[14], row[15], row[16], row[17], row[18], row[19], row[20], row[21], row[22], row[23], row[24], row[25], row[0]).run()
+    if ((repaired.meta.changes ?? repaired.meta.rows_written ?? 0) > 0) {
+      await db.prepare('INSERT INTO cc_development_events (task_id,event_type,status,message,evidence_json,actor_user_id) SELECT id,?,?,?,?,NULL FROM cc_development_tasks WHERE task_key=?').bind('seed_repair', row[11], 'Repaired historical Development Registry seed value alignment', JSON.stringify({ reason: 'invalid_json_shape' }), row[0]).run()
+    }
+  }
 }
 
 export async function listDevelopmentTasks(db: D1Database, filters: { vertical?: string; status?: string } = {}) {

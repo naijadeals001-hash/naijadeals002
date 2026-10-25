@@ -196,7 +196,7 @@ ordersApi.post('/checkout', async (c) => {
   const deliveryMethod: DeliveryMethod = body.delivery_method === 'express' ? 'express' : 'standard'
 
   try {
-    await assertVerticalTransactionAllowed(c.env.DB, 'ecosystem.naijashop', shipping.country)
+    await assertVerticalTransactionAllowed(c.env.DB, 'ecosystem.naijashop', shipping.country, shipping.city)
   } catch (err) {
     if (err instanceof RolloutGuardError) return c.json({ error: err.message, code: err.code }, err.status as any)
     throw err

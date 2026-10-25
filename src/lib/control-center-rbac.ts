@@ -31,6 +31,7 @@ import type { AppEnv } from '../types'
 export interface ControlCenterAccessResolution {
   roleKeys: string[]
   permissionKeys: Set<string>
+  countryIsoCodes: string[]
 }
 
 /**
@@ -62,11 +63,13 @@ export async function resolveControlCenterAccess(db: D1Database, userId: number)
   if (roleRows.results.length === 0) return null
 
   const roleKeys = roleRows.results.map((r) => r.key)
+  const scopeRows = await db.prepare('SELECT country_iso FROM cc_user_country_scopes WHERE user_id = ? ORDER BY country_iso').bind(userId).all<{ country_iso: string }>()
+  const countryIsoCodes = scopeRows.results.map((row) => row.country_iso)
   const isSuperAdmin = roleKeys.includes('super_admin')
 
   if (isSuperAdmin) {
     const allPerms = await db.prepare('SELECT key FROM cc_permissions').all<{ key: string }>()
-    return { roleKeys, permissionKeys: new Set(allPerms.results.map((p) => p.key)) }
+    return { roleKeys, permissionKeys: new Set(allPerms.results.map((p) => p.key)), countryIsoCodes }
   }
 
   const roleIds = roleRows.results.map((r) => r.id)
@@ -81,7 +84,7 @@ export async function resolveControlCenterAccess(db: D1Database, userId: number)
     .bind(...roleIds)
     .all<{ key: string }>()
 
-  return { roleKeys, permissionKeys: new Set(permRows.results.map((p) => p.key)) }
+  return { roleKeys, permissionKeys: new Set(permRows.results.map((p) => p.key)), countryIsoCodes }
 }
 
 /**
@@ -140,6 +143,10 @@ export async function requireControlCenterApiAuth(c: Context<AppEnv>, next: () =
  * a Control Center user with a role that lacks this permission gets a real
  * 403, even though they successfully passed requireControlCenterAuth.
  */
+export function canManageCountry(access: ControlCenterAccessResolution, countryIso: string): boolean {
+  return access.roleKeys.some((key) => ['super_admin', 'platform_admin'].includes(key)) || access.countryIsoCodes.includes(countryIso.trim().toUpperCase())
+}
+
 export function requireControlCenterPermission(permissionKey: string) {
   return async (c: Context<AppEnv>, next: () => Promise<void>) => {
     const resolution = c.get('ccAccess') as ControlCenterAccessResolution | undefined

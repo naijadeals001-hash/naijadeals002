@@ -2,7 +2,7 @@ import type { EcosystemCapabilityState } from './control-center-ecosystem'
 
 export type CountryRolloutStatus = 'PLANNED' | 'PRE-LAUNCH' | 'BETA' | 'LIVE' | 'PAUSED' | 'SUSPENDED'
 
-export type RolloutGuardCode = 'VERTICAL_NOT_CONFIGURED' | 'VERTICAL_DISABLED' | 'COUNTRY_NOT_OPERATIONAL' | 'VERTICAL_DISABLED_IN_COUNTRY'
+export type RolloutGuardCode = 'VERTICAL_NOT_CONFIGURED' | 'VERTICAL_DISABLED' | 'COUNTRY_NOT_OPERATIONAL' | 'VERTICAL_DISABLED_IN_COUNTRY' | 'VERTICAL_DISABLED_IN_CITY' | 'VERTICAL_RESTRICTED_IN_CITY'
 
 export class RolloutGuardError extends Error {
   readonly code: RolloutGuardCode
@@ -118,9 +118,11 @@ export async function isVerticalEnabledInCountry(db: D1Database, verticalKey: st
  * missing. Global disablement is evaluated before country overrides, so a
  * country cannot re-enable a globally disabled vertical.
  */
-export async function assertVerticalTransactionAllowed(db: D1Database, verticalKey: string, isoCode: string): Promise<void> {
+export async function assertVerticalTransactionAllowed(db: D1Database, verticalKey: string, isoCode: string, cityName?: string | null): Promise<void> {
   const key = verticalKey.startsWith('ecosystem.') ? verticalKey : `ecosystem.${verticalKey}`
+  const verticalSlug = key.replace(/^ecosystem\.naija/, '')
   const country = isoCode.trim().toUpperCase()
+  const city = cityName?.trim().toLowerCase() || null
   const row = await db.prepare(`
     SELECT cap.enabled AS globally_enabled,
            cap.status AS capability_status,
@@ -138,6 +140,17 @@ export async function assertVerticalTransactionAllowed(db: D1Database, verticalK
   if (row.capability_status !== 'ACTIVE') throw new RolloutGuardError('VERTICAL_NOT_CONFIGURED', `Vertical ${key} is not operationally configured`)
   if (!row.country_status || !OPERATIONAL_COUNTRY_STATUSES.has(row.country_status)) throw new RolloutGuardError('COUNTRY_NOT_OPERATIONAL', `Country ${country} is not operational for new transactions`)
   if (row.country_override === 0) throw new RolloutGuardError('VERTICAL_DISABLED_IN_COUNTRY', `Vertical ${key} is disabled in country ${country}`)
+  if (city) {
+    const cityOverride = await db.prepare(`
+      SELECT enablement_state FROM cc_vertical_city_overrides
+      WHERE vertical_slug = ? AND country_iso = ? AND lower(trim(city_name)) = ?
+    `).bind(verticalSlug, country, city).first<{ enablement_state: 'enabled' | 'disabled' | 'restricted' }>()
+    // City configuration is an explicit narrowing layer. An absent override
+    // inherits the country decision; a city can never re-enable a globally or
+    // country-disabled vertical.
+    if (cityOverride?.enablement_state === 'disabled') throw new RolloutGuardError('VERTICAL_DISABLED_IN_CITY', `Vertical ${key} is disabled in ${cityName}, ${country}`)
+    if (cityOverride?.enablement_state === 'restricted') throw new RolloutGuardError('VERTICAL_RESTRICTED_IN_CITY', `Vertical ${key} is restricted in ${cityName}, ${country}`)
+  }
 }
 
 export async function setCountryStatus(db: D1Database, countryId: number, status: CountryRolloutStatus): Promise<RolloutCountry | null> {
@@ -148,6 +161,15 @@ export async function setCountryStatus(db: D1Database, countryId: number, status
            default_language AS defaultLanguage, status, display_order AS displayOrder
     FROM cc_countries WHERE id = ?
   `).bind(countryId).first<RolloutCountry>()
+}
+
+export async function setVerticalCityOverride(db: D1Database, verticalKey: string, countryIso: string, cityName: string, enablementState: 'enabled' | 'disabled' | 'restricted', userId: number, reason: string | null): Promise<void> {
+  const slug = verticalKey.replace(/^ecosystem\./, '')
+  await db.prepare(`
+    INSERT INTO cc_vertical_city_overrides (vertical_slug,country_iso,city_name,enablement_state,reason,created_by_user_id,updated_at)
+    VALUES (?,?,?,?,?,?,datetime('now'))
+    ON CONFLICT(vertical_slug,country_iso,city_name) DO UPDATE SET enablement_state=excluded.enablement_state, reason=excluded.reason, created_by_user_id=excluded.created_by_user_id, updated_at=datetime('now')
+  `).bind(slug, countryIso.trim().toUpperCase(), cityName.trim(), enablementState, reason, userId).run()
 }
 
 export async function setVerticalCountryOverride(db: D1Database, verticalKey: string, countryId: number, enabled: boolean, userId: number, reason: string | null): Promise<void> {

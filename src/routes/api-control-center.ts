@@ -24,7 +24,7 @@
  */
 import { Hono } from 'hono'
 import type { AppEnv } from '../types'
-import { requireControlCenterApiAuth, requireControlCenterPermission } from '../lib/control-center-rbac'
+import { canManageCountry, requireControlCenterApiAuth, requireControlCenterPermission } from '../lib/control-center-rbac'
 import { getClientIp } from '../lib/login-throttle'
 import { runControlCenterSearch } from '../lib/control-center-search'
 import { recordControlCenterAction } from '../lib/control-center-audit'
@@ -106,7 +106,7 @@ import {
 import { invalidateEcosystemNavCache } from '../lib/ecosystem-nav'
 import { getCategoryPillNav, invalidateCategoryPillNavCache } from '../lib/category-pill-nav'
 import { getUnifiedEcosystemRegistry } from '../lib/control-center-ecosystem'
-import { listRolloutCountries, listRolloutVerticals, getCountryRollout, setCountryStatus, setVerticalCountryOverride, type CountryRolloutStatus } from '../lib/control-center-rollout'
+import { listRolloutCountries, listRolloutVerticals, getCountryRollout, setCountryStatus, setVerticalCountryOverride, setVerticalCityOverride, type CountryRolloutStatus } from '../lib/control-center-rollout'
 import { ensureDevelopmentBacklog, getDevelopmentSummary, listDevelopmentTasks, getDevelopmentTask, listDevelopmentEvents, updateDevelopmentTask, DEVELOPMENT_STATUSES } from '../lib/control-center-development'
 
 export const apiControlCenterRoutes = new Hono<AppEnv>()
@@ -310,17 +310,45 @@ apiControlCenterRoutes.get('/verticals', requireControlCenterPermission('configu
   return c.json({ query: query || null, total: filtered.length, limit, offset, verticals: filtered.slice(offset, offset + limit), generated_at: new Date().toISOString() })
 })
 
-apiControlCenterRoutes.get('/verticals/:slug', requireControlCenterPermission('configuration.countries.read'), async (c) => {
+apiControlCenterRoutes.get('/verticals/:slug', requireControlCenterPermission('configuration.vertical.read'), async (c) => {
   const registry = await getUnifiedEcosystemRegistry(c.env.DB)
-  const vertical = registry.find((item) => item.key === c.req.param('slug'))
+  const slug = c.req.param('slug').replace(/^ecosystem\./, '')
+  const vertical = registry.find((item) => item.key === slug)
   if (!vertical) return c.json({ error: 'Vertical not found' }, 404)
-  return c.json({ vertical, generated_at: new Date().toISOString() })
+  const { results: cityOverrides } = await c.env.DB.prepare('SELECT country_iso, city_name, enablement_state, reason, updated_at FROM cc_vertical_city_overrides WHERE vertical_slug=? ORDER BY country_iso, city_name').bind(slug).all()
+  return c.json({ vertical, city_overrides: cityOverrides, generated_at: new Date().toISOString() })
 })
 
 // ---------- Pan-African rollout controls ----------
 // Country and vertical activation are server-side controls. The preview may
 // display a disabled surface, but these endpoints are the authoritative write
 // boundary and every mutation records an immutable Central Admin audit event.
+apiControlCenterRoutes.get('/rollout/cities/:countryIso/:cityName', requireControlCenterPermission('configuration.vertical.read'), async (c) => {
+  const countryIso = c.req.param('countryIso').toUpperCase()
+  const cityName = c.req.param('cityName').trim()
+  const { results } = await c.env.DB.prepare(`SELECT vertical_slug, enablement_state, reason, created_by_user_id, updated_at FROM cc_vertical_city_overrides WHERE country_iso = ? AND lower(trim(city_name)) = ? ORDER BY vertical_slug`).bind(countryIso, cityName.toLowerCase()).all()
+  return c.json({ country_iso: countryIso, city_name: cityName, overrides: results })
+})
+
+apiControlCenterRoutes.patch('/rollout/cities/:countryIso/:cityName/:verticalKey', requireControlCenterPermission('configuration.city.manage'), async (c) => {
+  const admin = c.get('user')!
+  const access = c.get('ccAccess')!
+  const countryIso = c.req.param('countryIso').toUpperCase()
+  const cityName = c.req.param('cityName').trim()
+  const verticalKey = c.req.param('verticalKey')
+  const body = await c.req.json<{ enablement_state?: 'enabled' | 'disabled' | 'restricted'; reason?: string }>().catch(() => null)
+  if (!cityName || !body?.enablement_state || !['enabled','disabled','restricted'].includes(body.enablement_state)) return c.json({ error: 'city name and a valid enablement_state are required' }, 400)
+  if (!canManageCountry(access, countryIso)) return c.json({ error: 'Country scope does not permit this change' }, 403)
+  const capability = await c.env.DB.prepare('SELECT key, enabled FROM cc_capabilities WHERE key = ? OR key = ?').bind(verticalKey, `ecosystem.${verticalKey}`).first<{ key: string; enabled: number }>()
+  if (!capability || !capability.key.startsWith('ecosystem.')) return c.json({ error: 'Ecosystem vertical not found' }, 404)
+  if (body.enablement_state === 'enabled' && capability.enabled !== 1) return c.json({ error: 'A city override cannot re-enable a globally disabled vertical' }, 409)
+  const before = await c.env.DB.prepare('SELECT * FROM cc_vertical_city_overrides WHERE vertical_slug = ? AND country_iso = ? AND lower(trim(city_name)) = ?').bind(capability.key.replace(/^ecosystem\./,''), countryIso, cityName.toLowerCase()).first()
+  await setVerticalCityOverride(c.env.DB, capability.key, countryIso, cityName, body.enablement_state, admin.id, body.reason ?? null)
+  const after = await c.env.DB.prepare('SELECT * FROM cc_vertical_city_overrides WHERE vertical_slug = ? AND country_iso = ? AND lower(trim(city_name)) = ?').bind(capability.key.replace(/^ecosystem\./,''), countryIso, cityName.toLowerCase()).first()
+  await recordControlCenterAction(c.env.DB, { actorUserId: admin.id, actorName: admin.name, action: 'vertical_city_override_changed', entityType: 'cc_vertical_city_override', entityId: `${capability.key}:${countryIso}:${cityName.toLowerCase()}`, beforeState: before, afterState: after, context: { reason: body.reason ?? null, scope: countryIso }, success: true, ipAddress: getClientIp(c.req.header('cf-connecting-ip') ?? null) })
+  return c.json({ success: true, override: after })
+})
+
 apiControlCenterRoutes.get('/rollout/countries', requireControlCenterPermission('configuration.countries.read'), async (c) => {
   return c.json({ countries: await listRolloutCountries(c.env.DB) })
 })

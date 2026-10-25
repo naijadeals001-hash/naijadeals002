@@ -137,7 +137,7 @@ logisticsApi.post('/logistics/quotes', async (c) => {
     return c.json({ error: 'origin_country_iso, destination_country_iso, vehicle_type_id and speed_tier are required' }, 400)
   }
   try {
-    await assertVerticalTransactionAllowed(c.env.DB, 'ecosystem.naijasend', body.origin_country_iso)
+    await assertVerticalTransactionAllowed(c.env.DB, 'ecosystem.naijasend', body.origin_country_iso, body.origin_zone_key)
   } catch (err) {
     if (err instanceof RolloutGuardError) return c.json({ error: err.message, code: err.code }, err.status as any)
     throw err
@@ -171,7 +171,7 @@ logisticsApi.post('/shipments', async (c) => {
     return c.json({ error: 'pickup, dropoff, vehicle_type_id, speed_tier and quoted_price_kobo are required' }, 400)
   }
   try {
-    await assertVerticalTransactionAllowed(c.env.DB, 'ecosystem.naijasend', body.origin_country_iso ?? 'NG')
+    await assertVerticalTransactionAllowed(c.env.DB, 'ecosystem.naijasend', body.origin_country_iso ?? 'NG', body.pickup?.city ?? body.origin_zone_key)
     const result = await createStandaloneShipment(c.env.DB, user.id, {
       originCountryIso: body.origin_country_iso ?? 'NG',
       destinationCountryIso: body.destination_country_iso ?? 'NG',

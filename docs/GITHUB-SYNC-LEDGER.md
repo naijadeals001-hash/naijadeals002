@@ -51,6 +51,19 @@
 - Verified implementation commit and remote SHA: `cadbbdb0589914f38e7434360ed034b33d609d84`; local D1 `EATS-001` checkpoint now records both SHAs and the 12/12 repeated courier evidence.
 - No production deployment, remote D1 mutation, merge, DNS change or force-push performed.
 
+## CC-003 authenticated acceptance, RBAC and city enforcement — current local checkpoint
+
+- Starting checkpoint verified: `002b57c4fea2eb1bb0377dbfe885947806d954ec` on `feat/naijadrive-private-ride-foundation`; remote matched, PM2 `naijadeals` remained online, and `.npm-cache-rea/` was preserved.
+- REA `6.7.0` verified through the preserved project cache; MCP remains enabled at `/home/user/.config/opencode/opencode.jsonc`. No new protected administrative workflow evidence was claimed; no access control was bypassed.
+- Root cause of the historical Development Registry error was confirmed in `src/lib/control-center-development.ts`: seed rows contained 25 or 24 values while the insert declared 26 columns. The fix inserts the omitted description position, pads optional screenshot values, validates row length, normalizes JSON fields, and repairs malformed persisted rows idempotently while recording a registry event.
+- Added `migrations/0102_control_center_cc003_rbac_city_scopes.sql` with `finance_officer`, `country_admin`, `configuration.city.manage`, `configuration.vertical.read`, and explicit `cc_user_country_scopes`. No users or production assignments are seeded.
+- RBAC now resolves assigned country scopes server-side and exposes `canManageCountry`; client role claims remain unused. City override writes require the city-manage permission, assigned country scope, an existing vertical, and cannot re-enable a globally disabled vertical.
+- `assertVerticalTransactionAllowed` now applies precedence: global disabled/configuration failure → country operational status and country override → optional city override. Absent city overrides inherit country behavior; enabled global/country settings can be narrowed to disabled/restricted city state. Shop, Eats, Drive and Send transaction boundaries now pass city/zone context where available.
+- Protected vertical detail API now returns persisted city overrides and uses `configuration.vertical.read`.
+- Automated evidence: CC-003 targeted suite **3/3**, Control Center combined regression **12/12**, affected EATS/Drive/Shop regression **17/17**, build **272 modules**.
+- Browser acceptance remains explicitly **not run** because no authorized Control Center role sessions were available. Country-admin HTTP workflow coverage is represented by direct server-side role/scope tests, not claimed as browser acceptance.
+- `EATS-001` remains separate and partial; no production deployment, remote D1 mutation, merge, DNS change or force-push performed.
+
 ## Control Center development registry batch — current local checkpoint
 
 - Added `migrations/0095_control_center_development_registry.sql` with persisted `cc_development_tasks` and append-only `cc_development_events`, readiness milestones, dependency metadata, REA evidence fields, preview/commit verification fields and development permissions.

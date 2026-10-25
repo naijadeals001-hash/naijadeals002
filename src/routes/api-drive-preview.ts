@@ -4,6 +4,7 @@ import { estimateDrivePreviewFare, type FareEstimateMode } from '../lib/drive-pr
 import { validateDrivePreviewBooking } from '../lib/drive-preview'
 import { requireAuth } from '../lib/auth'
 import { getRideForCustomer, transitionRide, recoverExpiredRideOffers, reassignRideAfterOffer, DRIVER_OFFER_EXPIRY_MINUTES } from '../lib/drive-rides'
+import { assertVerticalTransactionAllowed, RolloutGuardError } from '../lib/control-center-rollout'
 
 export const drivePreviewApi = new Hono<AppEnv>()
 
@@ -43,6 +44,12 @@ drivePreviewApi.post('/rides', requireAuth, async (c) => {
   const body = await c.req.json<{ pickupZone?: string; dropoffZone?: string; vehicleCategory?: string; idempotencyKey?: string }>().catch(() => null)
   const validation = validateDrivePreviewBooking(body)
   if (!validation.ok) return c.json({ error: validation.error, code: validation.code }, validation.status)
+  try {
+    await assertVerticalTransactionAllowed(c.env.DB, 'ecosystem.naijadrive', 'NG', body?.pickupZone)
+  } catch (err) {
+    if (err instanceof RolloutGuardError) return c.json({ error: err.message, code: err.code }, err.status as any)
+    throw err
+  }
   const idem = body?.idempotencyKey?.trim() || null
   if (idem && (idem.length < 8 || idem.length > 128)) return c.json({ error: 'idempotencyKey must be between 8 and 128 characters' }, 400)
   if (idem) {
