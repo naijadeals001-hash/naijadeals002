@@ -63,6 +63,7 @@ test('booking creation: per_night pricing multiplies base price by number of nig
     listingType: 'stay_unit',
     title: `Harness Night Listing ${Date.now()}`,
     countryIso: 'NG',
+    vertical: 'ecosystem.naijastay',
     basePriceKobo: 1000000,
     pricingUnit: 'per_night',
     bookingMode: 'instant',

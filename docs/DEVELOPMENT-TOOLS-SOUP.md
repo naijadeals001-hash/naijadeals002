@@ -16,6 +16,8 @@ Candidate: `https://github.com/southwind-ai/soup`
 | Native OpenCode adapter | NOT RUN / NOT FOUND | No native adapter was documented or present in the inspected release |
 | NaijaDeals integration | NOT RUN | Intentionally isolated; no application or OpenCode integration performed |
 | Production readiness | NOT READY | Routing quality and security governance still require caller-owned controls |
+| Required-skill validation gate | PARTIAL | The caller-owned fallback preserves mandatory context and handles missing/unavailable/unsafe selection, but the six-task benchmark still has only 5/6 required-skill recall in the direct provider run |
+| Adoption decision | BLOCKED | No supported native OpenCode adapter; larger golden-task quality and reliable required-skill recall are still outstanding |
 
 ## Project verification
 

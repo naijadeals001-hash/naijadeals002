@@ -18,6 +18,8 @@ Branch: `feat/naijadrive-private-ride-foundation`
 | AgentShield install | PARTIAL | Package-local npm install failed; isolated dependency-prefix install succeeded |
 | AgentShield scan | PARTIAL | Scan executed, but returned Grade D and exit `2` |
 | Production integration | NOT RUN | ECC remains tooling-only; NaijaDeals runtime and deployment were not changed |
+| Latest deterministic rerun | PASS | Doctor exited 0; the combined shell returned non-zero because the subsequent plan invocation did not complete cleanly; prior saved deterministic plan evidence remains valid |
+| Provider-backed recovery | BLOCKED | No usable OpenCode model output was obtained; direct provider reachability does not prove OpenCode dispatch |
 
 ## Installation and configuration evidence
 

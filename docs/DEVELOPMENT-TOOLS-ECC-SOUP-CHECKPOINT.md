@@ -28,6 +28,9 @@ No NaijaDeals production behavior, deployment configuration, secrets, D1/R2 data
 | REA version/config preservation | PASS | 6.7.0 and OpenCode MCP registration aligned |
 | REA full doctor | PARTIAL | Optional native engines and unrelated Claude registration unavailable |
 | Production readiness | NOT READY | Outstanding provider and security governance blockers |
+| D1-001 booking fixture follow-up | PASS | `ecosystem.naijastay` supplied by isolated fixtures; 20/20 booking workflows passed against local D1; no new PM2 binding error |
+| ECC provider recovery follow-up | BLOCKED | Deterministic doctor remains healthy, but no usable provider-backed OpenCode/ECC output was obtained |
+| Soup adoption gate | BLOCKED | Caller fallback is present, but required-skill recall/net-benefit proof and supported adapter remain insufficient |
 
 ## Evidence and commands
 

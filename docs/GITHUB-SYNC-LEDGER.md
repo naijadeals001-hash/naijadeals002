@@ -43,6 +43,15 @@
 - `npm run test:node -- tests/control-center-cc003.test.mjs`: 4/4 passed. `npm run test:ts-baseline`: current diagnostics 0. `npm run build`: 272 modules passed. The focused booking-engine exercise was not green (2/15 passed; 13 fixture/precondition failures) and is recorded as blocked/partial, not a D1 success.
 - Added `docs/D1-001-HISTORICAL-BINDING-ERROR-INVESTIGATION-2026-10-25.md`. No production deployment, production D1 mutation, DNS/secrets change, merge or force-push performed. This D1 batch is local and pending commit/push.
 
+## D1-001 booking fixture follow-up — local, pending push
+
+- Starting checkpoint independently verified: local and remote `6c44a5688ad3bcccdc933a6e01652a40e8581aa6` on `feat/naijadrive-private-ride-foundation`; D1-001 and TS-001 commits remain ancestors. `.npm-cache-rea/` is preserved and `/home/user/webapp` was not modified.
+- Corrected only isolated booking fixtures: generated listings now send `vertical: ecosystem.naijastay`; the direct per-night fixture sends the same vertical. Local D1 prerequisites were read and verified as `NG=LIVE`, NaijaStay `ACTIVE`/globally enabled, with no disabling country override. No rollout rows were changed.
+- Reused the existing online PM2 `naijadeals` preview. Corrected booking matrix passed **20/20** across creation, lifecycle, availability, capacity and concurrency. Existing PM2 error log remains at 665 lines; no new generic binding error appeared.
+- The generic historical binding error remains `NOT REPRODUCED`/unlocalized. No speculative SQL change was made. D1-001 remains `PARTIAL` because historical caller/source-map evidence is incomplete.
+- Global tooling helper was rerun for NaijaDeals and `/home/user/webapp`: ECC `PASS`, REA `PARTIAL`, Soup `PARTIAL`; the dirty webapp was untouched. Preview smoke checks `/`, `/drive`, `/eats` returned HTTP 200.
+- This follow-up is not yet committed or pushed; production deployment and production data mutation remain not performed.
+
 ## TS-001 — TypeScript diagnostic remediation and quality-gate recovery
 
 - Starting checkpoint verified: local and remote `210ad1c5b533d5c4f73e577956c773dda7d64e3c` on `feat/naijadrive-private-ride-foundation`; `.npm-cache-rea/` preserved and unrelated worktrees untouched.

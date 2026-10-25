@@ -9,9 +9,9 @@ Branch: `feat/naijadrive-private-ride-foundation`
 | Error | Status | Result |
 |---|---|---|
 | `18 values for 17 columns` | PARTIAL | Historical source path was traced to the Development Registry seed/alignment defect already fixed in the CC-003 batch; a fresh malformed-row repair regression now passes. The exact historical runtime error was not re-triggered against the already-fixed code. |
-| `Wrong number of parameter bindings for SQL query` | NOT REPRODUCED | Historical stack evidence was captured, but no current source path produced the error during the bounded tests and preview observation. No speculative SQL change was made. |
-| Fresh PM2 runtime observation | PASS | Existing preview stayed online; exercised routes returned expected responses and added zero PM2 error-log lines. |
-| Relevant booking-engine exercise | BLOCKED | Local fixtures returned `Listing vertical is not configured` / HTTP 409 before reaching the suspected booking SQL path. This is a rollout-fixture precondition failure, not evidence of a binding defect. |
+| `Wrong number of parameter bindings for SQL query` | NOT REPRODUCED | Historical stack evidence remains in the preserved PM2 log, but the corrected booking workflows produced no new instance. No speculative SQL change was made. |
+| Fresh PM2 runtime observation | PASS | Existing preview stayed online; the corrected booking matrix exercised booking SQL and added zero PM2 error-log lines. |
+| Relevant booking-engine exercise | PASS | The isolated fixture now supplies `ecosystem.naijastay`; local NG/NaijaStay rollout prerequisites were verified as `LIVE`/`ACTIVE`/enabled. All 20 targeted booking tests passed. |
 
 No production D1 database, deployment, DNS, secrets, or remote runtime was changed.
 
@@ -35,14 +35,14 @@ Historical PM2 errors were recorded before exercising routes. The existing error
 
 These were kept separate from new evidence. The error log was not deleted or rotated.
 
-Fresh observation window:
+Fresh booking observation window:
 
 ```text
-Start: 2026-10-25T17:21:17+00:00
-End:   2026-10-25T17:21:17+00:00
-PM2 error lines before: 665
-PM2 error lines after:  665
-New error lines: 0
+Existing PM2 process: naijadeals (reused; no duplicate server)
+PM2 error log: /home/user/.pm2/logs/naijadeals-error-0.log
+Lines observed after booking matrix: 665
+New booking-related error lines: 0
+Historical binding-error lines remain preserved at older log entries.
 ```
 
 Responses from the existing preview:
@@ -128,6 +128,12 @@ The following bounded local tests were exercised:
 - Booking Engine creation, state, availability and concurrency paths.
 - Existing preview routes in the fresh PM2 observation window.
 
+The current Development Registry repair path passed without the error. The booking fixture was corrected to send `vertical: ecosystem.naijastay` for generated listings; the one direct per-night fixture in `01.booking-creation.test.mjs` was corrected similarly. Before running, local D1 state was verified as `NG=LIVE`, `ecosystem.naijastay=ACTIVE`, globally enabled, with no disabling country override. No local rollout rows were mutated, so there was no teardown state to restore and production rollout state was untouched.
+
+The corrected matrix reached the intended hold, booking, lifecycle, availability, capacity-race and double-conversion paths. It passed 20/20 tests and emitted no new PM2 binding-error lines. This is evidence that the prior 409 was a fixture defect and that the exercised current booking paths do not reproduce the historical generic error; it is not proof that every historical caller has been identified.
+
+The original blocked-run details follow for historical traceability:
+
 The current Development Registry repair path passed without the error. The booking suite did not reach its intended hold/booking SQL paths because its local fixtures were rejected earlier by the rollout guard with:
 
 ```text
@@ -135,15 +141,15 @@ Listing vertical is not configured
 HTTP 409
 ```
 
-This is a test-fixture/configuration precondition failure. It is not evidence that the booking SQL binding error is fixed or caused by booking SQL.
+This was a test-fixture/configuration precondition failure. It was not evidence that the booking SQL binding error was fixed or caused by booking SQL.
 
-No source change was made for this error because the cause was not proven.
+No source SQL change was made for this error because the cause was not proven.
 
 ### Conclusion
 
 Status: **NOT REPRODUCED**.
 
-The historical error remains an open investigation item. The next useful step is to repair or explicitly provision the local booking test vertical/rollout fixture, rerun the booking paths, and capture the response body plus fresh PM2 logs. That should occur before changing any booking SQL.
+The historical error remains an open investigation item. The corrected booking paths now provide bounded negative evidence: 20/20 tests passed and the PM2 error log did not grow. The exact historical caller is still unknown, so SQL remains unchanged.
 
 ## Verification results
 
@@ -169,13 +175,14 @@ PASS — 28/28 in the current rerun before D1-specific changes
 
 ### Booking engine result
 
-The bounded booking-engine run was **BLOCKED/PARTIAL**, not reported as a pass:
+The corrected booking-engine run was **PASS** for the exercised workflows:
 
-- 15 tests executed across creation/state/availability/concurrency files.
-- 2 passed.
-- 13 failed at the fixture setup boundary with HTTP 409.
-- Primary failure: `Listing vertical is not configured`.
-- No D1 binding error was observed in that run.
+- 20 tests executed across creation, lifecycle, availability and concurrency files.
+- 20 passed; 0 failed.
+- The fixture sends `ecosystem.naijastay`; local rollout prerequisites were verified without mutating them.
+- No D1 binding error was observed in the corrected run and PM2 error-log line count remained 665.
+
+The earlier 15-test run remains recorded above as the fixture-precondition failure that motivated this correction.
 
 ### Browser acceptance
 
@@ -188,7 +195,7 @@ Browser acceptance was not required for the source-level Development Registry re
 - The historical registry seed/alignment path.
 - The passing malformed-row repair test.
 - The unreproduced second binding error.
-- The booking fixture rollout blocker.
+- The corrected booking fixture and 20/20 targeted booking result; the historical generic binding error remains unlocalized.
 
 It was intentionally not marked `COMPLETE`.
 
@@ -196,8 +203,8 @@ It was intentionally not marked `COMPLETE`.
 
 1. The exact caller for the historical generic binding error remains unknown.
 2. The old PM2 bundle/source-map relationship is unavailable, so stack offsets cannot be mapped conclusively to a current source file.
-3. The booking test fixture must provision a valid configured vertical before its SQL paths can be evaluated.
-4. Historical PM2 errors may include failures from older builds or stale local D1 state.
+3. The corrected booking matrix covers the intended current booking paths, but cannot prove unrelated historical callers are clean.
+4. Historical PM2 errors may include failures from older builds or stale local D1 state; they were preserved and not counted as fresh failures.
 5. No production claim is made.
 
-Recommended next task: fix the isolated booking test rollout precondition only, rerun the booking-engine D1 paths, and inspect fresh logs for the generic binding error before considering any SQL modification.
+Recommended next task: add request-level SQL observability or a source-mapped reproduction harness around any future occurrence; do not change SQL until a concrete mismatch is captured.

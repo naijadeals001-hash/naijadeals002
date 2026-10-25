@@ -131,11 +131,12 @@ export async function creditWalletDirect(userId, amountKobo) {
 }
 
 /** Creates a fresh single-capacity gig_service listing owned by `client`, returning {listingId, resourceId}. Used as the common fixture root for most test files. `cancellationPolicyId`, when provided, is forwarded as-is (used by invariant 6's cancellation/refund tests to attach a custom policy). `depositPercentage`, when provided, is forwarded as-is (used by Invariant 9's ledger-derived-refund-integrity tests to exercise partial-deposit listings — createBookableListing/the route already accept+persist this field; omitted here it defaults to 100 server-side, exactly like every pre-existing NaijaGigs listing). */
-export async function createTestListing(client, { title, bookingMode = 'instant', capacityUnits = 1, basePriceKobo = 500000, cancellationPolicyId, depositPercentage } = {}) {
+export async function createTestListing(client, { title, bookingMode = 'instant', capacityUnits = 1, basePriceKobo = 500000, cancellationPolicyId, depositPercentage, vertical = 'ecosystem.naijastay', countryIso = 'NG' } = {}) {
   const res = await client.post('/api/booking-providers/me/bookable-listings', {
     listingType: 'gig_service',
     title: title ?? `Harness Listing ${RUN_NONCE}-${Math.floor(Math.random() * 1e6)}`,
-    countryIso: 'NG',
+    countryIso,
+    vertical,
     basePriceKobo,
     bookingMode,
     capacityModel: capacityUnits > 1 ? 'multiple' : 'single',
