@@ -157,6 +157,14 @@
 - Build passed (270 modules). Dispatch recovery, private ride, carpool and Shop checkout regression tests passed: 6/6.
 - Existing PM2 preview reused; `/drive` returned HTTP 200. Authenticated driver browser acceptance remains unavailable without an authorized driver session and is recorded as a limitation. `DRIVE-001` remains `PARTIAL`.
 
+## DRIVE-001 acceptance hardening
+
+- Strengthened acceptance so ride assignment is claimed first with a conditional ride update, then the offer is claimed with an expiry/status guard; a failed second claim rolls the ride claim back.
+- Explicitly rejects stale acceptance after rejected, expired, or concurrently handled offers with HTTP 409 rather than allowing a stale client to resurrect an offer.
+- Added adversarial coverage for expired-offer acceptance, rejected-offer acceptance, concurrent two-driver acceptance, exactly one persisted winner, reassignment and terminal no-driver recovery.
+- Final relevant suite: 7 passed, 0 failed; build passed (270 modules). Existing preview `/drive` was refreshed through the existing PM2 process.
+- `DRIVE-001` remains `PARTIAL`: authenticated browser customer/driver evidence is still unavailable; live GPS, real-time push, external routing and external payments remain intentionally unconfigured.
+
 ## Known gates not green
 
 - Whole-repository `npm run test:node` has existing unrelated production waitlist and NestJS TypeScript source-loader failures.

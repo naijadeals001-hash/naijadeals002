@@ -121,11 +121,17 @@ drivePreviewApi.post('/driver/offers/:id/expire', requireAuth, async (c) => {
 drivePreviewApi.post('/driver/offers/:id/accept', requireAuth, async (c) => {
   await recoverExpiredRideOffers(c.env.DB)
   const user = c.get('user')!
-  const offer = await c.env.DB.prepare('SELECT o.id,o.ride_request_id,o.driver_profile_id,r.status FROM drive_ride_offers o JOIN drive_ride_requests r ON r.id=o.ride_request_id JOIN driver_profiles d ON d.id=o.driver_profile_id WHERE o.id=? AND d.user_id=? AND o.status=\'offered\'').bind(Number(c.req.param('id')), user.id).first<any>()
-  if (!offer) return c.json({ error: 'Offer not found or already handled' }, 404)
-  const result = await c.env.DB.prepare("UPDATE drive_ride_requests SET status='accepted',accepted_driver_profile_id=?,accepted_at=datetime('now'),updated_at=datetime('now') WHERE id=? AND status IN ('searching','offered')").bind(offer.driver_profile_id, offer.ride_request_id).run()
-  if (!result.meta.rows_written) return c.json({ error: 'Ride was accepted by another driver' }, 409)
-  await c.env.DB.batch([c.env.DB.prepare("UPDATE drive_ride_offers SET status='accepted',responded_at=datetime('now') WHERE id=? AND status='offered'").bind(offer.id), c.env.DB.prepare("UPDATE drive_ride_offers SET status='expired',responded_at=datetime('now') WHERE ride_request_id=? AND id<>? AND status='offered'").bind(offer.ride_request_id, offer.id), c.env.DB.prepare("INSERT INTO drive_ride_events (ride_request_id,from_status,to_status,actor_user_id,actor_role,note) VALUES (?,?,?,?,?,?)").bind(offer.ride_request_id, offer.status, 'accepted', user.id, 'driver', 'Driver accepted offer')])
+  const offer = await c.env.DB.prepare('SELECT o.id,o.ride_request_id,o.driver_profile_id,o.status AS offer_status,o.expires_at,r.status FROM drive_ride_offers o JOIN drive_ride_requests r ON r.id=o.ride_request_id JOIN driver_profiles d ON d.id=o.driver_profile_id WHERE o.id=? AND d.user_id=?').bind(Number(c.req.param('id')), user.id).first<any>()
+  if (!offer) return c.json({ error: 'Offer not found' }, 404)
+  if (offer.offer_status !== 'offered' || !offer.expires_at || offer.expires_at <= new Date().toISOString().replace('T', ' ').slice(0, 19)) return c.json({ error: `Offer is no longer actionable (${offer.offer_status})` }, 409)
+  const rideClaim = await c.env.DB.prepare("UPDATE drive_ride_requests SET status='accepted',accepted_driver_profile_id=?,accepted_at=datetime('now'),updated_at=datetime('now') WHERE id=? AND status IN ('searching','offered') AND EXISTS (SELECT 1 FROM drive_ride_offers WHERE id=? AND driver_profile_id=? AND status='offered' AND expires_at > datetime('now'))").bind(offer.driver_profile_id, offer.ride_request_id, offer.id, offer.driver_profile_id).run()
+  if (!rideClaim.meta.rows_written) return c.json({ error: 'Ride or offer changed concurrently; acceptance rejected' }, 409)
+  const offerClaim = await c.env.DB.prepare("UPDATE drive_ride_offers SET status='accepted',responded_at=datetime('now') WHERE id=? AND driver_profile_id=? AND status='offered' AND expires_at > datetime('now')").bind(offer.id, offer.driver_profile_id).run()
+  if (!offerClaim.meta.rows_written) {
+    await c.env.DB.prepare("UPDATE drive_ride_requests SET status='offered',accepted_driver_profile_id=NULL,accepted_at=NULL,updated_at=datetime('now') WHERE id=? AND accepted_driver_profile_id=? AND status='accepted'").bind(offer.ride_request_id, offer.driver_profile_id).run()
+    return c.json({ error: 'Offer changed concurrently; acceptance rejected' }, 409)
+  }
+  await c.env.DB.batch([c.env.DB.prepare("UPDATE drive_ride_offers SET status='expired',responded_at=datetime('now') WHERE ride_request_id=? AND id<>? AND status='offered'").bind(offer.ride_request_id, offer.id), c.env.DB.prepare("INSERT INTO drive_ride_events (ride_request_id,from_status,to_status,actor_user_id,actor_role,note) VALUES (?,?,?,?,?,?)").bind(offer.ride_request_id, offer.status, 'accepted', user.id, 'driver', 'Driver accepted offer atomically')])
   return c.json({ success: true, ride_id: offer.ride_request_id, status: 'accepted' })
 })
 

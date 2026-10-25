@@ -34,6 +34,26 @@ test('private ride persists, retries idempotently, driver accepts, and lifecycle
   assert.equal(stored.fare_mode, 'simulated')
 })
 
+test('concurrent acceptance permits exactly one driver assignment', async () => {
+  const created = await customer.client.post('/api/drive/rides', { pickupZone: 'abuja-central', dropoffZone: 'gwarinpa', vehicleCategory: 'car', idempotencyKey: `race-${RUN_NONCE}` })
+  assert.equal(created.status, 201, JSON.stringify(created.body))
+  const rideId = created.body.ride.id
+  const firstOffer = await driver.client.post(`/api/drive/rides/${rideId}/offers`, {})
+  const secondOffer = await driverTwo.client.post(`/api/drive/rides/${rideId}/offers`, {})
+  assert.equal(firstOffer.status, 201)
+  assert.equal(secondOffer.status, 201)
+  const results = await Promise.all([
+    driver.client.post(`/api/drive/driver/offers/${firstOffer.body.id}/accept`, {}),
+    driverTwo.client.post(`/api/drive/driver/offers/${secondOffer.body.id}/accept`, {}),
+  ])
+  assert.deepEqual(results.map((r) => r.status).sort(), [200, 409])
+  const stored = await queryOneD1(`SELECT status,accepted_driver_profile_id FROM drive_ride_requests WHERE id=${rideId}`)
+  assert.equal(stored.status, 'accepted')
+  assert.ok(stored.accepted_driver_profile_id)
+  const assigned = await queryOneD1(`SELECT COUNT(*) AS count FROM drive_ride_offers WHERE ride_request_id=${rideId} AND status='accepted'`)
+  assert.equal(assigned.count, 1)
+})
+
 test('offer inbox, expiry, rejection and no-driver recovery are persisted', async () => {
   const created = await customer.client.post('/api/drive/rides', { pickupZone: 'abuja-central', dropoffZone: 'lokogoma', vehicleCategory: 'car', idempotencyKey: `recovery-${RUN_NONCE}` })
   assert.equal(created.status, 201, JSON.stringify(created.body))
@@ -45,10 +65,14 @@ test('offer inbox, expiry, rejection and no-driver recovery are persisted', asyn
   await execD1(`UPDATE drive_ride_offers SET expires_at = datetime('now','-1 minute') WHERE id = ${offered.body.id}`)
   const recovered = await driverTwo.client.get('/api/drive/driver/offers')
   assert.equal(recovered.status, 200)
+  const expiredAccept = await driver.client.post(`/api/drive/driver/offers/${offered.body.id}/accept`, {})
+  assert.equal(expiredAccept.status, 409)
   const next = recovered.body.offers.find((o) => o.ride_id === rideId && o.status === 'offered')
   assert.ok(next, JSON.stringify(recovered.body))
   const rejected = await driverTwo.client.post(`/api/drive/driver/offers/${next.id}/reject`, { reason: 'Unavailable' })
   assert.equal(rejected.status, 200, JSON.stringify(rejected.body))
+  const rejectedAccept = await driverTwo.client.post(`/api/drive/driver/offers/${next.id}/accept`, {})
+  assert.equal(rejectedAccept.status, 409)
   const ride = await queryOneD1(`SELECT status FROM drive_ride_requests WHERE id = ${rideId}`)
   assert.equal(ride.status, 'no_driver_available')
   const events = await queryOneD1(`SELECT COUNT(*) AS count FROM drive_ride_events WHERE ride_request_id = ${rideId} AND note LIKE '%rejected%'`)
