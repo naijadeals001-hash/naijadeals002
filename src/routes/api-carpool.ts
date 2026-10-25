@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import type { AppEnv } from '../types'
 import { requireAuth } from '../lib/auth'
+import { assertVerticalTransactionAllowed, RolloutGuardError } from '../lib/control-center-rollout'
 
 export const carpoolApi = new Hono<AppEnv>()
 carpoolApi.post('/trips', requireAuth, async (c) => {
@@ -10,6 +11,15 @@ carpoolApi.post('/trips', requireAuth, async (c) => {
   const contribution = Number(body?.contribution_kobo ?? 0)
   if (!body?.origin?.trim() || !body?.destination?.trim() || !body?.departure_at || !Number.isInteger(seats) || seats < 1 || !Number.isInteger(contribution) || contribution < 0) {
     return c.json({ error: 'origin, destination, departure_at, positive seats_total and non-negative contribution_kobo are required' }, 400)
+  }
+  try {
+    // NaijaDrive is currently a Nigeria-only pilot. Keep the country boundary
+    // explicit until a persisted trip-country field is introduced with a
+    // cross-country dispatch requirement.
+    await assertVerticalTransactionAllowed(c.env.DB, 'ecosystem.naijadrive', 'NG', body.origin)
+  } catch (err) {
+    if (err instanceof RolloutGuardError) return c.json({ error: err.message, code: err.code }, err.status as any)
+    throw err
   }
   const result = await c.env.DB.prepare(`INSERT INTO carpool_trips (driver_user_id, origin, destination, departure_at, seats_total, seats_available, contribution_kobo, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
     .bind(user.id, body.origin.trim(), body.destination.trim(), body.departure_at, seats, seats, contribution, body.notes?.trim() || null).run()
@@ -37,6 +47,7 @@ carpoolApi.post('/trips/:id/requests', requireAuth, async (c) => {
   if (trip.driver_user_id === user.id) return c.json({ error: 'Drivers cannot request their own trip' }, 400)
   if (!Number.isInteger(seats) || seats < 1) return c.json({ error: 'seats must be a positive integer' }, 400)
   try {
+    await assertVerticalTransactionAllowed(c.env.DB, 'ecosystem.naijadrive', 'NG')
     const [updated, request] = await c.env.DB.batch([
       c.env.DB.prepare(`UPDATE carpool_trips SET seats_available = seats_available - ?, status = CASE WHEN seats_available - ? = 0 THEN 'full' ELSE status END, updated_at = datetime('now') WHERE id = ? AND status = 'published' AND seats_available >= ?`).bind(seats, seats, tripId, seats),
       c.env.DB.prepare('INSERT INTO carpool_requests (trip_id, passenger_user_id, seats_requested) VALUES (?, ?, ?)').bind(tripId, user.id, seats),
@@ -44,6 +55,7 @@ carpoolApi.post('/trips/:id/requests', requireAuth, async (c) => {
     if (!updated.meta.rows_written) return c.json({ error: 'Not enough seats remain' }, 409)
     return c.json({ id: Number(request.meta.last_row_id), status: 'requested', trip_id: tripId, seats_requested: seats }, 201)
   } catch (error) {
+    if (error instanceof RolloutGuardError) return c.json({ error: error.message, code: error.code }, error.status as any)
     if (String(error).toLowerCase().includes('unique')) return c.json({ error: 'You already requested a seat on this trip' }, 409)
     throw error
   }

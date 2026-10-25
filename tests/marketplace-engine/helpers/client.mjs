@@ -22,13 +22,21 @@ const DB_BINDING = process.env.MKT_TEST_D1_NAME ?? 'naijadeals-production'
 const PROJECT_DIR = process.env.MKT_TEST_PROJECT_DIR ?? new URL('../../../', import.meta.url).pathname
 
 export async function execD1(sql) {
-  const { stdout } = await execFileAsync(
-    'npx',
-    ['wrangler', 'd1', 'execute', DB_BINDING, '--local', '--json', `--command=${sql}`],
-    { cwd: PROJECT_DIR, maxBuffer: 10 * 1024 * 1024 }
-  )
-  const parsed = JSON.parse(stdout)
-  return parsed.map((stmt) => stmt.results)
+  const args = ['wrangler', 'd1', 'execute', DB_BINDING, '--local', '--json', `--command=${sql}`]
+  let lastError
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    try {
+      const { stdout } = await execFileAsync('npx', args, { cwd: PROJECT_DIR, maxBuffer: 10 * 1024 * 1024 })
+      const parsed = JSON.parse(stdout)
+      return parsed.map((stmt) => stmt.results)
+    } catch (error) {
+      lastError = error
+      const message = String(error?.stderr ?? error?.message ?? error)
+      if (!/SQLITE_BUSY|SQLITE_BUSY_SNAPSHOT|database is locked/i.test(message) || attempt === 7) throw error
+      await new Promise((resolve) => setTimeout(resolve, 250 * (attempt + 1)))
+    }
+  }
+  throw lastError
 }
 
 export async function queryD1(sql) {

@@ -3,6 +3,7 @@ import type { AppEnv } from '../types'
 import { requireAuth } from '../lib/auth'
 import { getNaijaPayProvider, getNaijaPayTransaction, listNaijaPayProviders, listNaijaPayTransactions } from '../lib/naijapay-data'
 import { createPaymentIntent, recordPaymentEvent, transitionPaymentIntent } from '../lib/payment-engine'
+import { assertVerticalTransactionAllowed, RolloutGuardError } from '../lib/control-center-rollout'
 
 export const naijaPayApi = new Hono<AppEnv>()
 naijaPayApi.use('*', requireAuth)
@@ -75,6 +76,12 @@ naijaPayApi.post('/utilities/purchase', async (c) => {
   if (!body.product_id || !body.identifier || !Number.isSafeInteger(amountMinor) || amountMinor <= 0) return c.json({ error: 'product_id, identifier and positive amount_minor are required' }, 400)
   const product = await c.env.DB.prepare(`SELECT p.*, p.operational_status AS product_status, pr.provider_key, pr.category, pr.operational_status AS provider_status, pr.environment FROM naijapay_products p JOIN naijapay_providers pr ON pr.id=p.provider_id WHERE p.id=?`).bind(body.product_id).first<any>()
   if (!product || product.operational_status !== 'sandbox' || product.product_status !== 'sandbox') return c.json({ error: 'Only configured sandbox products are available', code: 'PROVIDER_NOT_READY' }, 409)
+  try {
+    await assertVerticalTransactionAllowed(c.env.DB, 'ecosystem.naijapay', product.country_iso)
+  } catch (err) {
+    if (err instanceof RolloutGuardError) return c.json({ error: err.message, code: err.code }, err.status as any)
+    throw err
+  }
   const intent = await createPaymentIntent(c.env.DB, { idempotencyKey: key, userId: user.id, verticalKey: `utility.${product.category}`, countryIso: product.country_iso, currency: product.currency, amountMinor, fundingMethod: 'wallet', merchantReference: body.identifier })
   if (intent.created) {
     await transitionPaymentIntent(c.env.DB, intent.intent.id, 'created', 'succeeded')

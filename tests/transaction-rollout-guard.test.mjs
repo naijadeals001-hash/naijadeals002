@@ -11,6 +11,9 @@ const orderApi = fs.readFileSync(path.join(root, 'src/routes/api-orders.ts'), 'u
 const eatsApi = fs.readFileSync(path.join(root, 'src/routes/api-eats.ts'), 'utf8')
 const bookingsApi = fs.readFileSync(path.join(root, 'src/routes/api-bookings.ts'), 'utf8')
 const logisticsApi = fs.readFileSync(path.join(root, 'src/routes/api-logistics.ts'), 'utf8')
+const carpoolApi = fs.readFileSync(path.join(root, 'src/routes/api-carpool.ts'), 'utf8')
+const naijaPayApi = fs.readFileSync(path.join(root, 'src/routes/api-naijapay.ts'), 'utf8')
+const walletApi = fs.readFileSync(path.join(root, 'src/routes/api-wallet.ts'), 'utf8')
 const serviceOrders = fs.readFileSync(path.join(root, 'src/lib/service-orders.ts'), 'utf8')
 
 test('transaction guard fails closed and gives global disablement precedence', () => {
@@ -24,7 +27,7 @@ test('transaction guard fails closed and gives global disablement precedence', (
 })
 
 test('transaction boundaries use the shared rollout guard', () => {
-  for (const [name, source] of Object.entries({ serviceApi, providerApi, orderApi, eatsApi, bookingsApi, logisticsApi })) {
+  for (const [name, source] of Object.entries({ serviceApi, providerApi, orderApi, eatsApi, bookingsApi, logisticsApi, carpoolApi, naijaPayApi, walletApi })) {
     assert.match(source, /assertVerticalTransactionAllowed/, `${name} missing rollout guard`)
   }
 })

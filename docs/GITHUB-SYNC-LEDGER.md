@@ -361,3 +361,13 @@
 - Build passed after the final asset and responsive fixes. `node --check public/static/control-center-3d.js` passed. CC-003/CC-004 focused tests passed 5/5. Integrated relevant matrix passed 26/26.
 - `npm run test:ts-baseline` remains failing: baseline 9, current 34, newly surfaced 25, resolved 0. All listed diagnostics are in existing NestJS/runtime or unrelated route files; no Three.js TypeScript import/configuration change contributed. The gate is explicitly reported failing, not suppressed or rebaselined.
 - No route, API, migration, RBAC, production data, DNS, production deployment, production merge, reset, force-push or hosted publish was performed. This batch is deliverable with the TypeScript baseline debt explicitly unresolved.
+
+## Ecosystem rollout-boundary hardening — local verification
+
+- Starting checkpoint verified locally and remotely at `36edf285c974fd2af3e687b9d592a8f2b0e89e8b` on `feat/naijadrive-private-ride-foundation`; the user-reported `18e6c99e85ab084311b9d2c829a977c0cb65246c` is an ancestor, not current HEAD. `.npm-cache-rea/` remains preserved and `/home/user/webapp` was not modified.
+- Audited marketplace checkout, NaijaEats checkout, booking holds/confirmation/payment, NaijaSend quote/shipment paths, NaijaGigs requests/quotes/orders, NaijaDrive rides, and payment entry points against the shared `assertVerticalTransactionAllowed` engine.
+- Added missing transaction guards to NaijaDrive carpool trip/request creation, NaijaPay sandbox utility purchases, wallet top-up initialization, and NaijaSend return-shipment creation. Existing-record reads and lifecycle operations remain available according to ownership/state rules.
+- Added negative boundary coverage proving disabled NaijaDrive and NaijaPay operations return `VERTICAL_DISABLED` before creating carpool trips, payment intents, or financial records. Re-enabled local capability fixtures restore valid operations; all fixture state is restored in test teardown.
+- Focused rollout tests: `transaction-rollout-guard.test.mjs` 3/3, `naijadrive-carpool-api.test.mjs` 2/2, `naijapay-rollout-guard.test.mjs` 1/1. Existing NaijaDrive lifecycle tests passed 6/6. Existing NaijaShop currency/checkout acceptance passed 19/19. Existing NaijaEats operator/courier acceptance passed 14/14.
+- REA/ECC/Soup status remains evidence-based: REA `PARTIAL` (existing optional-engine/provider limitations), ECC `PASS` for deterministic local engineering checks but LLM-backed OpenCode remains `BLOCKED`, Soup `PARTIAL` (mandatory-skill validation available, no approved production adapter). No unavailable tool capability was claimed.
+- Production deployment, production D1/R2 mutation, DNS, secrets, payment configuration, reset, clean, merge, or force-push were not performed.

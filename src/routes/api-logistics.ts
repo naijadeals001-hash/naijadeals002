@@ -234,9 +234,13 @@ logisticsApi.get('/shipments/:id/events', async (c) => {
 logisticsApi.post('/shipments/:id/return', async (c) => {
   const user = c.get('user')!
   try {
+    const shipment = await c.env.DB.prepare('SELECT origin_country_iso FROM shipments WHERE id = ? AND (customer_user_id = ? OR vendor_id IN (SELECT id FROM vendors WHERE user_id = ?))').bind(Number(c.req.param('id')), user.id, user.id).first<{ origin_country_iso: string }>()
+    if (!shipment) return c.json({ error: 'Shipment not found or not accessible' }, 404)
+    await assertVerticalTransactionAllowed(c.env.DB, 'ecosystem.naijasend', shipment.origin_country_iso)
     const result = await createReturnShipment(c.env.DB, user.id, Number(c.req.param('id')))
     return c.json(result, 201)
   } catch (err) {
+    if (err instanceof RolloutGuardError) return c.json({ error: err.message, code: err.code }, err.status as any)
     if (err instanceof NotOwnedShipmentError) return c.json({ error: err.message }, 404)
     if (err instanceof LogisticsShipmentError) return c.json({ error: err.message }, 400)
     throw err

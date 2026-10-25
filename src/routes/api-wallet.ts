@@ -4,6 +4,7 @@ import { requireAuth } from '../lib/auth'
 import { getWalletBalance, getWalletHistory, creditWallet } from '../lib/wallet'
 import { initializePaystackTransaction, verifyPaystackTransaction } from '../lib/paystack'
 import { createPaymentIntent, IdempotencyConflictError } from '../lib/payment-engine'
+import { assertVerticalTransactionAllowed, RolloutGuardError } from '../lib/control-center-rollout'
 
 export const walletApi = new Hono<AppEnv & { Bindings: AppEnv['Bindings'] & { PAYSTACK_SECRET_KEY?: string } }>()
 
@@ -22,6 +23,13 @@ walletApi.post('/topup/initialize', async (c) => {
   const body = await c.req.json<{ amount_kobo: number }>().catch(() => null)
   if (!body?.amount_kobo || body.amount_kobo < 10000) {
     return c.json({ error: 'Minimum top-up is ₦100' }, 400)
+  }
+
+  try {
+    await assertVerticalTransactionAllowed(c.env.DB, 'ecosystem.naijapay', 'NG')
+  } catch (err) {
+    if (err instanceof RolloutGuardError) return c.json({ error: err.message, code: err.code }, err.status as any)
+    throw err
   }
 
   const secretKey = c.env.PAYSTACK_SECRET_KEY
