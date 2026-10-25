@@ -27,6 +27,7 @@ import {
   QuoteStateError
 } from '../lib/service-requests'
 import { createServiceOrderFromQuote, getOwnedOrderForCustomer, getOrdersForCustomer, getEventsForOrder, customerTransitionOrder, confirmAdditionalCharge, OrderStateError } from '../lib/service-orders'
+import { listCollaboration, createMessage, createMilestone, transitionMilestone, CollaborationAccessError, CollaborationStateError } from '../lib/service-collaboration'
 
 export const serviceRequestsApi = new Hono<AppEnv>()
 
@@ -167,6 +168,56 @@ serviceRequestsApi.get('/service-orders/:id', async (c) => {
 
   const events = await getEventsForOrder(c.env.DB, id)
   return c.json({ order, events })
+})
+
+// GET /api/service-orders/:id/collaboration — authorized milestones and messages.
+serviceRequestsApi.get('/service-orders/:id/collaboration', async (c) => {
+  try {
+    return c.json(await listCollaboration(c.env.DB, Number(c.req.param('id')), c.get('user')!.id))
+  } catch (err) {
+    if (err instanceof CollaborationAccessError) return c.json({ error: err.message }, 404)
+    throw err
+  }
+})
+
+// POST /api/service-orders/:id/messages — customer/provider collaboration.
+serviceRequestsApi.post('/service-orders/:id/messages', async (c) => {
+  const body = await c.req.json<{ body?: string }>().catch(() => null)
+  try {
+    const message = await createMessage(c.env.DB, Number(c.req.param('id')), c.get('user')!.id, body?.body ?? '', c.req.header('Idempotency-Key'))
+    return c.json({ message }, 201)
+  } catch (err) {
+    if (err instanceof CollaborationAccessError) return c.json({ error: err.message }, 404)
+    if (err instanceof CollaborationStateError) return c.json({ error: err.message }, 400)
+    throw err
+  }
+})
+
+// POST /api/service-orders/:id/milestones — assigned provider creates a plan item.
+serviceRequestsApi.post('/service-orders/:id/milestones', async (c) => {
+  const body = await c.req.json<{ title?: string; description?: string; due_at?: string | null }>().catch(() => null)
+  try {
+    const milestone = await createMilestone(c.env.DB, Number(c.req.param('id')), c.get('user')!.id, { ...(body ?? {}), idempotency_key: c.req.header('Idempotency-Key') })
+    return c.json({ milestone }, 201)
+  } catch (err) {
+    if (err instanceof CollaborationAccessError) return c.json({ error: err.message }, 403)
+    if (err instanceof CollaborationStateError) return c.json({ error: err.message }, 400)
+    throw err
+  }
+})
+
+// POST /api/service-orders/:id/milestones/:milestoneId/transition — role-aware state machine.
+serviceRequestsApi.post('/service-orders/:id/milestones/:milestoneId/transition', async (c) => {
+  const body = await c.req.json<{ status?: string }>().catch(() => null)
+  if (!body?.status) return c.json({ error: 'status is required' }, 400)
+  try {
+    const milestone = await transitionMilestone(c.env.DB, Number(c.req.param('id')), Number(c.req.param('milestoneId')), c.get('user')!.id, body.status)
+    return c.json({ milestone })
+  } catch (err) {
+    if (err instanceof CollaborationAccessError) return c.json({ error: err.message }, 404)
+    if (err instanceof CollaborationStateError) return c.json({ error: err.message }, 400)
+    throw err
+  }
 })
 
 // POST /api/service-orders/:id/cancel — spec section 45

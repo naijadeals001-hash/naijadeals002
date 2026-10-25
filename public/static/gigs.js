@@ -153,5 +153,31 @@
         window.location.reload();
       });
     }
+
+    var messageForm = qs('#gigs-message-form');
+    if (messageForm) {
+      var collaborationError = qs('#gigs-collaboration-error');
+      var collaborationStatus = qs('#gigs-collaboration-status');
+      var messageBody = qs('#gigs-message-body');
+      var messageSubmit = qs('#gigs-message-submit');
+      messageForm.addEventListener('submit', async function (e) {
+        e.preventDefault();
+        hideErr(collaborationError);
+        var body = (messageBody.value || '').trim();
+        if (!body) { showErr(collaborationError, 'Write a message before sending.'); return; }
+        messageSubmit.disabled = true;
+        collaborationStatus.textContent = 'Sending...';
+        var res = await api('/api/service-orders/' + orderId + '/messages', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': 'message-' + Date.now() }, body: JSON.stringify({ body: body }) });
+        messageSubmit.disabled = false;
+        if (!res.ok) { collaborationStatus.textContent = 'Not sent'; showErr(collaborationError, (res.data && res.data.error) || 'Message could not be sent.'); return; }
+        collaborationStatus.textContent = 'Sent';
+        messageBody.value = '';
+        var list = qs('#gigs-messages');
+        var empty = list && list.querySelector('p.text-gray-400');
+        if (empty) empty.remove();
+        if (list) { var item = document.createElement('p'); item.className = 'text-sm text-gray-700 bg-gray-50 rounded-lg px-3 py-2'; item.textContent = 'You: ' + res.data.message.body; list.appendChild(item); }
+      });
+    }
+  }
   }
 })();

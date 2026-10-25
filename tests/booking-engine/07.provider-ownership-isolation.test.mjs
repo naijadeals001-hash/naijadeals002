@@ -85,6 +85,7 @@ async function createOrgListing(memberClient, orgId, opts = {}) {
     countryIso: 'NG',
     basePriceKobo: opts.basePriceKobo ?? 500000,
     bookingMode: opts.bookingMode ?? 'instant',
+    vertical: 'ecosystem.naijastay',
     capacityModel: 'single',
     resources: [{ name: 'Resource 1', capacityUnits: 1 }],
   })

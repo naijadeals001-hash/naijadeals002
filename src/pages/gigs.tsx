@@ -34,6 +34,7 @@ import {
   expireQuoteIfNeeded
 } from '../lib/service-requests'
 import { getOrdersForCustomer, getOwnedOrderForCustomer, getEventsForOrder } from '../lib/service-orders'
+import { listCollaboration } from '../lib/service-collaboration'
 
 const URGENCY_LABEL: Record<string, { label: string; color: string }> = {
   normal: { label: 'Normal', color: 'text-gray-600 bg-gray-100' },
@@ -920,9 +921,10 @@ export async function gigsOrderDetailPage(c: Context<AppEnv>) {
     )
   }
 
-  const [events, provider] = await Promise.all([
+  const [events, provider, collaboration] = await Promise.all([
     getEventsForOrder(db, id) as unknown as Promise<any[]>,
-    db.prepare('SELECT display_name, contact_phone, avatar_url FROM provider_profiles WHERE id = ?').bind(order.provider_profile_id).first<{ display_name: string; contact_phone: string | null; avatar_url: string | null }>()
+    db.prepare('SELECT display_name, contact_phone, avatar_url FROM provider_profiles WHERE id = ?').bind(order.provider_profile_id).first<{ display_name: string; contact_phone: string | null; avatar_url: string | null }>(),
+    listCollaboration(db, id, user.id)
   ])
 
   const canCancel = order.status === 'accepted' || order.status === 'scheduled'
@@ -979,6 +981,21 @@ export async function gigsOrderDetailPage(c: Context<AppEnv>) {
             )}
           </div>
         )}
+
+        <section class="mb-8" aria-labelledby="gigs-collaboration-title">
+          <div class="flex items-center justify-between gap-3 mb-3">
+            <div><h2 id="gigs-collaboration-title" class="text-sm font-bold text-gray-500 uppercase tracking-wide">Work collaboration</h2><p class="text-xs text-gray-400 mt-1">Milestones and messages shared with your assigned provider.</p></div>
+            <span id="gigs-collaboration-status" class="text-xs text-gray-400">Loaded</span>
+          </div>
+          <div id="gigs-collaboration-error" class="hidden bg-red-50 text-red-600 text-sm rounded-lg px-4 py-3 mb-3"></div>
+          <div id="gigs-milestones" class="space-y-2 mb-4">
+            {collaboration.milestones.length === 0 ? <p class="text-sm text-gray-400 bg-white border border-dashed border-gray-200 rounded-xl p-4">No milestones yet. Your provider can add the first work package.</p> : collaboration.milestones.map((milestone: any) => <article class="bg-white border border-gray-200 rounded-xl p-4" data-milestone-id={milestone.id}><div class="flex items-center justify-between gap-2"><h3 class="text-sm font-semibold text-gray-800">{milestone.title}</h3><span class="text-xs font-semibold text-primary bg-primary-light rounded-full px-2 py-1">{milestone.status.replace('_', ' ')}</span></div>{milestone.description && <p class="text-sm text-gray-600 mt-2">{milestone.description}</p>}</article>)}
+          </div>
+          <div id="gigs-messages" class="space-y-2 mb-4">
+            {collaboration.messages.length === 0 ? <p class="text-sm text-gray-400">No messages yet.</p> : collaboration.messages.map((message: any) => <p class="text-sm text-gray-700 bg-gray-50 rounded-lg px-3 py-2"><span class="font-semibold">{message.sender_user_id === user.id ? 'You' : 'Provider'}:</span> {message.body}</p>)}
+          </div>
+          <form id="gigs-message-form" class="flex gap-2"><label class="sr-only" for="gigs-message-body">Message provider</label><input id="gigs-message-body" name="body" required maxlength={2000} placeholder="Send a message to your provider" class="min-w-0 flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm" /><button id="gigs-message-submit" class="shrink-0 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white">Send</button></form>
+        </section>
 
         <section>
           <h2 class="text-sm font-bold text-gray-500 uppercase tracking-wide mb-3">Order history</h2>

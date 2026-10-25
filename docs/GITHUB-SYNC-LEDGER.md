@@ -13,6 +13,16 @@
 - Production merge/release: not performed
 - Untracked `.npm-cache-rea/` preserved and intentionally excluded from commits
 
+## NaijaGigs collaboration and NaijaStay host checkpoint — local, pending push
+
+- Starting checkpoint independently verified at local/remote `0f06ca9ead139f6131a09b43892a4d8f40fe7e34` on `feat/naijadrive-private-ride-foundation`; `/home/user/webapp` and all existing worktrees were preserved. The untracked `.npm-cache-rea/` directory remains untouched and unstaged.
+- GIGS-001 added additive migration `0104_gigs_collaboration.sql`, authorized participant resolution, persistent messages, provider-created milestones, role-aware milestone transitions, audit events, idempotency-key retry safety, and customer order-detail collaboration UI with loading/success/empty/error states. No payment, escrow, ledger, or settlement behavior was added.
+- GIGS focused regression `npm run test:node -- tests/naijagigs-collaboration.test.mjs`: **1/1 passed**. It covers customer/provider access, stranger rejection, malformed input, milestone authorization/transitions, invalid transitions, message persistence, idempotent retries, audit events, and `payment_status=unpaid`.
+- STAY-001 confirmed and regression-covered the existing generic Booking Engine host surface rather than duplicating it: listing ownership, update, resource-backed availability blocking, and invalid availability-rule validation. `npm run test:node -- tests/naijastay-host-operations.test.mjs`: **1/1 passed**. Host workspace UI and authenticated browser acceptance remain incomplete.
+- Registry evidence is recorded by local/deployable migration `0105_gigs_stay_registry_update.sql`; API contracts are documented in `docs/NAIJAGIGS-NAIJASTAY-API-CONTRACTS.md`. Registry states remain `PARTIAL` because browser acceptance, external integration, and production verification are not claimed.
+- The existing Booking Engine authorization fixtures in `07.provider-ownership-isolation.test.mjs` and `09.security-regression.test.mjs` were corrected to declare `vertical: ecosystem.naijastay`, matching the rollout guard's real precondition; after the correction they passed **7/7** and **6/6** respectively. The earlier uncorrected runs failed at the fixture precondition (`409 Listing vertical is not configured`), not at authorization assertions.
+- `npm run build`: **273 modules passed**. `npm run test:ts-baseline`: current diagnostics **0**, new diagnostics **0**. Local migrations `0104` and `0105` applied successfully. Preview `/gigs` returned HTTP 200 after restart. No production deployment, remote D1/R2 mutation, DNS/secrets/payment configuration change, merge or force-push performed.
+
 ## ECC 2.2.3 + Soup skill-routing tooling checkpoint — pushed and follow-up verified
 
 - Starting checkpoint verified at local `950171589a11574a99a52d24d816062b6a929ff6` on `feat/naijadrive-private-ride-foundation`; remote remains `210ad1c5b533d5c4f73e577956c773dda7d64e3c`. `.npm-cache-rea/` remains preserved and unstaged.
