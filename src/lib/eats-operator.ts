@@ -111,6 +111,27 @@ export async function getOwnedEatsOrderForOperator(db: D1Database, providerProfi
   ).bind(orderId, providerProfileId).first()
 }
 
+export async function getEatsFulfillmentForOperator(db: D1Database, providerProfileId: number, orderId: number) {
+  const { results } = await db.prepare(`
+    SELECT eof.*, s.tracking_number, s.status AS shipment_status,
+           pj.id AS pickup_job_id, pj.status AS pickup_job_status,
+           dj.id AS delivery_job_id, dj.status AS delivery_job_status,
+           COUNT(DISTINCT eco.id) AS offer_count,
+           SUM(CASE WHEN eco.status='offered' THEN 1 ELSE 0 END) AS open_offer_count
+    FROM eats_order_fulfillments eof
+    JOIN eats_orders eo ON eo.id = eof.order_id
+    JOIN restaurants r ON r.id = eo.restaurant_id AND r.owner_provider_profile_id = ?
+    JOIN shipments s ON s.id = eof.shipment_id
+    LEFT JOIN pickup_jobs pj ON pj.shipment_id = s.id
+    LEFT JOIN delivery_jobs dj ON dj.shipment_id = s.id
+    LEFT JOIN eats_courier_offers eco ON eco.fulfillment_id = eof.id
+    WHERE eof.order_id = ?
+    GROUP BY eof.id, s.tracking_number, s.status, pj.id, pj.status, dj.id, dj.status
+    ORDER BY eof.id DESC LIMIT 1
+  `).bind(providerProfileId, orderId).all<any>()
+  return results[0] ?? null
+}
+
 export async function getEatsOrderItemsForOperator(db: D1Database, providerProfileId: number, orderId: number) {
   const order = await getOwnedEatsOrderForOperator(db, providerProfileId, orderId)
   if (!order) return null

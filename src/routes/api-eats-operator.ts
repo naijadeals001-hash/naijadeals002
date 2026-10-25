@@ -6,6 +6,7 @@ import {
   EatsOperatorNotFoundError,
   EatsOperatorStateError,
   getEatsOperatorOrderEvents,
+  getEatsFulfillmentForOperator,
   getEatsOrderItemsForOperator,
   getEatsOrdersForOperator,
   getOwnedEatsOrderForOperator,
@@ -67,11 +68,12 @@ eatsOperatorApi.get('/operator/orders/:id', async (c) => {
   if (!orderId) return c.json({ error: 'Invalid order id' }, 400)
   const order = await getOwnedEatsOrderForOperator(c.env.DB, profile.id, orderId)
   if (!order) return c.json({ error: 'Order not found' }, 404)
-  const [items, events] = await Promise.all([
+  const [items, events, fulfillment] = await Promise.all([
     getEatsOrderItemsForOperator(c.env.DB, profile.id, orderId),
     getEatsOperatorOrderEvents(c.env.DB, profile.id, orderId),
+    getEatsFulfillmentForOperator(c.env.DB, profile.id, orderId),
   ])
-  return c.json({ order, items, events })
+  return c.json({ order, items, events, fulfillment })
 })
 
 eatsOperatorApi.post('/operator/orders/:id/transition', async (c) => {
@@ -102,10 +104,16 @@ eatsOperatorApi.post('/operator/orders/:id/dispatch', async (c) => {
   const owned = await getOwnedEatsOrderForOperator(c.env.DB, profile.id, orderId)
   if (!owned) return c.json({ error: 'Order not found' }, 404)
   const body = await c.req.json<{ vehicle_type_id?: number; quoted_price_kobo?: number; speed_tier?: string; pickup?: { line1?: string; city?: string; state?: string; phone?: string }; delivery_instructions?: string }>().catch(() => null)
-  if (!body?.vehicle_type_id || !body.quoted_price_kobo || body.quoted_price_kobo < 1) {
-    return c.json({ error: 'vehicle_type_id and a positive quoted_price_kobo are required; no courier or price is invented' }, 400)
-  }
   try {
+    const existing = await getEatsFulfillmentForOperator(c.env.DB, profile.id, orderId)
+    if (existing) {
+      const offer = await offerNextEatsCourier(c.env.DB, Number(existing.id), profile.user_id, 'merchant')
+      await c.env.DB.prepare(`INSERT INTO eats_fulfillment_events (fulfillment_id,event_type,actor_user_id,actor_role,metadata_json) VALUES (?,?,?,?,?)`).bind(existing.id, 'dispatch_retry_requested', profile.user_id, 'merchant', JSON.stringify({ order_id: orderId })).run()
+      return c.json({ success: true, retry: true, fulfillment: { ...existing, dispatch_outcome: offer ? 'offers_open' : existing.dispatch_outcome }, courier_dispatch: offer ? { status: 'offer_created', expires_at: offer.expiresAt } : { status: existing.dispatch_outcome === 'no_courier_available' ? 'no_courier_available' : 'retry_limit_exhausted' } })
+    }
+    if (!body?.vehicle_type_id || !body.quoted_price_kobo || body.quoted_price_kobo < 1) {
+      return c.json({ error: 'vehicle_type_id and a positive quoted_price_kobo are required; no courier or price is invented' }, 400)
+    }
     const fulfillment = await dispatchEatsOrder(c.env.DB, orderId, {
       vehicleTypeId: body.vehicle_type_id,
       quotedPriceKobo: body.quoted_price_kobo,
@@ -114,7 +122,7 @@ eatsOperatorApi.post('/operator/orders/:id/dispatch', async (c) => {
       deliveryInstructions: body.delivery_instructions,
     })
     const offer = await offerNextEatsCourier(c.env.DB, Number(fulfillment.fulfillmentId), profile.user_id, 'merchant')
-    return c.json({ success: true, fulfillment, courier_dispatch: offer ? { status: 'offer_created', expires_at: offer.expiresAt } : { status: 'no_courier_available' } }, 201)
+    return c.json({ success: true, fulfillment, courier_dispatch: offer ? { status: 'offer_created', expires_at: offer.expiresAt } : { status: 'dispatch_pending' } }, 201)
   } catch (err) {
     if (err instanceof EatsFulfillmentError || err instanceof EatsCourierDispatchError) return c.json({ error: err.message }, 409)
     throw err

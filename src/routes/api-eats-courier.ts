@@ -5,6 +5,7 @@ import { requireActiveDriver } from '../lib/logistics-drivers'
 import { completeJob, markJobArrived, markJobEnRoute } from '../lib/logistics-delivery'
 import { getJobForDriver } from '../lib/logistics-dispatch'
 import { completeEatsDelivery, EatsCourierDispatchError, getEatsCourierOffersForUser, offerNextEatsCourier, respondToEatsCourierOffer, requestEatsDeliveryOtp } from '../lib/eats-courier-dispatch'
+import { enqueueNotificationEvent, processOutboxEvent } from '../lib/notifications'
 
 export const eatsCourierApi = new Hono<AppEnv>()
 eatsCourierApi.use('*', requireAuth)
@@ -81,7 +82,30 @@ eatsCourierApi.post('/courier/delivery-jobs/:id/request-proof', requireActiveDri
   if (!id || !driverId) return c.json({ error: 'Invalid delivery job or courier identity' }, 400)
   try {
     const otp = await requestEatsDeliveryOtp(c.env.DB, id, driverId)
-    return c.json({ otp_sent: true, otp_debug_only: otp })
+    const recipient = await c.env.DB.prepare(`
+      SELECT eo.customer_user_id, eo.order_number
+      FROM delivery_jobs dj
+      JOIN shipments s ON s.id = dj.shipment_id
+      JOIN eats_order_fulfillments eof ON eof.shipment_id = s.id
+      JOIN eats_orders eo ON eo.id = eof.order_id
+      WHERE dj.id = ?
+    `).bind(id).first<{ customer_user_id: number; order_number: string }>()
+    if (!recipient) return c.json({ error: 'Delivery recipient could not be resolved', delivery_status: 'unavailable' }, 503)
+    const queued = await enqueueNotificationEvent(c.env.DB, {
+      idempotencyKey: `eats-delivery-otp:${id}`,
+      eventType: 'eats_delivery_otp_requested',
+      recipientUserId: recipient.customer_user_id,
+      category: 'security',
+      payload: { otp_code: otp, order_number: recipient.order_number, delivery_job_id: id },
+      referenceType: 'delivery_job',
+      referenceId: String(id),
+    })
+    const processed = queued.outboxId ? await processOutboxEvent(c.env.DB, queued.outboxId) : { processed: false }
+    return c.json({
+      otp_sent: processed.processed === true,
+      delivery_status: processed.processed === true ? 'delivered_in_app' : 'queued_for_delivery',
+      notification_outbox_id: queued.outboxId,
+    })
   } catch (err) {
     if (err instanceof EatsCourierDispatchError) return c.json({ error: err.message }, 409)
     throw err

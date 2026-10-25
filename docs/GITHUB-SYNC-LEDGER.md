@@ -5,18 +5,12 @@
 - Repository: `https://github.com/naijadeals001-hash/naijadeals002.git`
 - Local worktree: `/home/user/worktrees/release-naijaeats-phase1`
 - Branch: `feat/naijadrive-private-ride-foundation`
-- Commit: `93b9fb421ed4afaae38e1e8f9aea2d73c08f4ced`
-- Commit message: `feat(shop): make checkout retries idempotent`
+- Starting checkpoint verified: `60732b8710037b9bf347dc1c2fa51ff25bb2a0bb`
+- Current implementation batch: local, uncommitted until final focused verification
 - Remote branch: `origin/feat/naijadrive-private-ride-foundation`
-- Remote SHA verified: `ada2ecec47ce533a11f5a3de27439f764300dc28`
-- Push result: successful
-- Batches delivered: A — NaijaGigs; D/E foundation — NaijaStream and NaijaSend
-- Prior Batch B implementation commit: `0f7d51d7faff74793e43ad192054b995c56d16fc` (remote verified)
-- Prior service-location commit: `cc2dcd3e03bc3436a43ae13d8d820c43439df786` (remote verified)
-- Prior navigation accessibility commit: `eb125827ffff8184cc2a94b4ba517dd3ac89ecb8` (remote verified)
-- Prior Batch A implementation commit: `6c30e08746b4b2cca3e827915b29b221e98e722e` (remote verified)
 - Production deployment: not performed
 - Production merge/release: not performed
+- Untracked `.npm-cache-rea/` preserved and intentionally excluded from commits
 
 ## Control Center 2.0 — authoritative vertical registry batch (local checkpoint)
 
@@ -42,6 +36,18 @@
 - `npm run build` passed with 272 modules; existing EATS/Drive/Carpool regression suite passed 15/15 before the new courier test fixture was added. Preview `/eats` returned HTTP 200 after PM2 recovery; `/control-center/development` correctly returned the existing unauthenticated 302 boundary.
 - New courier fixture tests exercised eligibility, courier-scoped offers, rejection exclusion, conditional acceptance, expiry/reassignment and OTP proof. The D1-backed fixture became unstable/time-limited during repeated runs and is not being reported as passed; authenticated browser acceptance and screenshots remain pending. EATS-001 must remain `PARTIAL`.
 - No production deployment, remote D1 mutation, merge, DNS change or force-push performed. This batch remains local and uncommitted until the D1 fixture timeout is resolved.
+
+## EATS courier isolation and fulfillment hardening — current local checkpoint
+
+- Actual timeout cause confirmed: a shared fixture reused mutable courier/order state and LIKE/GLOB cleanup collided with stale rows; cleanup could hang or obscure the original failure. This was not treated as a generic timeout.
+- `tests/naijaeats-courier-dispatch.test.mjs` now gives every test a unique fixture scope, tracks all inserted IDs, deletes only those IDs, keeps one D1 proxy per suite, and bounds every cleanup phase to 5 seconds with the phase in the error. A third courier was added so expiry/reassignment does not depend on the first accepted courier remaining available.
+- Repeatability evidence: three consecutive complete courier runs passed 4/4 each (12 passed, 0 failed); elapsed wall-clock runs were 15s, 18s and 18s. The focused courier + EATS operator run passed 14/14. No courier acceptance claim is made for browser workflows.
+- Production OTP debug exposure was removed from `/api/eats/courier/delivery-jobs/:id/request-proof`. The code is persisted server-side and delivered through the existing durable notification outbox/in-app channel; the API returns only notification status and outbox id, never the code.
+- Merchant order detail now shows persisted fulfillment, offer, pickup, delivery, proof and intervention states. Dispatch is idempotent for an existing fulfillment, records `dispatch_retry_requested`, and uses the bounded courier retry policy without inventing a courier, ETA, price or GPS.
+- `offerNextEatsCourier` now keeps an empty eligible pool retryable (`offers_open`) and only persists terminal `no_courier_available` after the reassignment limit is exhausted.
+- Build passed after this batch (272 modules). Existing PM2 `naijadeals` was reused; `/eats` returned HTTP 200 after restart. The restart emitted an existing Control Center D1 binding error in historical logs, but the preview recovered and served the route.
+- Full mixed regression remains not green: Drive private-ride recovery had one stale fixture assertion, and the broad `test:node` discovery includes unrelated waitlist/NestJS missing-module failures. Authenticated customer/merchant/courier browser acceptance remains blocked by lack of an authorized session. REA `npx` verification was blocked by root-owned npm cache permissions; existing Bolt Food evidence remains the only claimed reference.
+- No production deployment, remote D1 mutation, merge, DNS change or force-push performed.
 
 ## Control Center development registry batch — current local checkpoint
 

@@ -44,8 +44,11 @@ export async function offerNextEatsCourier(db: D1Database, fulfillmentId: number
   }
   const [candidate] = await listEligibleEatsCouriers(db, fulfillmentId, 1)
   if (!candidate) {
-    await db.prepare(`UPDATE eats_order_fulfillments SET dispatch_outcome='no_courier_available', updated_at=datetime('now') WHERE id=? AND courier_driver_id IS NULL`).bind(fulfillmentId).run()
-    await event(db, fulfillmentId, 'no_courier_available', actorUserId, actorRole, { reason: 'eligible_pool_exhausted' })
+    // A temporarily empty eligible pool is retryable. Persist the terminal
+    // no_courier_available state only after EATS_MAX_REASSIGNMENTS is exhausted
+    // above; operators can then retry without falsely claiming a terminal miss.
+    await db.prepare(`UPDATE eats_order_fulfillments SET dispatch_outcome='offers_open', updated_at=datetime('now') WHERE id=? AND courier_driver_id IS NULL AND dispatch_outcome <> 'delivered'`).bind(fulfillmentId).run()
+    await event(db, fulfillmentId, 'courier_matching_retryable', actorUserId, actorRole, { reason: 'eligible_pool_empty', reassignment_count: reassignmentCount })
     return null
   }
   const expiresAt = new Date(Date.now() + EATS_OFFER_TTL_MINUTES * 60_000).toISOString()
