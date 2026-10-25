@@ -69,15 +69,18 @@ naijaPayApi.post('/utilities/purchase', async (c) => {
   const key = c.req.header('Idempotency-Key')
   const body = await c.req.json<{ product_id?: number; identifier?: string; amount_minor?: number }>().catch(() => null)
   if (!key) return c.json({ error: 'Idempotency-Key header is required' }, 400)
-  if (!body?.product_id || !body.identifier || !Number.isSafeInteger(body.amount_minor) || body.amount_minor <= 0) return c.json({ error: 'product_id, identifier and positive amount_minor are required' }, 400)
+  if (!body) return c.json({ error: 'Invalid request body' }, 400)
+  const amountMinor = body.amount_minor
+  if (amountMinor === undefined) return c.json({ error: 'product_id, identifier and positive amount_minor are required' }, 400)
+  if (!body.product_id || !body.identifier || !Number.isSafeInteger(amountMinor) || amountMinor <= 0) return c.json({ error: 'product_id, identifier and positive amount_minor are required' }, 400)
   const product = await c.env.DB.prepare(`SELECT p.*, p.operational_status AS product_status, pr.provider_key, pr.category, pr.operational_status AS provider_status, pr.environment FROM naijapay_products p JOIN naijapay_providers pr ON pr.id=p.provider_id WHERE p.id=?`).bind(body.product_id).first<any>()
   if (!product || product.operational_status !== 'sandbox' || product.product_status !== 'sandbox') return c.json({ error: 'Only configured sandbox products are available', code: 'PROVIDER_NOT_READY' }, 409)
-  const intent = await createPaymentIntent(c.env.DB, { idempotencyKey: key, userId: user.id, verticalKey: `utility.${product.category}`, countryIso: product.country_iso, currency: product.currency, amountMinor: body.amount_minor, fundingMethod: 'wallet', merchantReference: body.identifier })
+  const intent = await createPaymentIntent(c.env.DB, { idempotencyKey: key, userId: user.id, verticalKey: `utility.${product.category}`, countryIso: product.country_iso, currency: product.currency, amountMinor, fundingMethod: 'wallet', merchantReference: body.identifier })
   if (intent.created) {
     await transitionPaymentIntent(c.env.DB, intent.intent.id, 'created', 'succeeded')
     await recordPaymentEvent(c.env.DB, intent.intent.id, 'sandbox.fulfillment', { identifier: body.identifier, product_id: product.id }, product.provider_key, `SANDBOX-${intent.intent.transactionReference}`)
   }
-  return c.json({ sandbox: true, outcome: 'succeeded', receipt: { transaction_reference: intent.intent.transactionReference, payment_intent_id: intent.intent.id, category: product.category, product: product.product_name, currency: product.currency, amount_minor: body.amount_minor, identifier: body.identifier, provider_reference: `SANDBOX-${intent.intent.transactionReference}` } }, intent.created ? 201 : 200)
+  return c.json({ sandbox: true, outcome: 'succeeded', receipt: { transaction_reference: intent.intent.transactionReference, payment_intent_id: intent.intent.id, category: product.category, product: product.product_name, currency: product.currency, amount_minor: amountMinor, identifier: body.identifier, provider_reference: `SANDBOX-${intent.intent.transactionReference}` } }, intent.created ? 201 : 200)
 })
 
 naijaPayApi.get('/providers/:providerKey', async (c) => {

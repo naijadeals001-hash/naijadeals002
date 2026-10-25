@@ -105,7 +105,7 @@ bookingsApi.get('/bookable-listings/:id/availability', async (c) => {
   const startsAt = c.req.query('starts_at')
   const endsAt = c.req.query('ends_at')
   const capacity = c.req.query('capacity') ? Number(c.req.query('capacity')) : 1
-  if (Number.isNaN(listingId) || Number.isNaN(resourceId) || !isValidBookingWindow(startsAt, endsAt)) {
+  if (Number.isNaN(listingId) || Number.isNaN(resourceId) || !startsAt || !endsAt || !isValidBookingWindow(startsAt, endsAt)) {
     return c.json({ error: 'listing id, resource_id, starts_at and ends_at must define a valid time window' }, 400)
   }
 
@@ -125,7 +125,7 @@ bookingsApi.get('/bookable-listings/:id/capacity', async (c) => {
   const resourceId = Number(c.req.query('resource_id'))
   const startsAt = c.req.query('starts_at')
   const endsAt = c.req.query('ends_at')
-  if (Number.isNaN(listingId) || Number.isNaN(resourceId) || !isValidBookingWindow(startsAt, endsAt)) {
+  if (Number.isNaN(listingId) || Number.isNaN(resourceId) || !startsAt || !endsAt || !isValidBookingWindow(startsAt, endsAt)) {
     return c.json({ error: 'resource_id, starts_at and ends_at must define a valid time window' }, 400)
   }
   const resource = await getOwnedResource(c.env.DB, listingId, resourceId)
@@ -347,7 +347,10 @@ bookingsApi.post('/booking-holds', async (c) => {
   try {
     const listing = await getPublicListingById(c.env.DB, Number(body.listing_id))
     if (!listing) return c.json({ error: 'Listing not found' }, 404)
-    await assertVerticalTransactionAllowed(c.env.DB, listing.vertical, listing.country_iso ?? 'NG')
+    const vertical = listing.vertical
+    if (!vertical) return c.json({ error: 'Listing vertical is not configured' }, 409)
+    const countryIso: string = String(listing.country_iso ?? 'NG')
+    await assertVerticalTransactionAllowed(c.env.DB, vertical, countryIso)
     const hold = await createHold(c.env.DB, {
       listingId: Number(body.listing_id),
       resourceId: Number(body.resource_id),
@@ -394,7 +397,10 @@ bookingsApi.post('/bookings', async (c) => {
   if (!listing) return c.json({ error: 'Listing not found' }, 404)
 
   try {
-    await assertVerticalTransactionAllowed(c.env.DB, listing.vertical, listing.country_iso ?? 'NG')
+    const vertical = listing.vertical
+    if (!vertical) return c.json({ error: 'Listing vertical is not configured' }, 409)
+    const countryIso: string = String(listing.country_iso ?? 'NG')
+    await assertVerticalTransactionAllowed(c.env.DB, vertical, countryIso)
   } catch (err) {
     if (err instanceof RolloutGuardError) return c.json({ error: err.message, code: err.code }, err.status as any)
     throw err
@@ -473,7 +479,10 @@ bookingsApi.post('/bookings/:id/pay', async (c) => {
   const listing = await c.env.DB.prepare('SELECT bl.deposit_percentage, bl.vertical, bl.country_iso FROM bookings b JOIN bookable_listings bl ON bl.id = b.listing_id WHERE b.id = ?').bind(id).first<{ deposit_percentage: number; vertical: string; country_iso: string }>()
   try {
     if (!listing) return c.json({ error: 'Booking not found' }, 404)
-    await assertVerticalTransactionAllowed(c.env.DB, listing.vertical, listing.country_iso ?? 'NG')
+    const vertical = listing.vertical
+    if (!vertical) return c.json({ error: 'Listing vertical is not configured' }, 409)
+    const countryIso: string = String(listing.country_iso ?? 'NG')
+    await assertVerticalTransactionAllowed(c.env.DB, vertical, countryIso)
     const booking = await payForBooking(c.env.DB, id, user.id, listing?.deposit_percentage ?? 100)
     return c.json(booking)
   } catch (err) {

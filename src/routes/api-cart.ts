@@ -119,7 +119,8 @@ cartApi.delete('/items/:cartItemId/saved', async (c) => {
 cartApi.post('/preview', async (c) => {
   const body = await c.req
     .json<{ coupon_code?: string; delivery_method?: DeliveryMethod; buy_now?: { listing_id: number; quantity: number; variant_id?: number | null } }>()
-    .catch(() => ({}))
+    .catch(() => null)
+  if (!body) return c.json({ error: 'Invalid request body' }, 400)
 
   let items: CartItemRow[]
   if (body.buy_now) {

@@ -138,7 +138,7 @@ eatsApi.post('/checkout', async (c) => {
   const body = await c.req
     .json<{
       address_id?: number
-      name?: string; phone?: string; address?: string; city?: string; state?: string
+      name?: string; phone?: string; address?: string; city?: string; state?: string; country?: string
       special_instructions?: string
       payment_method: 'wallet' | 'paystack'
     }>()
@@ -149,9 +149,9 @@ eatsApi.post('/checkout', async (c) => {
   if (body.address_id) {
     const saved = await getAddress(c.env.DB, user.id, body.address_id)
     if (!saved) return c.json({ error: 'Selected address not found' }, 404)
-    shipping = { name: saved.recipient_name, phone: saved.phone, address: saved.line1, city: saved.city, state: saved.state }
+    shipping = { name: saved.recipient_name, phone: saved.phone, address: saved.line1, city: saved.city, state: saved.state, country: saved.country_iso ?? 'NG' }
   } else if (body.name && body.phone && body.address && body.city && body.state) {
-    shipping = { name: body.name, phone: body.phone, address: body.address, city: body.city, state: body.state }
+    shipping = { name: body.name, phone: body.phone, address: body.address, city: body.city, state: body.state, country: body.country ?? 'NG' }
   } else {
     return c.json({ error: 'A delivery address is required — select a saved address or enter delivery details' }, 400)
   }

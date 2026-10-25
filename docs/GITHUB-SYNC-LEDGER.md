@@ -13,6 +13,17 @@
 - Production merge/release: not performed
 - Untracked `.npm-cache-rea/` preserved and intentionally excluded from commits
 
+## TS-001 — TypeScript diagnostic remediation and quality-gate recovery
+
+- Starting checkpoint verified: local and remote `210ad1c5b533d5c4f73e577956c773dda7d64e3c` on `feat/naijadrive-private-ride-foundation`; `.npm-cache-rea/` preserved and unrelated worktrees untouched.
+- REA `6.7.0` and the existing OpenCode MCP registration were verified. REA was not used for this local compiler/type-contract task because no external library behavior or reference workflow was required; local source and compiler evidence were sufficient.
+- Source-backed inventory captured the complete 34-diagnostic starting output: 13 decorator/configuration messages from the root compiler discovering a separately configured NestJS service, plus route, JSX, nullability, and response-contract defects. The service's own TypeScript project passed independently.
+- Fixes preserved strictness and runtime boundaries: root decorator options aligned with the service config; Hono JSX numeric attributes were typed correctly; renderer output was wrapped; booking/rollout parameters were narrowed; malformed cart JSON now returns 400; catalog helpers are consumed as arrays; Control Center route parameters and nullable audit snapshots are explicit; courier context is typed; Eats shipping carries country; NaijaPay amounts are narrowed before payment-intent creation.
+- `npm run test:ts-baseline`: passed with baseline 9, current 0, new 0, resolved 9. `npm run build`: passed, 272 modules. `node --check public/static/control-center-3d.js`: passed.
+- Integrated regression matrix passed **26/26**: CC-003, CC-004, NaijaDrive recovery, EATS courier dispatch, EATS operator, carpool, and Shop checkout idempotency. Three.js browser suite passed all four viewport profiles with reduced motion, forced fallback, context loss, disposal, 0 unexpected console errors, and 0 failed requests.
+- Preview `/` returned HTTP 200 with `Home | NaijaDeals`. Historical PM2 D1 messages were preserved as separate follow-up evidence; logs were not deleted and no new SQL claim was made.
+- Added `docs/TS-001-TYPESCRIPT-DIAGNOSTIC-REMEDIATION-2026-10-25.md` and persisted local Development Registry task `TS-001` as `COMPLETE`. No production deployment or remote D1 mutation was performed.
+
 ## Control Center 2.0 — authoritative vertical registry batch (local checkpoint)
 
 - Audit starting checkpoint: `5af95031604b8ebeab319a5bc11b069bd0ebd08c` on `feat/naijadrive-private-ride-foundation`; remote matched and `.npm-cache-rea/` preserved.

@@ -39,9 +39,9 @@ export interface ControlCenterAuditEntry {
   /** The entity's id as a string (D1-agnostic — some ids are numeric, session ids etc. may not be). Null for actions with no single target entity (e.g. login). */
   entityId: string | null
   /** Safe-to-log snapshot of pre-mutation state. Pass only the specific fields being audited, never a raw row spread. Omit entirely for non-mutating events (e.g. login). */
-  beforeState?: Record<string, unknown>
+  beforeState?: Record<string, unknown> | null
   /** Safe-to-log snapshot of post-mutation state. Same safety rule as beforeState. */
-  afterState?: Record<string, unknown>
+  afterState?: Record<string, unknown> | null
   /** Free-form safe context — reason/comment, permission key used, correlation id, source, etc. Never secrets. */
   context?: Record<string, unknown>
   /** Whether the action succeeded. false for "unauthorized attempt" / "validation failed" audit entries — Phase 1 prompt Section 31 requires these to exist WITHOUT looking like a false success. */

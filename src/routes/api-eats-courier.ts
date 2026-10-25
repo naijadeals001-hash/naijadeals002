@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
-import type { AppEnv } from '../types'
+import type { Context } from 'hono'
+import type { AppEnv, DriverProfileRow } from '../types'
 import { requireAuth } from '../lib/auth'
 import { requireActiveDriver } from '../lib/logistics-drivers'
 import { completeJob, markJobArrived, markJobEnRoute } from '../lib/logistics-delivery'
@@ -15,9 +16,8 @@ function positive(value: string | undefined) {
   return Number.isInteger(n) && n > 0 ? n : null
 }
 
-async function driverIdForUser(c: any) {
-  const profile = c.get('driverProfile' as any)
-  return profile?.id as number | undefined
+async function driverIdForUser(c: Context<AppEnv>) {
+  return c.get('driverProfile')?.id
 }
 
 eatsCourierApi.get('/courier/offers', requireActiveDriver, async (c) => {
@@ -38,7 +38,7 @@ eatsCourierApi.post('/courier/offers/:id/respond', requireActiveDriver, async (c
 })
 
 eatsCourierApi.post('/courier/zones', requireActiveDriver, async (c) => {
-  const profile = c.get('driverProfile' as any) as any
+  const profile = c.get('driverProfile') as DriverProfileRow
   const body = await c.req.json<{ country_iso?: string; zone_key?: string; active?: boolean }>().catch(() => null)
   if (!body?.country_iso || !body.zone_key) return c.json({ error: 'country_iso and zone_key are required' }, 400)
   const zone = await c.env.DB.prepare('SELECT key FROM delivery_zones WHERE country_iso=? AND key=? AND is_active=1').bind(body.country_iso, body.zone_key).first()
@@ -47,7 +47,7 @@ eatsCourierApi.post('/courier/zones', requireActiveDriver, async (c) => {
   return c.json({ ok: true })
 })
 
-async function jobAction(c: any, jobType: 'pickup' | 'delivery', action: 'en_route' | 'arrived' | 'complete') {
+async function jobAction(c: Context<AppEnv>, jobType: 'pickup' | 'delivery', action: 'en_route' | 'arrived' | 'complete') {
   const id = positive(c.req.param('id')); const driverId = await driverIdForUser(c)
   if (!id || !driverId) return c.json({ error: 'Invalid job or courier identity' }, 400)
   const job = await getJobForDriver(c.env.DB, jobType, id, driverId)

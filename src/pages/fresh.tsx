@@ -516,9 +516,9 @@ export async function freshProductPage(c: Context<AppEnv>) {
                 Harvested: {new Date(product.harvested_date).toLocaleDateString('en-NG', { year: 'numeric', month: 'short', day: 'numeric' })}
               </p>
             )}
-            {product.seller_count > 1 && (
+            {(product.seller_count ?? 0) > 1 && (
               <a href="#compare-sellers" class="text-sm text-primary font-semibold hover:underline mt-1 inline-block">
-                {product.seller_count} sellers from {formatMoney(cheapestListing.price_kobo, cheapestListing.currency)}
+                {product.seller_count ?? 0} sellers from {formatMoney(cheapestListing.price_kobo, cheapestListing.currency)}
               </a>
             )}
 

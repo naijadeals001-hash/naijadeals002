@@ -171,6 +171,7 @@ export interface EatsShippingDetails {
   address: string
   city: string
   state: string
+  country?: string
 }
 
 function generateEatsOrderNumber(): string {

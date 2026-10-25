@@ -312,7 +312,9 @@ apiControlCenterRoutes.get('/verticals', requireControlCenterPermission('configu
 
 apiControlCenterRoutes.get('/verticals/:slug', requireControlCenterPermission('configuration.vertical.read'), async (c) => {
   const registry = await getUnifiedEcosystemRegistry(c.env.DB)
-  const slug = c.req.param('slug').replace(/^ecosystem\./, '')
+  const slugParam = c.req.param('slug')
+  if (!slugParam) return c.json({ error: 'Vertical slug is required' }, 400)
+  const slug = slugParam.replace(/^ecosystem\./, '')
   const vertical = registry.find((item) => item.key === slug)
   if (!vertical) return c.json({ error: 'Vertical not found' }, 404)
   const { results: cityOverrides } = await c.env.DB.prepare('SELECT country_iso, city_name, enablement_state, reason, updated_at FROM cc_vertical_city_overrides WHERE vertical_slug=? ORDER BY country_iso, city_name').bind(slug).all()
@@ -417,8 +419,11 @@ apiControlCenterRoutes.get('/eats/operations/orders', requireControlCenterPermis
 // display a disabled surface, but these endpoints are the authoritative write
 // boundary and every mutation records an immutable Central Admin audit event.
 apiControlCenterRoutes.get('/rollout/cities/:countryIso/:cityName', requireControlCenterPermission('configuration.vertical.read'), async (c) => {
-  const countryIso = c.req.param('countryIso').toUpperCase()
-  const cityName = c.req.param('cityName').trim()
+  const countryIsoParam = c.req.param('countryIso')
+  const cityNameParam = c.req.param('cityName')
+  if (!countryIsoParam || !cityNameParam) return c.json({ error: 'Country and city are required' }, 400)
+  const countryIso = countryIsoParam.toUpperCase()
+  const cityName = cityNameParam.trim()
   const { results } = await c.env.DB.prepare(`SELECT vertical_slug, enablement_state, reason, created_by_user_id, updated_at FROM cc_vertical_city_overrides WHERE country_iso = ? AND lower(trim(city_name)) = ? ORDER BY vertical_slug`).bind(countryIso, cityName.toLowerCase()).all()
   return c.json({ country_iso: countryIso, city_name: cityName, overrides: results })
 })
@@ -426,9 +431,12 @@ apiControlCenterRoutes.get('/rollout/cities/:countryIso/:cityName', requireContr
 apiControlCenterRoutes.patch('/rollout/cities/:countryIso/:cityName/:verticalKey', requireControlCenterPermission('configuration.city.manage'), async (c) => {
   const admin = c.get('user')!
   const access = c.get('ccAccess')!
-  const countryIso = c.req.param('countryIso').toUpperCase()
-  const cityName = c.req.param('cityName').trim()
+  const countryIsoParam = c.req.param('countryIso')
+  const cityNameParam = c.req.param('cityName')
   const verticalKey = c.req.param('verticalKey')
+  if (!countryIsoParam || !cityNameParam || !verticalKey) return c.json({ error: 'Country, city and vertical are required' }, 400)
+  const countryIso = countryIsoParam.toUpperCase()
+  const cityName = cityNameParam.trim()
   const body = await c.req.json<{ enablement_state?: 'enabled' | 'disabled' | 'restricted'; reason?: string }>().catch(() => null)
   if (!cityName || !body?.enablement_state || !['enabled','disabled','restricted'].includes(body.enablement_state)) return c.json({ error: 'city name and a valid enablement_state are required' }, 400)
   if (!canManageCountry(access, countryIso)) return c.json({ error: 'Country scope does not permit this change' }, 403)
@@ -452,7 +460,9 @@ apiControlCenterRoutes.get('/rollout/verticals', requireControlCenterPermission(
 })
 
 apiControlCenterRoutes.get('/rollout/countries/:iso', requireControlCenterPermission('configuration.countries.read'), async (c) => {
-  const rollout = await getCountryRollout(c.env.DB, c.req.param('iso'))
+  const iso = c.req.param('iso')
+  if (!iso) return c.json({ error: 'Country ISO code is required' }, 400)
+  const rollout = await getCountryRollout(c.env.DB, iso)
   if (!rollout.country) return c.json({ error: 'Country not found' }, 404)
   return c.json(rollout)
 })
@@ -1706,7 +1716,9 @@ apiControlCenterRoutes.patch('/development/tasks/:key', requireControlCenterPerm
   if (!body) return c.json({ error: 'JSON body required' }, 400)
   if (body.status && !DEVELOPMENT_STATUSES.includes(body.status)) return c.json({ error: 'Invalid development status' }, 400)
   const admin = c.get('user')!
-  const task = await updateDevelopmentTask(c.env.DB, c.req.param('key'), body, admin.id)
+  const taskKey = c.req.param('key')
+  if (!taskKey) return c.json({ error: 'Development task key is required' }, 400)
+  const task = await updateDevelopmentTask(c.env.DB, taskKey, body, admin.id)
   if (!task) return c.json({ error: 'Development task not found' }, 404)
   await recordControlCenterAction(c.env.DB, { actorUserId: admin.id, actorName: admin.name, action: 'development_task_updated', entityType: 'cc_development_task', entityId: String(task.id), afterState: { task_key: task.task_key, status: task.status, checkpoint: task.checkpoint, commit_sha: task.commit_sha, remote_sha: task.remote_sha }, context: { fields: Object.keys(body) }, success: true, ipAddress: getClientIp(c.req.header('cf-connecting-ip') ?? null) })
   return c.json({ success: true, task })

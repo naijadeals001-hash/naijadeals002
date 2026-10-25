@@ -311,8 +311,8 @@ catalogApi.get('/products/:slug', async (c) => {
   if (!product) return c.json({ error: 'Product not found' }, 404)
 
   const listings = await getListingsForProduct(c.env.DB, product.id)
-  const primaryListing: any = (listings.results as any[]).find((l) => l.is_primary === 1) ?? listings.results[0]
-  const variants = primaryListing ? await getVariantsForListing(c.env.DB, primaryListing.id) : { results: [] }
+  const primaryListing: any = listings.find((l) => l.is_primary === 1) ?? listings[0]
+  const variants = primaryListing ? await getVariantsForListing(c.env.DB, primaryListing.id) : []
 
   const reviews = await c.env.DB.prepare(
     'SELECT * FROM reviews WHERE product_id = ? ORDER BY created_at DESC LIMIT 20'
@@ -341,8 +341,8 @@ catalogApi.get('/products/:slug', async (c) => {
 
   return c.json({
     product,
-    listings: listings.results,
-    variants: variants.results,
+    listings,
+    variants,
     reviews: reviews.results,
     questions: questions.results,
     related: related.results,
