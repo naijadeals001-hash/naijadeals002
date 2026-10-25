@@ -82,6 +82,20 @@ test('CC-003 Development Registry seeding is idempotent and has no value-count m
   assert.ok(Number(count.count) >= 12)
 })
 
+test('D1-001 malformed registry rows are repaired without binding errors', async () => {
+  const db = await getTestDb()
+  await db.prepare(`
+    INSERT OR REPLACE INTO cc_development_tasks
+      (task_key, workstream, vertical, feature, title, preview_routes_json, screenshot_refs_json)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).bind('CC-001', 'fixture', 'fixture', 'fixture', 'fixture', 'not-json', 'not-json').run()
+
+  await assert.doesNotReject(() => ensureDevelopmentBacklog(db))
+  const repaired = await db.prepare('SELECT preview_routes_json, screenshot_refs_json FROM cc_development_tasks WHERE task_key=?').bind('CC-001').first()
+  assert.match(repaired.preview_routes_json, /^\[/)
+  assert.match(repaired.screenshot_refs_json, /^\[/)
+})
+
 test.after(async () => {
   const db = await getTestDb()
   if (createdUsers.length) {

@@ -23,6 +23,16 @@
 - Documentation added: `docs/DEVELOPMENT-TOOLS-ECC-223.md`, `docs/DEVELOPMENT-TOOLS-SOUP.md`, and `docs/DEVELOPMENT-TOOLS-ECC-SOUP-CHECKPOINT.md`. The Control Center registry was not changed because this is an isolated tooling evaluation with blocked/partial acceptance; no fake completion event was created.
 - No production deployment, remote D1 mutation, DNS/secrets change, merge, force-push or application behavior change performed. This documentation batch is local and pending commit/push decision.
 
+## D1-001 — Historical SQL binding investigation — local, pending push
+
+- Starting checkpoint: local/remote `c660259d8c46ab7671342d0d4f5fdffdd718123a` on `feat/naijadrive-private-ride-foundation`; `.npm-cache-rea/` remains preserved and untracked. The existing PM2 `naijadeals` preview was reused without a duplicate server.
+- Historical errors were separated from fresh evidence. Existing PM2 logs contain older `18 values for 17 columns` and `Wrong number of parameter bindings for SQL query` entries. The fresh observation window exercised `/`, `/drive`, `/eats`, the protected Development Registry page/API, and the protected Drive offers API: responses were 200/302/401 as expected and PM2 error-log lines remained unchanged at 665.
+- The `18 values for 17 columns` source path was traced through repository history to the earlier Development Registry seed/alignment defect addressed in CC-003 commit `5978b966a070e985705bc2ed425df4998b36288e`. A fresh malformed-row local D1 fixture now exercises the repair path without a binding error. The adjacent empty route/screenshot JSON normalization defect was fixed and regression-covered; this does not claim every historical occurrence is eliminated.
+- The generic parameter-binding error was not independently reproduced. Source/migration/bind searches and bounded local tests did not prove a current caller. Booking Engine coverage was blocked before the suspected SQL path by the rollout precondition `Listing vertical is not configured` (HTTP 409), so no speculative SQL change was made.
+- Added `tests/control-center-cc003.test.mjs` coverage for malformed registry repair; updated `src/lib/control-center-development.ts` with the smallest empty-JSON normalization fix and a truthful `D1-001` Development Registry row marked `PARTIAL`.
+- `npm run test:node -- tests/control-center-cc003.test.mjs`: 4/4 passed. `npm run test:ts-baseline`: current diagnostics 0. `npm run build`: 272 modules passed. The focused booking-engine exercise was not green (2/15 passed; 13 fixture/precondition failures) and is recorded as blocked/partial, not a D1 success.
+- Added `docs/D1-001-HISTORICAL-BINDING-ERROR-INVESTIGATION-2026-10-25.md`. No production deployment, production D1 mutation, DNS/secrets change, merge or force-push performed. This D1 batch is local and pending commit/push.
+
 ## TS-001 — TypeScript diagnostic remediation and quality-gate recovery
 
 - Starting checkpoint verified: local and remote `210ad1c5b533d5c4f73e577956c773dda7d64e3c` on `feat/naijadrive-private-ride-foundation`; `.npm-cache-rea/` preserved and unrelated worktrees untouched.
