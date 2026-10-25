@@ -6,8 +6,8 @@
 - Local worktree: `/home/user/worktrees/release-naijaeats-phase1`
 - Branch: `feat/naijadrive-private-ride-foundation`
 - Starting checkpoint verified: `60732b8710037b9bf347dc1c2fa51ff25bb2a0bb`
-- Current implementation batch: `5978b966a070e985705bc2ed425df4998b36288e` (`feat(control-center): implement CC-003 RBAC and city controls`)
-- Verified remote SHA: `5978b966a070e985705bc2ed425df4998b36288e`
+- Current implementation batch: `af341e02e6ea1ae8c09d2064ea5aedb8d9bf532f` (`feat(control-center): add CC-004 operations acceptance`)
+- Verified remote SHA: `af341e02e6ea1ae8c09d2064ea5aedb8d9bf532f`
 - Remote branch: `origin/feat/naijadrive-private-ride-foundation`
 - Production deployment: not performed
 - Production merge/release: not performed
