@@ -296,6 +296,27 @@ apiControlCenterRoutes.get('/ecosystem', async (c) => {
   })
 })
 
+// Authoritative vertical registry read surface. This is deliberately separate
+// from the older ecosystem preview metadata: each status dimension is persisted
+// or derived from a canonical engine and remains independently visible.
+apiControlCenterRoutes.get('/verticals', requireControlCenterPermission('configuration.countries.read'), async (c) => {
+  const query = (c.req.query('q') ?? '').trim().toLowerCase()
+  const requestedLimit = Number(c.req.query('limit') ?? 50)
+  const requestedOffset = Number(c.req.query('offset') ?? 0)
+  const limit = Number.isInteger(requestedLimit) ? Math.min(Math.max(requestedLimit, 1), 100) : 50
+  const offset = Number.isInteger(requestedOffset) ? Math.max(requestedOffset, 0) : 0
+  const registry = await getUnifiedEcosystemRegistry(c.env.DB)
+  const filtered = query ? registry.filter((vertical) => [vertical.key, vertical.name, vertical.productArea, vertical.operationsState, vertical.implementationState].some((value) => value.toLowerCase().includes(query))) : registry
+  return c.json({ query: query || null, total: filtered.length, limit, offset, verticals: filtered.slice(offset, offset + limit), generated_at: new Date().toISOString() })
+})
+
+apiControlCenterRoutes.get('/verticals/:slug', requireControlCenterPermission('configuration.countries.read'), async (c) => {
+  const registry = await getUnifiedEcosystemRegistry(c.env.DB)
+  const vertical = registry.find((item) => item.key === c.req.param('slug'))
+  if (!vertical) return c.json({ error: 'Vertical not found' }, 404)
+  return c.json({ vertical, generated_at: new Date().toISOString() })
+})
+
 // ---------- Pan-African rollout controls ----------
 // Country and vertical activation are server-side controls. The preview may
 // display a disabled surface, but these endpoints are the authoritative write

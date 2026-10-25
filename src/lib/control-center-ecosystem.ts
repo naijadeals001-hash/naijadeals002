@@ -18,6 +18,23 @@ export type UnifiedEcosystemVertical = {
   capabilityState: EcosystemCapabilityState
   adminSurface: string
   evidence: string
+  registryStatus: string
+  enablementState: 'enabled' | 'disabled' | 'restricted'
+  implementationState: 'planned' | 'in_progress' | 'partial' | 'implementation_complete'
+  automatedAcceptanceState: 'not_run' | 'failed' | 'partial' | 'passed'
+  browserAcceptanceState: 'not_run' | 'failed' | 'partial' | 'passed'
+  outstandingAcceptance: string[]
+  operationsState: 'healthy' | 'degraded' | 'unavailable' | 'not_yet_operational'
+  integrationState: 'configured' | 'unconfigured' | 'unhealthy' | 'unverified'
+  releaseState: 'not_released' | 'preview_verified' | 'production_verified'
+  ownerRole: string
+  dependencies: string[]
+  blockers: string
+  healthDetail: string
+  latestRemoteSha: string | null
+  lastStatusUpdateAt: string | null
+  liveCountryCount: number
+  totalCountryCount: number
 }
 
 const REQUIRED_VERTICALS: UnifiedEcosystemVertical[] = [
@@ -43,6 +60,7 @@ const REQUIRED_VERTICALS: UnifiedEcosystemVertical[] = [
   ['aura', 'Aura AI', 'Platform Intelligence', '/aura', 'incomplete', 'Aura AI operations shell', 'Control Center shell exists; no model-backed command execution is connected.'],
 ].map(([key, name, productArea, route, capabilityState, adminSurface, evidence]) => ({
   key, name, productArea, route, capabilityState: capabilityState as EcosystemCapabilityState, adminSurface, evidence,
+  registryStatus: 'not_loaded', enablementState: 'disabled', implementationState: 'planned', automatedAcceptanceState: 'not_run', browserAcceptanceState: 'not_run', outstandingAcceptance: [], operationsState: 'unavailable', integrationState: 'unconfigured', releaseState: 'not_released', ownerRole: 'platform_admin', dependencies: [], blockers: '', healthDetail: '', latestRemoteSha: null, lastStatusUpdateAt: null, liveCountryCount: 0, totalCountryCount: 0,
 }))
 
 export const UNIFIED_ECOSYSTEM_VERTICALS = Object.freeze(REQUIRED_VERTICALS)
@@ -55,19 +73,57 @@ export const ECOSYSTEM_STATE_LABELS: Record<EcosystemCapabilityState, string> = 
 }
 
 export async function getUnifiedEcosystemRegistry(db: D1Database): Promise<UnifiedEcosystemVertical[]> {
-  const configured = await db
-    .prepare('SELECT slug, name, status, route FROM ecosystem_verticals ORDER BY display_order, id')
-    .all<{ slug: string; name: string; status: string; route: string }>()
-    .catch(() => ({ results: [] as { slug: string; name: string; status: string; route: string }[] }))
+  const [configured, readiness, capabilities, countries, development] = await Promise.all([
+    db.prepare('SELECT slug, name, status, route FROM ecosystem_verticals ORDER BY display_order, id').all<{ slug: string; name: string; status: string; route: string }>(),
+    db.prepare('SELECT * FROM cc_vertical_readiness').all<any>(),
+    db.prepare("SELECT key, status, enabled FROM cc_capabilities WHERE key LIKE 'ecosystem.%'").all<{ key: string; status: string; enabled: number }>(),
+    db.prepare("SELECT COUNT(*) AS total, SUM(CASE WHEN status IN ('LIVE','BETA') THEN 1 ELSE 0 END) AS live FROM cc_countries").first<{ total: number; live: number }>(),
+    db.prepare('SELECT vertical, implementation_state, automated_test_state, browser_acceptance, remote_sha FROM cc_development_tasks').all<any>(),
+  ])
 
   const configuredByKey = new Map((configured.results ?? []).map((row) => [row.slug, row]))
+  const readinessByKey = new Map((readiness.results ?? []).map((row) => [row.vertical_slug, row]))
+  const capabilityByKey = new Map((capabilities.results ?? []).map((row) => [row.key.replace(/^ecosystem\./, ''), row]))
+  const developmentByKey = new Map<string, any>()
+  for (const task of development.results ?? []) {
+    const key = String(task.vertical).toLowerCase().replace(/^naija/, '').replace('fulfillment', 'eats').replace('private-rides', 'drive')
+    if (!developmentByKey.has(key) || task.implementation_state === 'IMPLEMENTED') developmentByKey.set(key, task)
+  }
+
   return UNIFIED_ECOSYSTEM_VERTICALS.map((vertical) => {
     const row = configuredByKey.get(vertical.key)
-    if (!row) return vertical
+    const ready = readinessByKey.get(vertical.key) ?? {}
+    const capability = capabilityByKey.get(vertical.key)
+    const task = developmentByKey.get(vertical.key)
+    const implementationState = ready.implementation_state ?? (task?.implementation_state === 'IMPLEMENTED' ? 'implementation_complete' : vertical.implementationState)
+    const enabled = capability ? capability.enabled === 1 : ready.enablement_state === 'enabled'
+    const enablementState = ready.enablement_state === 'restricted' ? 'restricted' : enabled ? 'enabled' : 'disabled'
+    const acceptanceAuto = ready.automated_acceptance_state ?? (task?.automated_test_state === 'PASSED' ? 'passed' : vertical.automatedAcceptanceState)
+    const acceptanceBrowser = ready.browser_acceptance_state ?? vertical.browserAcceptanceState
+    const blockers = ready.blockers || vertical.blockers
     return {
       ...vertical,
-      route: row.route || vertical.route,
-      evidence: `${vertical.evidence} Registry record: ${row.status}.`,
+      name: row?.name || vertical.name,
+      route: row?.route || vertical.route,
+      registryStatus: row?.status || vertical.registryStatus,
+      enablementState,
+      implementationState,
+      automatedAcceptanceState: acceptanceAuto,
+      browserAcceptanceState: acceptanceBrowser,
+      outstandingAcceptance: JSON.parse(ready.outstanding_acceptance_json || '[]'),
+      operationsState: ready.operations_state || vertical.operationsState,
+      integrationState: ready.integration_state || vertical.integrationState,
+      releaseState: ready.release_state || (task?.preview_state === 'PREVIEW_VERIFIED' ? 'preview_verified' : vertical.releaseState),
+      ownerRole: ready.owner_role || vertical.ownerRole,
+      dependencies: JSON.parse(ready.dependencies_json || '[]'),
+      blockers,
+      healthDetail: ready.health_detail || '',
+      latestRemoteSha: ready.latest_remote_sha || task?.remote_sha || null,
+      lastStatusUpdateAt: ready.last_status_update_at || null,
+      liveCountryCount: Number(countries?.live ?? 0),
+      totalCountryCount: Number(countries?.total ?? 0),
+      capabilityState: enablementState === 'disabled' ? 'unavailable' : implementationState === 'implementation_complete' && acceptanceAuto === 'passed' ? 'operational' : 'partial',
+      evidence: `${vertical.evidence} Registry: ${row?.status ?? 'not configured'}; implementation ${implementationState}; operations ${ready.operations_state ?? 'not yet operational'}; release ${ready.release_state ?? 'not released'}.`,
     }
   })
 }

@@ -12,6 +12,8 @@
 
 > **Full ecosystem execution update (2026-10-25)**: The coordinated execution pass preserved the existing worktree and preview, added persisted registry metadata and honest public preview routes for the remaining reserved verticals, and added protected Pan-African country/vertical rollout controls backed by the existing Control Center capability and audit engines. The local preview and focused tests passed; this does **not** mean every vertical is operational. The authoritative status is in [`docs/FULL-ECOSYSTEM-BASELINE-2026-10-25.md`](docs/FULL-ECOSYSTEM-BASELINE-2026-10-25.md) and [`docs/REA-ECOSYSTEM-COVERAGE-MATRIX.md`](docs/REA-ECOSYSTEM-COVERAGE-MATRIX.md). No production deployment was performed.
 
+> **Control Center 2.0 update (2026-10-25)**: The Control Center now has a persisted vertical-readiness model separating enablement, implementation, automated/browser acceptance, operations, integrations and release. The registry aggregates rollout capabilities, country coverage and Development Registry evidence; NaijaDrive's implemented preview lifecycle is no longer collapsed into a generic unavailable status. Authenticated admin browser acceptance remains pending where no authorized session is available.
+
 > **Ecosystem architecture**: NaijaDeals is being built as a Super Ecosystem — one platform,
 > a set of shared engines (identity, marketplace, payments, bookings, logistics, trust,
 > search, etc.), and many vertical product layers (NaijaShop, NaijaEats, NaijaPay, and 19

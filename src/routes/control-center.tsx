@@ -318,7 +318,7 @@ controlCenterRoutes.get('/', async (c) => {
   const ccAccess = c.get('ccAccess')!
   const db = c.env.DB
 
-  const [kpis, bookingOps, pending, countries, health, feed, hourly, distributions] = await Promise.all([
+  const [kpis, bookingOps, pending, countries, health, feed, hourly, distributions, registry] = await Promise.all([
     getCommandCenterKpis(db),
     getBookingOperationsSnapshot(db),
     getPendingActionsSnapshot(db),
@@ -327,12 +327,15 @@ controlCenterRoutes.get('/', async (c) => {
     getLiveActivityFeed(db, 7),
     getHourlyOrderVolume(db, 24),
     getOperationalDistributions(db),
+    getUnifiedEcosystemRegistry(db),
   ])
 
   const liveCountries = countries.filter((cc) => cc.status === 'LIVE')
   const plannedCountries = countries.filter((cc) => cc.status !== 'LIVE')
   const totalPending = pending.pendingModeration + pending.pendingVendorVerification + pending.pendingProviderVerification + pending.openDisputes + pending.pendingRefunds
-  const healthOk = health.filter((h) => h.status === 'operational' || h.status === 'not_monitored').length
+  const healthOk = health.filter((h) => h.status === 'operational').length
+  const healthAttention = health.filter((h) => h.status === 'attention' || h.status === 'degraded').length
+  const healthLabel = healthAttention > 0 ? `${healthAttention} system${healthAttention === 1 ? '' : 's'} need attention` : healthOk === health.length ? 'All monitored systems operational' : 'Monitored systems operational; some checks unavailable'
 
   return c.render(
     <ControlCenterLayout title="Command Center" user={user} ccAccess={ccAccess} active="overview">
@@ -387,9 +390,9 @@ controlCenterRoutes.get('/', async (c) => {
                   <span class="text-[9px] text-gray-500 font-semibold tracking-wide">SYSTEMS</span>
                 </div>
               </div>
-              <div class="flex items-center gap-1.5 text-ccaccent text-xs font-bold">
-                <span class="relative flex h-2 w-2"><span class="cc-pulse absolute inline-flex h-full w-full rounded-full bg-ccaccent opacity-75"></span><span class="relative inline-flex rounded-full h-2 w-2 bg-ccaccent"></span></span>
-                All Systems Operational
+              <div class={`flex items-center gap-1.5 text-xs font-bold ${healthAttention > 0 ? 'text-amber-400' : 'text-ccaccent'}`}>
+                <span class={`relative flex h-2 w-2 rounded-full ${healthAttention > 0 ? 'bg-amber-400' : 'bg-ccaccent'}`}></span>
+                {healthLabel}
               </div>
               <a href="/control-center/system-health" class="text-[11px] text-gray-500 hover:text-ccaccent mt-2 font-semibold">View health matrix →</a>
             </div>
@@ -397,19 +400,16 @@ controlCenterRoutes.get('/', async (c) => {
             {/* ---- Ecosystem vertical strip ---- */}
             <div class="lg:col-span-3 bg-gradient-to-br from-ccpanel to-ccpanel2 border border-ccborder rounded-2xl p-4 flex flex-col">
               <div class="flex items-center justify-between mb-2.5">
-                <span class="text-xs font-bold text-white flex items-center gap-1.5"><span class="material-symbols-outlined text-ccaccent text-base">hub</span>9 Verticals</span>
-                <span class="text-[10px] text-gray-500">1 live</span>
+                <span class="text-xs font-bold text-white flex items-center gap-1.5"><span class="material-symbols-outlined text-ccaccent text-base">hub</span>{registry.length} Verticals</span>
+                <span class="text-[10px] text-gray-500">{registry.filter((v) => v.enablementState === 'enabled').length} enabled</span>
               </div>
               <div class="grid grid-cols-3 gap-1.5 flex-1">
-                {[
-                  { l: 'Shop', live: true }, { l: 'Fresh', live: false }, { l: 'Eats', live: false },
-                  { l: 'Gigs', live: false }, { l: 'Stay', live: false }, { l: 'Drive', live: false },
-                  { l: 'Send', live: false }, { l: 'Stream', live: false }, { l: 'Aura', live: false },
-                ].map((v) => (
-                  <div class={`rounded-lg border px-1.5 py-2.5 text-center ${v.live ? 'bg-ccaccent/10 border-ccaccent/30' : 'bg-black/20 border-ccborder'}`}>
-                    <div class={`text-[10px] font-bold ${v.live ? 'text-ccaccent' : 'text-gray-500'}`}>{v.l}</div>
+                {registry.slice(0, 9).map((v) => {
+                  const enabled = v.enablementState === 'enabled'
+                  return <div title={`${v.name}: ${v.implementationState}, ${v.operationsState}`} class={`rounded-lg border px-1.5 py-2.5 text-center ${enabled ? 'bg-ccaccent/10 border-ccaccent/30' : 'bg-black/20 border-ccborder'}`}>
+                    <div class={`text-[10px] font-bold ${enabled ? 'text-ccaccent' : 'text-gray-500'}`}>{v.name.replace('Naija', '')}</div>
                   </div>
-                ))}
+                })}
               </div>
               <a href="/control-center/ecosystem" class="text-[11px] text-ccaccent hover:underline mt-2.5 text-center font-semibold">View ecosystem →</a>
             </div>
@@ -943,6 +943,15 @@ controlCenterRoutes.get('/ecosystem', async (c) => {
               <div class="text-base font-extrabold text-white">{v.name}</div>
               <div class="text-[10px] uppercase tracking-wide text-gray-600 mt-1">{v.productArea}</div>
               <div class="text-xs text-gray-500 mt-3 leading-snug">{v.adminSurface}</div>
+              <div class="grid grid-cols-2 gap-x-3 gap-y-2 mt-4 text-[10px]">
+                <div><div class="text-gray-600 uppercase">Enablement</div><div class="text-gray-300">{v.enablementState}</div></div>
+                <div><div class="text-gray-600 uppercase">Implementation</div><div class="text-gray-300">{v.implementationState.replaceAll('_', ' ')}</div></div>
+                <div><div class="text-gray-600 uppercase">Operations</div><div class="text-gray-300">{v.operationsState.replaceAll('_', ' ')}</div></div>
+                <div><div class="text-gray-600 uppercase">Release</div><div class="text-gray-300">{v.releaseState.replaceAll('_', ' ')}</div></div>
+                <div><div class="text-gray-600 uppercase">Acceptance</div><div class="text-gray-300">Tests {v.automatedAcceptanceState} · Browser {v.browserAcceptanceState}</div></div>
+                <div><div class="text-gray-600 uppercase">Coverage</div><div class="text-gray-300">{v.liveCountryCount}/{v.totalCountryCount} countries</div></div>
+              </div>
+              {v.blockers && <div class="text-[10px] text-amber-400/80 mt-3 leading-snug">Blocker: {v.blockers}</div>}
               <div class="text-[10px] text-gray-600 mt-3 leading-snug">{v.evidence}</div>
             </a>
           ))}
@@ -957,7 +966,7 @@ controlCenterRoutes.get('/ecosystem', async (c) => {
             </div>
           ))}
         </div>
-        <div class="border-t border-ccborder mt-10 pt-5 text-xs text-gray-500">Operational actions remain permission-gated in the existing Customers, Vendors, Providers, Finance, Verification, Moderation, and Communications surfaces. This page is a read-only portfolio registry.</div>
+        <div class="border-t border-ccborder mt-10 pt-5 text-xs text-gray-500">Status dimensions are independent: enablement does not imply implementation, acceptance, operational health, integration readiness or release. Operational actions remain permission-gated in the existing Customers, Vendors, Providers, Finance, Verification, Moderation, and Communications surfaces.</div>
         {/*
           {verticals.map((v) => (
             <div class="relative rounded-2xl overflow-hidden border border-ccborder bg-ccpanel group hover:border-ccaccent/30 transition-colors">

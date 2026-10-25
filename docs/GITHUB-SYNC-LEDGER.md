@@ -18,6 +18,19 @@
 - Production deployment: not performed
 - Production merge/release: not performed
 
+## Control Center 2.0 — authoritative vertical registry batch (local checkpoint)
+
+- Audit starting checkpoint: `5af95031604b8ebeab319a5bc11b069bd0ebd08c` on `feat/naijadrive-private-ride-foundation`; remote matched and `.npm-cache-rea/` preserved.
+- REA preflight: `rea-agents@6.7.0` verified using the preserved project cache; MCP remains enabled at `/home/user/.config/opencode/opencode.jsonc`. A fresh public browser capture of `/control-center/ecosystem` reached the legitimate Control Center login boundary; no authenticated admin session was available and no access control was bypassed.
+- Highest-impact defect identified: the Control Center had three conflicting truths — static `UNIFIED_ECOSYSTEM_VERTICALS`, capability/country rollout records, and Development Registry states. The overview also hardcoded “9 Verticals / 1 live” and presented NaijaDrive rides/deliveries as unavailable despite persisted ride and logistics tables.
+- Recorded `CC-002` in the persisted Development Registry before implementation.
+- Added `migrations/0101_control_center_vertical_readiness.sql` with persisted enablement, implementation, automated/browser acceptance, operations, integration, release, ownership, dependencies, blockers and city-override metadata. It does not activate any production capability.
+- Reworked `src/lib/control-center-ecosystem.ts` to aggregate the canonical ecosystem registry, rollout capability state, country coverage and Development Registry evidence. NaijaDrive now shows implementation/readiness separately from enablement, operations and release.
+- Reworked the Command Center overview to remove hardcoded vertical counts and the blanket “All Systems Operational” claim. Ride requests and delivery jobs now use real persisted counts; health messaging distinguishes attention, operational and unavailable checks.
+- Added protected read APIs: `GET /api/control-center/verticals` with search/pagination and `GET /api/control-center/verticals/:slug`; both use existing Control Center RBAC.
+- Build passed: 272 modules. New authoritative registry tests passed 2/2; combined registry + NaijaEats operator tests passed 12/12. Preview smoke checks: `/drive` HTTP 200, unauthenticated ecosystem page HTTP 302, protected vertical API HTTP 401. Authenticated Control Center browser acceptance remains pending.
+- Outstanding: city override enforcement is metadata-only in this batch; no production deployment or production configuration mutation; authenticated admin screenshots and full cross-role API acceptance remain pending.
+
 ## EATS courier dispatch increment — local checkpoint (not yet pushed)
 
 - Verified starting checkpoint `74bbaabfd96742695ad945bd42f49571174031eb` on `feat/naijadrive-private-ride-foundation`; `.npm-cache-rea/` preserved.
