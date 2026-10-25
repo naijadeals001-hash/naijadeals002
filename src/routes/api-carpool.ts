@@ -49,6 +49,12 @@ carpoolApi.post('/trips/:id/requests', requireAuth, async (c) => {
   }
 })
 
+carpoolApi.get('/driver/requests', requireAuth, async (c) => {
+  const user = c.get('user')!
+  const { results } = await c.env.DB.prepare(`SELECT cr.id, cr.status, cr.seats_requested, cr.created_at, ct.id AS trip_id, ct.origin, ct.destination, ct.departure_at, u.name AS passenger_name FROM carpool_requests cr JOIN carpool_trips ct ON ct.id = cr.trip_id JOIN users u ON u.id = cr.passenger_user_id WHERE ct.driver_user_id = ? ORDER BY cr.created_at DESC LIMIT 100`).bind(user.id).all()
+  return c.json({ requests: results })
+})
+
 carpoolApi.post('/requests/:id/decision', requireAuth, async (c) => {
   const user = c.get('user')!
   const requestId = Number(c.req.param('id'))

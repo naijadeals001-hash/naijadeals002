@@ -115,7 +115,7 @@ export async function drivePage(c: Context<AppEnv>) {
           </div>
         </section>
 
-        <section id="carpool" class="scroll-mt-28 border-y border-slate-200 bg-white px-4 py-12 md:px-8 md:py-16"><div class="mx-auto max-w-[80rem]"><div class="grid gap-8 lg:grid-cols-[.9fr_1.1fr] lg:items-start"><div><StatusChip tone="green">Shared rides</StatusChip><h2 class="mt-4 text-3xl font-bold text-slate-900">Publish or find a carpool trip</h2><p class="mt-3 leading-7 text-slate-600">Carpooling has separate trip and seat inventory rules. It is not a private cab request and does not invent driver supply.</p><form id="carpool-search-form" class="mt-5 grid gap-3 sm:grid-cols-2"><input name="origin" placeholder="From" class="rounded-xl border border-slate-300 px-3 py-3 text-sm" /><input name="destination" placeholder="To" class="rounded-xl border border-slate-300 px-3 py-3 text-sm" /><button class="sm:col-span-2 min-h-[44px] rounded-xl bg-[#0b7a3b] px-4 text-sm font-bold text-white">Find available trips</button></form><p id="carpool-status" class="mt-3 hidden rounded-xl p-3 text-sm" role="status"></p></div><div id="carpool-results" class="grid gap-3"><div class="rounded-2xl border border-dashed border-slate-300 p-5 text-sm text-slate-500">Search for a route to see only persisted, published trips with available seats.</div></div></div></div></section>
+        <section id="carpool" class="scroll-mt-28 border-y border-slate-200 bg-white px-4 py-12 md:px-8 md:py-16"><div class="mx-auto max-w-[80rem]"><div class="grid gap-8 lg:grid-cols-[.9fr_1.1fr] lg:items-start"><div><StatusChip tone="green">Shared rides</StatusChip><h2 class="mt-4 text-3xl font-bold text-slate-900">Publish or find a carpool trip</h2><p class="mt-3 leading-7 text-slate-600">Carpooling has separate trip and seat inventory rules. It is not a private cab request and does not invent driver supply.</p><form id="carpool-search-form" class="mt-5 grid gap-3 sm:grid-cols-2"><input name="origin" placeholder="From" class="rounded-xl border border-slate-300 px-3 py-3 text-sm" /><input name="destination" placeholder="To" class="rounded-xl border border-slate-300 px-3 py-3 text-sm" /><button class="sm:col-span-2 min-h-[44px] rounded-xl bg-[#0b7a3b] px-4 text-sm font-bold text-white">Find available trips</button></form><p id="carpool-status" class="mt-3 hidden rounded-xl p-3 text-sm" role="status"></p><div class="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4"><div class="flex items-center justify-between gap-3"><div><p class="text-xs font-bold uppercase tracking-[.18em] text-[#0b7a3b]">Driver decisions</p><h3 class="mt-1 font-bold text-slate-900">Passenger requests for your trips</h3></div><button id="load-carpool-requests" type="button" class="rounded-lg border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700">Refresh</button></div><p id="carpool-requests-status" class="mt-3 text-sm text-slate-500" role="status">Sign in as a trip driver to view requests.</p><div id="carpool-requests-list" class="mt-3 grid gap-2"></div></div></div><div id="carpool-results" class="grid gap-3"><div class="rounded-2xl border border-dashed border-slate-300 p-5 text-sm text-slate-500">Search for a route to see only persisted, published trips with available seats.</div></div></div></div></section>
 
         <section id="share" class="scroll-mt-28 border-y border-slate-200 bg-white px-4 py-12 md:px-8 md:py-16"><div class="mx-auto max-w-[80rem]"><div class="grid gap-8 lg:grid-cols-[.9fr_1.1fr] lg:items-center"><div><StatusChip tone="slate">Product entry point</StatusChip><h2 class="mt-4 text-3xl font-bold text-slate-900">Cab sharing, designed separately</h2><p class="mt-3 leading-7 text-slate-600">Shared rides are a distinct product: pooled routing, seat inventory, match quality and safety rules must be implemented before this becomes an operational booking flow.</p><a href="#share-status" class="mt-6 inline-flex min-h-[44px] items-center gap-2 rounded-xl border border-slate-300 px-5 text-sm font-bold text-slate-700 hover:bg-slate-50">View readiness <span class="material-symbols-outlined text-base">arrow_downward</span></a></div><div id="share-status" class="grid gap-3 sm:grid-cols-2"><div class="rounded-2xl border border-slate-200 p-5"><span class="material-symbols-outlined text-3xl text-slate-400">group</span><h3 class="mt-3 font-bold">Shared matching</h3><p class="mt-2 text-sm text-slate-500">Not implemented. No passenger match or seat inventory is represented.</p></div><div class="rounded-2xl border border-slate-200 p-5"><span class="material-symbols-outlined text-3xl text-slate-400">alt_route</span><h3 class="mt-3 font-bold">Pooled routing</h3><p class="mt-2 text-sm text-slate-500">Not implemented. Routing provider integration is still required.</p></div></div></div></div></section>
 
@@ -137,10 +137,60 @@ export async function drivePage(c: Context<AppEnv>) {
             const response = await fetch('/api/carpool/trips?' + query.toString());
             const body = await response.json();
             if (!response.ok) throw new Error(body.error || 'Carpool search unavailable.');
-            carpoolResults.innerHTML = body.trips.length ? body.trips.map((trip) => '<article class="rounded-2xl border border-slate-200 bg-white p-4"><div class="flex items-center justify-between gap-3"><strong>' + trip.origin + ' → ' + trip.destination + '</strong><span class="text-xs font-bold text-[#0b7a3b]">' + trip.seats_available + ' seat(s)</span></div><p class="mt-2 text-sm text-slate-500">Departure ' + new Date(trip.departure_at).toLocaleString() + '</p><p class="mt-1 text-sm font-semibold">Contribution: ₦' + (Number(trip.contribution_kobo) / 100).toLocaleString('en-NG') + '</p></article>').join('') : '<div class="rounded-2xl border border-dashed border-slate-300 p-5 text-sm text-slate-500">No published trips with seats matched this route.</div>';
+            carpoolResults.innerHTML = body.trips.length ? body.trips.map((trip) => '<article class="rounded-2xl border border-slate-200 bg-white p-4"><div class="flex items-center justify-between gap-3"><strong>' + trip.origin + ' → ' + trip.destination + '</strong><span class="text-xs font-bold text-[#0b7a3b]">' + trip.seats_available + ' seat(s)</span></div><p class="mt-2 text-sm text-slate-500">Departure ' + new Date(trip.departure_at).toLocaleString() + '</p><p class="mt-1 text-sm font-semibold">Contribution: ₦' + (Number(trip.contribution_kobo) / 100).toLocaleString('en-NG') + '</p><button type="button" data-carpool-request-id="' + trip.id + '" class="mt-3 rounded-lg bg-[#0b7a3b] px-3 py-2 text-xs font-bold text-white">Request 1 seat</button></article>').join('') : '<div class="rounded-2xl border border-dashed border-slate-300 p-5 text-sm text-slate-500">No published trips with seats matched this route.</div>';
+            carpoolResults.querySelectorAll('[data-carpool-request-id]').forEach((button) => button.addEventListener('click', async () => {
+              const tripId = button.getAttribute('data-carpool-request-id');
+              if (!tripId || button.disabled) return;
+              button.disabled = true;
+              button.setAttribute('aria-busy', 'true');
+              button.textContent = 'Requesting…';
+              try {
+                const requestResponse = await fetch('/api/carpool/trips/' + tripId + '/requests', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ seats: 1 }) });
+                const result = await requestResponse.json().catch(() => ({}));
+                if (!requestResponse.ok) throw new Error(result.error || 'Carpool request unavailable.');
+                button.textContent = 'Request submitted';
+                if (carpoolStatus) carpoolStatus.textContent = 'Seat request #' + result.id + ' is awaiting the trip driver.';
+              } catch (error) {
+                button.disabled = false;
+                button.removeAttribute('aria-busy');
+                button.textContent = 'Request 1 seat';
+                if (carpoolStatus) carpoolStatus.textContent = error instanceof Error ? error.message : 'Carpool request unavailable.';
+              }
+            }));
             if (carpoolStatus) { carpoolStatus.className = 'mt-3 rounded-xl bg-green-100 p-3 text-sm text-green-900'; carpoolStatus.textContent = body.trips.length + ' persisted trip(s) found. No driver supply was fabricated.'; }
           } catch (error) { if (carpoolStatus) { carpoolStatus.className = 'mt-3 rounded-xl bg-amber-100 p-3 text-sm text-amber-900'; carpoolStatus.textContent = error instanceof Error ? error.message : 'Carpool search unavailable.'; } }
         });
+        const carpoolRequestsList = document.getElementById('carpool-requests-list');
+        const carpoolRequestsStatus = document.getElementById('carpool-requests-status');
+        async function loadCarpoolRequests() {
+          if (!carpoolRequestsList || !carpoolRequestsStatus) return;
+          carpoolRequestsStatus.textContent = 'Loading persisted passenger requests…';
+          try {
+            const response = await fetch('/api/carpool/driver/requests');
+            const body = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(body.error || 'Driver sign-in required.');
+            carpoolRequestsList.innerHTML = body.requests.length ? body.requests.map((request) => '<article class="rounded-xl border border-slate-200 bg-white p-3"><div class="flex items-center justify-between gap-2"><strong class="text-sm">' + request.origin + ' → ' + request.destination + '</strong><span class="text-xs font-bold uppercase text-slate-500">' + request.status + '</span></div><p class="mt-1 text-xs text-slate-500">' + request.seats_requested + ' seat(s) · ' + request.passenger_name + ' · ' + new Date(request.departure_at).toLocaleString('en-NG') + '</p>' + (request.status === 'requested' ? '<div class="mt-3 flex gap-2"><button data-carpool-decision="accepted" data-carpool-request-id="' + request.id + '" class="rounded-lg bg-[#0b7a3b] px-3 py-2 text-xs font-bold text-white">Accept</button><button data-carpool-decision="rejected" data-carpool-request-id="' + request.id + '" class="rounded-lg border border-slate-300 px-3 py-2 text-xs font-bold">Reject</button></div>' : '') + '</article>').join('') : '<p class="text-sm text-slate-500">No persisted passenger requests.</p>';
+            carpoolRequestsStatus.textContent = body.requests.length + ' persisted request(s). Decisions are enforced by the trip owner on the server.';
+            carpoolRequestsList.querySelectorAll('[data-carpool-decision]').forEach((button) => button.addEventListener('click', async () => {
+              const requestId = button.getAttribute('data-carpool-request-id');
+              const decision = button.getAttribute('data-carpool-decision');
+              if (!requestId || !decision || button.disabled) return;
+              button.disabled = true;
+              button.setAttribute('aria-busy', 'true');
+              try {
+                const decisionResponse = await fetch('/api/carpool/requests/' + requestId + '/decision', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ status: decision }) });
+                const result = await decisionResponse.json().catch(() => ({}));
+                if (!decisionResponse.ok) throw new Error(result.error || 'Carpool decision unavailable.');
+                await loadCarpoolRequests();
+              } catch (error) {
+                carpoolRequestsStatus.textContent = error instanceof Error ? error.message : 'Carpool decision unavailable.';
+                button.disabled = false;
+                button.removeAttribute('aria-busy');
+              }
+            }));
+          } catch (error) { carpoolRequestsStatus.textContent = error instanceof Error ? error.message : 'Driver sign-in required.'; }
+        }
+        document.getElementById('load-carpool-requests')?.addEventListener('click', loadCarpoolRequests);
         const offersList = document.getElementById('driver-offers-list');
         const offersStatus = document.getElementById('driver-offers-status');
         async function loadDriverOffers() {
