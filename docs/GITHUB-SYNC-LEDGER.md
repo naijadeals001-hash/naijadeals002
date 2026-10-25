@@ -137,6 +137,17 @@
 - Tests: marketplace templates 3 passed; Drive preview/routing 9 passed; carpool inventory 1 passed; Eats operator 10 passed; Gigs lifecycle 1 passed after route isolation fix; Stay availability 1 passed. Combined initial run exposed the freight auth regression; isolated rerun passed after the fix.
 - This sprint checkpoint advances all five mandatory areas through fresh REA evidence and browser verification. Shop, Gigs and Stay existing persisted journeys remain active; the principal new implementation in this batch is NaijaDrive carpooling. Full cab dispatch, grocery checkout/fulfillment, freight carrier award/dispatch, Gigs milestones/messaging and Stay host management remain incomplete.
 
+## DRIVE-001 — persistent private ride lifecycle increment
+
+- Fresh REA evidence: `ev_671bd4a782953eff4ae132ab24dfbd4afa7daeccc66d01aca32f7a4814484926` from `capture_browser_scenario` against `https://bolt.eu/en/`, provider `rea-playwright-browser-scenario@1`. Public entry was captured; private booking/dispatch/payment internals were not inferred or bypassed. Full record: `docs/REFERENCE-EVIDENCE-2026-10-25-DRIVE.md`.
+- Added `migrations/0098_naijadrive_private_rides.sql` with persistent ride requests, driver offers and append-only ride events.
+- Added `src/lib/drive-rides.ts` with explicit ride state transitions and CAS-style status updates.
+- Extended `/api/drive`: authenticated customer ride creation, idempotent retry, customer read/cancel, driver availability, driver offers, atomic offer acceptance and authorized driver transitions through completion.
+- Updated `/drive` to submit real persisted pilot-mode ride requests with server-stored simulated quotes and honest refresh/GPS/payment limitations. Carpool remains separate and preserved.
+- Tests: `tests/naijadrive-private-ride.test.mjs`, carpool and Shop idempotency regression — 5 passed, 0 failed.
+- Build: `npm run build` passed (270 modules). Existing PM2 preview reused; `/drive` returned HTTP 200 after restart.
+- Registry: `DRIVE-001` is `PARTIAL`, not complete. Authenticated browser customer/driver acceptance, live routing/GPS, external payment and richer dispatch expiry/reassignment remain blocked or incomplete.
+
 ## Known gates not green
 
 - Whole-repository `npm run test:node` has existing unrelated production waitlist and NestJS TypeScript source-loader failures.

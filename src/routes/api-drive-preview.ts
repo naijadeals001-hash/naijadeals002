@@ -2,6 +2,8 @@ import { Hono } from 'hono'
 import type { AppEnv } from '../types'
 import { estimateDrivePreviewFare, type FareEstimateMode } from '../lib/drive-preview-fare'
 import { validateDrivePreviewBooking } from '../lib/drive-preview'
+import { requireAuth } from '../lib/auth'
+import { getRideForCustomer, transitionRide } from '../lib/drive-rides'
 
 export const drivePreviewApi = new Hono<AppEnv>()
 
@@ -32,4 +34,75 @@ drivePreviewApi.post('/preview-booking', async (c) => {
     error: 'No booking was created. NaijaDrive dispatch is not connected to this Worker preview yet; the NestJS runtime still requires a persistent authorized host.',
     code: 'NAIJADRIVE_RUNTIME_UNAVAILABLE',
   }, 503)
+})
+
+// Persistent private-ride lifecycle. This D1-backed path is intentionally refresh/poll based;
+// it never fabricates GPS, driver supply or provider payment success.
+drivePreviewApi.post('/rides', requireAuth, async (c) => {
+  const user = c.get('user')!
+  const body = await c.req.json<{ pickupZone?: string; dropoffZone?: string; vehicleCategory?: string; idempotencyKey?: string }>().catch(() => null)
+  const validation = validateDrivePreviewBooking(body)
+  if (!validation.ok) return c.json({ error: validation.error, code: validation.code }, validation.status)
+  const idem = body?.idempotencyKey?.trim() || null
+  if (idem && (idem.length < 8 || idem.length > 128)) return c.json({ error: 'idempotencyKey must be between 8 and 128 characters' }, 400)
+  if (idem) {
+    const existing = await c.env.DB.prepare('SELECT id,status,fare_kobo,currency,fare_mode FROM drive_ride_requests WHERE customer_user_id = ? AND idempotency_key = ?').bind(user.id, idem).first<any>()
+    if (existing) return c.json({ ride: existing, replayed: true })
+  }
+  const fare = await estimateDrivePreviewFare(body, 'simulated', c.env)
+  if (!fare.ok) return c.json({ error: fare.error, code: fare.code }, fare.status)
+  const inserted = await c.env.DB.prepare(`INSERT INTO drive_ride_requests (customer_user_id,pickup_zone,dropoff_zone,vehicle_category,status,fare_kobo,currency,fare_mode,idempotency_key) VALUES (?,?,?,?,?,?,?,?,?)`).bind(user.id, body!.pickupZone, body!.dropoffZone, body!.vehicleCategory || 'car', 'searching', fare.fareKobo, 'NGN', 'simulated', idem).run()
+  const id = Number(inserted.meta.last_row_id)
+  await c.env.DB.prepare('INSERT INTO drive_ride_events (ride_request_id,from_status,to_status,actor_user_id,actor_role,note) VALUES (?,?,?,?,?,?)').bind(id, null, 'searching', user.id, 'customer', 'Ride requested with simulated quote').run()
+  return c.json({ ride: await getRideForCustomer(c.env.DB, id, user.id), quote: fare }, 201)
+})
+
+drivePreviewApi.get('/rides/:id', requireAuth, async (c) => {
+  const ride = await getRideForCustomer(c.env.DB, Number(c.req.param('id')), c.get('user')!.id)
+  if (!ride) return c.json({ error: 'Ride not found' }, 404)
+  const events = await c.env.DB.prepare('SELECT * FROM drive_ride_events WHERE ride_request_id = ? ORDER BY id').bind(ride.id).all()
+  return c.json({ ride, events: events.results })
+})
+
+drivePreviewApi.post('/rides/:id/cancel', requireAuth, async (c) => {
+  try { await transitionRide(c.env.DB, Number(c.req.param('id')), ['requested','searching','offered','accepted','driver_arriving','driver_arrived'], 'cancelled', c.get('user')!.id, 'customer', 'Cancelled by customer'); return c.json({ success: true, status: 'cancelled' }) } catch (err) { return c.json({ error: err instanceof Error ? err.message : 'Unable to cancel ride' }, 409) }
+})
+
+drivePreviewApi.post('/driver/availability', requireAuth, async (c) => {
+  const user = c.get('user')!
+  const body = await c.req.json<{ online?: boolean }>().catch(() => null)
+  if (typeof body?.online !== 'boolean') return c.json({ error: 'online must be boolean' }, 400)
+  const driver = await c.env.DB.prepare("SELECT id,status,is_online FROM driver_profiles WHERE user_id = ?").bind(user.id).first<any>()
+  if (!driver || driver.status !== 'active') return c.json({ error: 'Active driver profile required' }, 403)
+  await c.env.DB.prepare("UPDATE driver_profiles SET is_online = ?, operational_status = ?, last_online_at = CASE WHEN ? = 1 THEN datetime('now') ELSE last_online_at END, updated_at = datetime('now') WHERE id = ?").bind(body.online ? 1 : 0, body.online ? 'available' : 'offline', body.online ? 1 : 0, driver.id).run()
+  return c.json({ success: true, online: body.online })
+})
+
+drivePreviewApi.post('/rides/:id/offers', requireAuth, async (c) => {
+  const user = c.get('user')!
+  const driver = await c.env.DB.prepare("SELECT id,status,is_online FROM driver_profiles WHERE user_id = ?").bind(user.id).first<any>()
+  if (!driver || driver.status !== 'active' || !driver.is_online) return c.json({ error: 'Active online driver profile required' }, 403)
+  const ride = await c.env.DB.prepare("SELECT id,status,vehicle_category FROM drive_ride_requests WHERE id = ?").bind(Number(c.req.param('id'))).first<any>()
+  if (!ride || !['searching','offered'].includes(ride.status)) return c.json({ error: 'Ride is not accepting driver offers' }, 409)
+  try { const offer = await c.env.DB.prepare("INSERT INTO drive_ride_offers (ride_request_id,driver_profile_id) VALUES (?,?)").bind(ride.id, driver.id).run(); await c.env.DB.prepare("UPDATE drive_ride_requests SET status='offered',updated_at=datetime('now') WHERE id=? AND status='searching'").bind(ride.id).run(); return c.json({ id: Number(offer.meta.last_row_id), status: 'offered' }, 201) } catch { return c.json({ error: 'Driver already offered on this ride' }, 409) }
+})
+
+drivePreviewApi.post('/driver/offers/:id/accept', requireAuth, async (c) => {
+  const user = c.get('user')!
+  const offer = await c.env.DB.prepare('SELECT o.id,o.ride_request_id,o.driver_profile_id,r.status FROM drive_ride_offers o JOIN drive_ride_requests r ON r.id=o.ride_request_id JOIN driver_profiles d ON d.id=o.driver_profile_id WHERE o.id=? AND d.user_id=? AND o.status=\'offered\'').bind(Number(c.req.param('id')), user.id).first<any>()
+  if (!offer) return c.json({ error: 'Offer not found or already handled' }, 404)
+  const result = await c.env.DB.prepare("UPDATE drive_ride_requests SET status='accepted',accepted_driver_profile_id=?,accepted_at=datetime('now'),updated_at=datetime('now') WHERE id=? AND status IN ('searching','offered')").bind(offer.driver_profile_id, offer.ride_request_id).run()
+  if (!result.meta.rows_written) return c.json({ error: 'Ride was accepted by another driver' }, 409)
+  await c.env.DB.batch([c.env.DB.prepare("UPDATE drive_ride_offers SET status='accepted',responded_at=datetime('now') WHERE id=? AND status='offered'").bind(offer.id), c.env.DB.prepare("UPDATE drive_ride_offers SET status='expired',responded_at=datetime('now') WHERE ride_request_id=? AND id<>? AND status='offered'").bind(offer.ride_request_id, offer.id), c.env.DB.prepare("INSERT INTO drive_ride_events (ride_request_id,from_status,to_status,actor_user_id,actor_role,note) VALUES (?,?,?,?,?,?)").bind(offer.ride_request_id, offer.status, 'accepted', user.id, 'driver', 'Driver accepted offer')])
+  return c.json({ success: true, ride_id: offer.ride_request_id, status: 'accepted' })
+})
+
+drivePreviewApi.post('/driver/rides/:id/transition', requireAuth, async (c) => {
+  const user = c.get('user')!
+  const body = await c.req.json<{ status?: string }>().catch(() => null)
+  const allowed = ['driver_arriving','driver_arrived','in_progress','completed']
+  if (!body?.status || !allowed.includes(body.status)) return c.json({ error: 'Invalid driver transition' }, 400)
+  const owner = await c.env.DB.prepare('SELECT r.status FROM drive_ride_requests r JOIN driver_profiles d ON d.id=r.accepted_driver_profile_id WHERE r.id=? AND d.user_id=?').bind(Number(c.req.param('id')), user.id).first<any>()
+  if (!owner) return c.json({ error: 'Ride is not assigned to this driver' }, 403)
+  try { await transitionRide(c.env.DB, Number(c.req.param('id')), [owner.status], body.status as any, user.id, 'driver', 'Driver lifecycle transition'); return c.json({ success: true, status: body.status }) } catch (err) { return c.json({ error: err instanceof Error ? err.message : 'Invalid transition' }, 409) }
 })

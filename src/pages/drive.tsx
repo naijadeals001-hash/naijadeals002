@@ -101,7 +101,7 @@ export async function drivePage(c: Context<AppEnv>) {
                 <label class="block"><span class="text-sm font-bold text-slate-700">Pickup note <span class="font-normal text-slate-400">(optional)</span></span><input name="pickupNote" maxLength={160} placeholder="Landmark or meeting point" class="mt-2 w-full rounded-xl border border-slate-300 px-3 py-3 text-sm" /></label>
                 <div><p class="text-sm font-bold text-slate-700">Vehicle category</p><div class="mt-2 grid gap-3 sm:grid-cols-2">{VEHICLES.map((vehicle) => <label class={`relative flex items-start gap-3 rounded-xl border p-3 ${vehicle.estimateEnabled ? 'cursor-pointer border-[#0b7a3b] bg-[#f4fbf5]' : 'cursor-not-allowed border-slate-200 bg-slate-50 opacity-75'}`}><input type="radio" name="vehicleCategory" value={vehicle.key} checked={vehicle.key === 'car'} disabled={!vehicle.estimateEnabled} class="mt-1" /><span><span class="block text-sm font-bold text-slate-800">{vehicle.label}</span><span class="block text-xs text-slate-500">{vehicle.capacity}</span><span class="mt-1 block text-[11px] font-semibold text-amber-700">{vehicle.status}</span></span></label>)}</div></div>
                 <div class="rounded-xl border border-[#b8dfc1] bg-[#f4fbf5] p-4"><div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><p class="text-sm font-bold text-[#062d17]">Fare estimate modes</p><p class="mt-1 text-xs leading-5 text-slate-600">Routed estimates require a configured provider. Demo estimates use clearly labelled fixtures and never become live quotes.</p></div><div class="flex flex-wrap gap-2"><button id="routed-fare-button" type="button" class="min-h-[44px] rounded-lg bg-[#0b7a3b] px-4 text-sm font-bold text-white hover:bg-[#062d17]">Get routed fare</button><button id="simulated-fare-button" type="button" class="min-h-[44px] rounded-lg border border-[#0b7a3b] px-4 text-sm font-bold text-[#0b7a3b] hover:bg-white">Use demo estimate</button></div></div><p id="drive-fare-status" class="hidden mt-3 rounded-xl p-3 text-sm" role="status"></p></div>
-                <div class="flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 sm:flex-row sm:items-center sm:justify-between"><div><p class="text-sm font-bold text-amber-900">Booking is not live yet</p><p class="mt-1 text-xs leading-5 text-amber-800">All vehicle categories remain disabled until regulatory and operational approval is recorded in the runtime database.</p></div><button type="submit" class="min-h-[44px] rounded-lg bg-slate-300 px-4 text-sm font-bold text-slate-600">Request ride</button></div>
+                <div class="flex flex-col gap-3 rounded-xl border border-[#b8dfc1] bg-[#f4fbf5] p-4 sm:flex-row sm:items-center sm:justify-between"><div><p class="text-sm font-bold text-[#062d17]">Private ride request is available in pilot mode</p><p class="mt-1 text-xs leading-5 text-slate-600">Your request is persisted with a simulated quote. Driver supply, GPS and external payment remain explicitly separate runtime states.</p></div><button type="submit" class="min-h-[44px] rounded-lg bg-[#0b7a3b] px-4 text-sm font-bold text-white">Request ride</button></div>
                 <p id="drive-booking-status" class="hidden rounded-xl p-3 text-sm" role="status"></p>
               </form>
             </div>
@@ -178,10 +178,14 @@ export async function drivePage(c: Context<AppEnv>) {
           bookingStatus.className = 'rounded-xl bg-slate-100 p-3 text-sm text-slate-700';
           bookingStatus.textContent = 'Checking NaijaDrive booking services…';
           try {
-            const response = await fetch('/api/drive/preview-booking', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(Object.fromEntries(data.entries())) });
+            const payload = Object.fromEntries(data.entries());
+            payload.idempotencyKey = 'drive-' + Date.now() + '-' + Math.random().toString(36).slice(2);
+            const response = await fetch('/api/drive/rides', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) });
             const body = await response.json();
-            bookingStatus.className = response.ok ? 'rounded-xl bg-green-100 p-3 text-sm text-green-800' : 'rounded-xl bg-amber-100 p-3 text-sm text-amber-900';
-            bookingStatus.textContent = body.error || 'Booking request accepted.';
+            if (response.status === 401) throw new Error('Sign in to persist a private ride request.');
+            if (!response.ok) throw new Error(body.error || 'Ride request unavailable.');
+            bookingStatus.className = 'rounded-xl bg-green-100 p-3 text-sm text-green-800';
+            bookingStatus.textContent = 'Ride request #' + body.ride.id + ' persisted as ' + body.ride.status + '. Quote: ₦' + (Number(body.ride.fare_kobo) / 100).toLocaleString('en-NG') + '. Driver matching is refresh-based; no GPS or driver supply is fabricated.';
           } catch {
             bookingStatus.className = 'rounded-xl bg-red-100 p-3 text-sm text-red-800';
             bookingStatus.textContent = 'The preview could not reach the booking service. No booking was created.';
