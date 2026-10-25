@@ -15,6 +15,21 @@ Branch: `feat/naijadrive-private-ride-foundation`
 
 No production D1 database, deployment, DNS, secrets, or remote runtime was changed.
 
+## Current re-verification
+
+```text
+Repository/remote: 301622c3638be2810e97ad882698e7344733b740
+Preview: rebuilt and restarted locally through PM2; /, /drive and /eats returned 200
+Rollout: NG=LIVE; ecosystem.naijastay=ACTIVE; enabled; no disabling country override
+Booking matrix: 20 passed, 0 failed
+CC-003: 4 passed, 0 failed
+TypeScript: current diagnostics 0; new diagnostics 0
+Build: 272 modules
+PM2 error lines: 665 before, 665 after booking run, delta 0
+```
+
+The preview was initially absent during the audit and was restarted from the existing `ecosystem.config.cjs`; no duplicate server was kept.
+
 ## Observation window
 
 The existing PM2 process was reused:

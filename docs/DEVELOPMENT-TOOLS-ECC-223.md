@@ -19,7 +19,8 @@ Branch: `feat/naijadrive-private-ride-foundation`
 | AgentShield scan | PARTIAL | Scan executed, but returned Grade D and exit `2` |
 | Production integration | NOT RUN | ECC remains tooling-only; NaijaDeals runtime and deployment were not changed |
 | Latest deterministic rerun | PASS | Doctor exited 0; the combined shell returned non-zero because the subsequent plan invocation did not complete cleanly; prior saved deterministic plan evidence remains valid |
-| Provider-backed recovery | BLOCKED | No usable OpenCode model output was obtained; direct provider reachability does not prove OpenCode dispatch |
+| Provider-backed recovery | BLOCKED | Fresh isolated `opencode run --pure -m opencode/beam-free` timed out at 45s with exit `124`, zero output, and logs stopped at `init` before provider/request markers |
+| Current deterministic doctor | PARTIAL | ECC doctor exited `1` in the current environment while the deterministic plan exited `0`; the prior successful plan/consult evidence remains preserved |
 
 ## Installation and configuration evidence
 
@@ -63,7 +64,21 @@ Observed result on the rerun:
 - Output JSON size: `0` bytes.
 - No inspectable planner response was produced.
 
-This was reproduced safely. The available evidence indicates initialization/configuration succeeded, but provider/model execution did not complete. Credentials and provider secrets were not printed. Because planning did not complete, implementation, automated testing, code review, and security review were **BLOCKED**, not simulated. The deterministic ECC plan and consultation tools are useful local validation, but they are not equivalent to an LLM-backed workflow.
+This was reproduced safely with a disposable config at `/tmp/opencode-minimal.OANUPk`. The command loaded the disposable config but still loaded the global OpenCode layers, reached `init`, then produced no provider/request/fetch/error markers before the 45-second timeout. Credentials and provider secrets were not printed. Because planning did not complete, implementation, automated testing, code review, and security review remain **BLOCKED**, not simulated. The deterministic plan remains useful local validation, but is not equivalent to an LLM-backed workflow.
+
+## Current provider diagnosis
+
+```text
+OpenCode: 1.18.18
+Command: OPENCODE_CONFIG=/tmp/opencode-minimal.OANUPk/opencode.json timeout 45 opencode run --pure -m opencode/beam-free 'Reply with exactly: OK' --print-logs --log-level DEBUG
+Exit: 124
+Elapsed: 45 seconds
+Output: empty
+Last log stage: init
+Provider/request markers: 0
+```
+
+This isolates the current blocker to OpenCode initialization or session dispatch before a provider request. It is not evidence of a model response, and ECC LLM-backed acceptance remains BLOCKED.
 
 ## AgentShield investigation
 

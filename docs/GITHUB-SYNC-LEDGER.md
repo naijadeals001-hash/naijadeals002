@@ -52,6 +52,17 @@
 - Global tooling helper was rerun for NaijaDeals and `/home/user/webapp`: ECC `PASS`, REA `PARTIAL`, Soup `PARTIAL`; the dirty webapp was untouched. Preview smoke checks `/`, `/drive`, `/eats` returned HTTP 200.
 - This follow-up is not yet committed or pushed; production deployment and production data mutation remain not performed.
 
+## Master execution re-verification — local, pending push
+
+- Live audit confirmed repository and remote at `301622c3638be2810e97ad882698e7344733b740` on `feat/naijadrive-private-ride-foundation`; only `.npm-cache-rea/` is untracked. `/home/user/webapp` was not modified. PM2 preview was initially absent, then rebuilt and restarted in place; no duplicate server remains.
+- Preview smoke: `/`, `/drive`, `/eats` returned HTTP 200. Local rollout state remained `NG=LIVE`, `ecosystem.naijastay=ACTIVE`, enabled, with no disabling override.
+- Booking matrix rerun: **20/20 passed**; PM2 error log was `665` lines before and after, delta `0`. CC-003 regression: **4/4**. TypeScript gate: current diagnostics `0`, new diagnostics `0`. Build: `272` modules.
+- ECC: official checkout remains 2.2.3; current deterministic plan exited `0`, current doctor exited `1`; isolated OpenCode 1.18.18 `--pure` probe timed out at 45 seconds with exit `124`, empty output, and no provider/request markers after `init`. LLM-backed ECC remains `BLOCKED`.
+- AgentShield: restored from official `affaan-m/agentshield` tag `v1.6.0`, commit `b0891303bdcd6037376a94263d45cfd2ff3dfb98`, scanned without auto-fix. Fresh result: Grade D `(58/100)`, 133 files, 134 findings, 32 critical, 49 medium, 46 low, 7 info. Integrity criticals remain npm `sha512` false positives. Environment-inheritance and template MCP timeout risks remain actionable.
+- Soup: rebuilt from official `v0.2.1`, commit `ba8d72e3a4f3283d0c06a9df6154e6b3af7892e6`; official suite **141/141**. Fresh 12-task benchmark: 9/12 perfect recall, mean recall `0.90`, irrelevant ratio `0.216`, deterministic 12/12, context accounting reduction `42.95%`. Required-skill omissions remain; no integration performed.
+- Updated the shared verification helper outside the repository to discover the approved current Soup environment `/tmp/soup-bench-venv/bin/python` while retaining `SOUP_PYTHON` override and the prior POC path. Reverification now reports Soup `PARTIAL` for both accessible projects instead of a false `BLOCKED` caused by an expired temp path.
+- No production deployment, production mutation, DNS change, force-push, or application source change was made in this re-verification batch. Documentation changes are local and pending commit.
+
 ## TS-001 — TypeScript diagnostic remediation and quality-gate recovery
 
 - Starting checkpoint verified: local and remote `210ad1c5b533d5c4f73e577956c773dda7d64e3c` on `feat/naijadrive-private-ride-foundation`; `.npm-cache-rea/` preserved and unrelated worktrees untouched.

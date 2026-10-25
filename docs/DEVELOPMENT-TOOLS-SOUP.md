@@ -9,15 +9,15 @@ Candidate: `https://github.com/southwind-ai/soup`
 |---|---|---|
 | Exact repository verification | PASS | `/tmp/soup-official`, official remote, tag `v0.2.1` |
 | Release/commit/license verification | PASS | `v0.2.1`, commit `ba8d72e3a4f3283d0c06a9df6154e6b3af7892e6`, MIT |
-| Isolated installation | PASS | `/tmp/soup-poc-venv`, editable official checkout, `soup-ai 0.2.1` |
-| Official test suite | PASS | `141 passed in 0.50s` |
+| Isolated installation | PASS | Fresh `/tmp/soup-bench-venv`, official checkout at `ba8d72e3a4f3283d0c06a9df6154e6b3af7892e6`, `soup-ai 0.2.1` |
+| Official test suite | PASS | Fresh run: `141 passed in 0.43s` |
 | Skill-routing POC | PASS | `/tmp/soup-poc.py`, six fixed tasks, five repeated selections per task |
 | Safety wrapper/fallback tests | PASS | Missing, unavailable, malformed, duplicate, unsafe and conflicting cases exercised |
 | Native OpenCode adapter | NOT RUN / NOT FOUND | No native adapter was documented or present in the inspected release |
 | NaijaDeals integration | NOT RUN | Intentionally isolated; no application or OpenCode integration performed |
 | Production readiness | NOT READY | Routing quality and security governance still require caller-owned controls |
 | Required-skill validation gate | PARTIAL | The caller-owned fallback preserves mandatory context and handles missing/unavailable/unsafe selection, but the six-task benchmark still has only 5/6 required-skill recall in the direct provider run |
-| Adoption decision | BLOCKED | No supported native OpenCode adapter; larger golden-task quality and reliable required-skill recall are still outstanding |
+| Adoption decision | BLOCKED | Fresh 12-task benchmark has mean required-skill recall `0.90`, but security recall misses, irrelevant context, and no supported OpenCode adapter still fail the adoption gate |
 
 ## Project verification
 
@@ -63,6 +63,33 @@ Results across six fixed tasks and five repeated selections per task:
 - Context size: measured as Python character count in the POC, not tokens. No token-saving claim is made.
 
 Observed single-domain selections were precise: Drive, Eats, RBAC, payment, and database tasks each selected the expected skill only. The cross-cutting result confirms the tradeoff: BM25 vocabulary routing can surface related context, but it does not understand authorization boundaries or decide whether extra instructions are safe.
+
+## Fresh expanded golden-task benchmark
+
+A fresh isolated benchmark was run from `/tmp/soup-golden-benchmark.py` using 12 reviewed skills and 12 labeled tasks covering migrations, seed alignment, RBAC, rollout, payments, security, booking, testing, logistics, frontend, REA evidence and TypeScript quality.
+
+```text
+Soup: v0.2.1 / BM25Strategy
+Tasks: 12
+Perfect-recall tasks: 9/12
+Mean required-skill recall: 0.90
+Mean irrelevant-context ratio: 0.216
+Deterministic five-run selection: 12/12
+Selection latency: approximately 0.136–0.176 ms/task
+Soup context tokens across tasks: 1,198
+Fixed-context tokens across tasks: 2,100
+Context accounting reduction: 42.95%
+```
+
+Important misses and risks:
+
+- Payment task selected `payment-engine` but omitted required `security-auth`.
+- Quality task selected `typescript-gate` but omitted required `testing-harness`.
+- The five-skill cross-cutting task recalled `4/5` and selected extra context.
+- Frontend task selected three unrelated skills in addition to frontend context.
+- This measures context assembly only; no LLM output quality, tool-call quality or currency cost was claimed.
+
+The benchmark confirms measurable context reduction and deterministic routing, but required-skill omission remains unacceptable for security- or migration-sensitive workflows. Soup stays isolated and must be wrapped with a required-skill gate plus fixed-context fallback before any future integration consideration.
 
 ## Failure and security tests
 

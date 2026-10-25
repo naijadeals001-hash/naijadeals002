@@ -25,12 +25,15 @@ No NaijaDeals production behavior, deployment configuration, secrets, D1/R2 data
 | Soup official tests | PASS | 141 passed |
 | Soup isolated POC | PASS | Six tasks, five repeated selections each |
 | Soup production integration | NOT RUN | Deliberately not integrated |
-| REA version/config preservation | PASS | 6.7.0 and OpenCode MCP registration aligned |
+| REA version/config preservation | PARTIAL | OpenCode MCP registration is aligned, but the current preserved cache does not provide a runnable REA CLI offline; optional native engines remain unavailable |
 | REA full doctor | PARTIAL | Optional native engines and unrelated Claude registration unavailable |
 | Production readiness | NOT READY | Outstanding provider and security governance blockers |
 | D1-001 booking fixture follow-up | PASS | `ecosystem.naijastay` supplied by isolated fixtures; 20/20 booking workflows passed against local D1; no new PM2 binding error |
 | ECC provider recovery follow-up | BLOCKED | Deterministic doctor remains healthy, but no usable provider-backed OpenCode/ECC output was obtained |
-| Soup adoption gate | BLOCKED | Caller fallback is present, but required-skill recall/net-benefit proof and supported adapter remain insufficient |
+| Soup adoption gate | BLOCKED | Fresh 12-task benchmark: 9/12 perfect recall, mean recall 0.90, mean irrelevant ratio 0.216; required-skill omissions remain and no supported adapter exists |
+| Fresh OpenCode probe | BLOCKED | Disposable `--pure` probe timed out at 45s with exit 124 at `init`, zero output and no provider markers |
+| Fresh AgentShield scan | PARTIAL | Grade D `(58/100)`, 134 findings; 32 critical matches remain npm integrity false positives; no auto-fix |
+| Fresh Soup golden benchmark | PARTIAL | Official tests 141/141; deterministic 12-task context benchmark completed, but no LLM quality or cost claim |
 
 ## Evidence and commands
 
@@ -51,14 +54,15 @@ node scripts/ecc.js plan --profile core --target opencode --json
 node scripts/consult.js 'TypeScript implementation testing code review security review' --target opencode --json
 ```
 
-All three local commands passed. A bounded real workflow was attempted twice against `/tmp/ecc-poc.6iPy8L` using `opencode run --agent planner --command plan`; both reached OpenCode initialization and timed out with exit `124`. Evidence: `/tmp/ecc-plan-attempt-rerun.err` and empty `/tmp/ecc-plan-attempt-rerun.json`.
+The deterministic plan exited `0`; the current doctor exited `1` because the current environment does not satisfy all doctor checks. A bounded real workflow was attempted again using a disposable `--pure` config; it reached `init` and timed out after 45 seconds with exit `124`, zero output and no provider markers. The LLM-backed workflow remains blocked.
 
 ### AgentShield
 
 - Isolated package dependencies: `/tmp/ecc-agentshield-deps`
 - Scan output: `/tmp/ecc-agentshield-scan-final.txt`
-- Result: Grade D `(59/100)`, 133 findings, 32 critical, 0 high, 48 medium, 46 low, 7 info, 16 auto-fixable.
-- Critical matches are Azure storage-key patterns in ECC `package-lock.json`; they remain unclassified and were not auto-fixed.
+- Fresh source: `/tmp/agentshield-source`, tag `v1.6.0`, commit `b0891303bdcd6037376a94263d45cfd2ff3dfb98`; isolated dependencies: `/tmp/agentshield-fresh-deps`.
+- Fresh result: Grade D `(58/100)`, 133 files, 134 findings, 32 critical, 0 high, 49 medium, 46 low, 7 info, 16 auto-fixable, exit `2`.
+- Critical matches were reclassified as npm `sha512` integrity metadata, not credentials. No auto-fix was run. Template MCP environment inheritance and timeout findings remain actionable review items.
 - ECC supply-chain IOC scan passed over 227 files.
 
 ### REA
