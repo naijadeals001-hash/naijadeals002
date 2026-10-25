@@ -15,6 +15,7 @@ import {
   transitionEatsOrderForOperator,
 } from '../lib/eats-operator'
 import { dispatchEatsOrder, EatsFulfillmentError } from '../lib/eats-fulfillment'
+import { offerNextEatsCourier, EatsCourierDispatchError } from '../lib/eats-courier-dispatch'
 
 export const eatsOperatorApi = new Hono<AppEnv>()
 eatsOperatorApi.use('*', requireAuth)
@@ -112,9 +113,10 @@ eatsOperatorApi.post('/operator/orders/:id/dispatch', async (c) => {
       pickup: body.pickup,
       deliveryInstructions: body.delivery_instructions,
     })
-    return c.json({ success: true, fulfillment }, 201)
+    const offer = await offerNextEatsCourier(c.env.DB, Number(fulfillment.fulfillmentId), profile.user_id, 'merchant')
+    return c.json({ success: true, fulfillment, courier_dispatch: offer ? { status: 'offer_created', expires_at: offer.expiresAt } : { status: 'no_courier_available' } }, 201)
   } catch (err) {
-    if (err instanceof EatsFulfillmentError) return c.json({ error: err.message }, 409)
+    if (err instanceof EatsFulfillmentError || err instanceof EatsCourierDispatchError) return c.json({ error: err.message }, 409)
     throw err
   }
 })

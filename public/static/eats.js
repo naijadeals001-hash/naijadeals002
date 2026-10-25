@@ -245,8 +245,18 @@
       if (res.status === 404) { statusEl.textContent = 'Fulfillment has not been dispatched yet. Restaurant preparation and courier assignment remain separate persisted steps.'; detailsEl.classList.add('hidden'); return; }
       if (!res.ok) { statusEl.textContent = (res.data && res.data.error) || 'Fulfillment status unavailable.'; return; }
       const f = res.data;
-      statusEl.textContent = 'Fulfillment: ' + (f.dispatch_status || 'dispatch_requested').replaceAll('_', ' ');
-      detailsEl.innerHTML = '<div>Shipment: ' + (f.shipment_status || 'not created') + '</div><div>Pickup job: ' + (f.pickup_job_status || 'unassigned') + '</div><div>Delivery job: ' + (f.delivery_job_status || 'unassigned') + '</div>';
+      const labels = {
+        pending: 'Awaiting courier dispatch',
+        offers_open: 'Courier matching in progress',
+        courier_assigned: 'Courier assigned',
+        picked_up: 'Picked up from restaurant',
+        out_for_delivery: 'Out for delivery',
+        delivered: 'Delivered with verified confirmation',
+        no_courier_available: 'Dispatch unavailable — operator retry required',
+        cancelled: 'Delivery cancelled'
+      };
+      statusEl.textContent = labels[f.dispatch_outcome] || ('Fulfillment: ' + (f.dispatch_status || 'dispatch_requested').replaceAll('_', ' '));
+      detailsEl.innerHTML = '<div>Shipment: ' + (f.shipment_status || 'not created') + '</div><div>Pickup job: ' + (f.pickup_job_status || 'unassigned') + '</div><div>Delivery job: ' + (f.delivery_job_status || 'unassigned') + '</div><div>Courier: ' + (f.courier_assigned ? 'assigned' : 'not assigned') + '</div>';
       detailsEl.classList.remove('hidden');
     }
     qs('#eats-fulfillment-refresh', panel)?.addEventListener('click', refresh);

@@ -18,6 +18,18 @@
 - Production deployment: not performed
 - Production merge/release: not performed
 
+## EATS courier dispatch increment — local checkpoint (not yet pushed)
+
+- Verified starting checkpoint `74bbaabfd96742695ad945bd42f49571174031eb` on `feat/naijadrive-private-ride-foundation`; `.npm-cache-rea/` preserved.
+- REA version/MCP configuration rechecked: `rea-agents@6.7.0` is registered at `/home/user/.config/opencode/opencode.jsonc`; the local `npx` preflight was blocked by an npm cache permission error, so no new REA capture is claimed. Existing Bolt Food evidence `ev_1a85796f4ca99ff5076eedc38c0f565e9fa6b04ba39ef826115e21f54d15c4c8` remains the reference and private courier behavior is explicitly unverified.
+- Control Center `EATS-001` was updated before implementation to `IMPLEMENTING`, with the existing evidence ID, preview routes, unconfigured external provider state, and authenticated-browser blocker recorded.
+- Added migration `0100_naijaeats_courier_dispatch.sql`: explicit courier zone permissions, persisted Eats offers with expiry/rejection/supersession, reassignment counter, and append-only fulfillment events/proof fields.
+- Added `src/lib/eats-courier-dispatch.ts` and `src/routes/api-eats-courier.ts`: country/online/active/zone eligibility, courier-only inbox, conditional acceptance/rejection, server expiry/reassignment/no-courier recovery, authorized pickup/delivery job actions and OTP proof-of-delivery gate.
+- Extended operator dispatch to issue the first persisted courier offer and customer fulfillment visibility to expose truthful `pending/offers_open/courier_assigned/picked_up/out_for_delivery/delivered/no_courier_available` states.
+- `npm run build` passed with 272 modules; existing EATS/Drive/Carpool regression suite passed 15/15 before the new courier test fixture was added. Preview `/eats` returned HTTP 200 after PM2 recovery; `/control-center/development` correctly returned the existing unauthenticated 302 boundary.
+- New courier fixture tests exercised eligibility, courier-scoped offers, rejection exclusion, conditional acceptance, expiry/reassignment and OTP proof. The D1-backed fixture became unstable/time-limited during repeated runs and is not being reported as passed; authenticated browser acceptance and screenshots remain pending. EATS-001 must remain `PARTIAL`.
+- No production deployment, remote D1 mutation, merge, DNS change or force-push performed. This batch remains local and uncommitted until the D1 fixture timeout is resolved.
+
 ## Control Center development registry batch — current local checkpoint
 
 - Added `migrations/0095_control_center_development_registry.sql` with persisted `cc_development_tasks` and append-only `cc_development_events`, readiness milestones, dependency metadata, REA evidence fields, preview/commit verification fields and development permissions.

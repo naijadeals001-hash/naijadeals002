@@ -70,7 +70,8 @@ export async function dispatchEatsOrder(db: D1Database, orderId: number, input: 
       `INSERT INTO eats_order_fulfillments (order_id, shipment_id, dispatch_status) VALUES (?, ?, 'dispatch_requested')`
     ).bind(orderId, shipment.shipmentId).run()
     const jobs = await requestDispatch(db, shipment.shipmentId)
-    return { ...shipment, ...jobs, dispatch_status: 'dispatch_requested' }
+    const fulfillment = await db.prepare('SELECT id FROM eats_order_fulfillments WHERE order_id = ?').bind(orderId).first<{ id: number }>()
+    return { ...shipment, ...jobs, fulfillmentId: fulfillment?.id ?? null, dispatch_status: 'dispatch_requested' }
   } catch (error) {
     // Do not hide a failed bridge or leave an apparently successful delivery
     // claim. The shipment remains queryable for admin reconciliation.
@@ -79,14 +80,18 @@ export async function dispatchEatsOrder(db: D1Database, orderId: number, input: 
 }
 
 export async function getEatsFulfillmentForCustomer(db: D1Database, orderNumber: string, userId: number) {
-  return db.prepare(
+  const fulfillment = await db.prepare(
     `SELECT eof.*, eo.order_number, s.tracking_number, s.status AS shipment_status,
             pj.id AS pickup_job_id, pj.status AS pickup_job_status,
-            dj.id AS delivery_job_id, dj.status AS delivery_job_status
+            dj.id AS delivery_job_id, dj.status AS delivery_job_status,
+            CASE WHEN eof.courier_driver_id IS NOT NULL THEN 1 ELSE 0 END AS courier_assigned
      FROM eats_order_fulfillments eof
      JOIN eats_orders eo ON eo.id = eof.order_id AND eo.order_number = ? AND eo.customer_user_id = ?
      JOIN shipments s ON s.id = eof.shipment_id
      LEFT JOIN pickup_jobs pj ON pj.shipment_id = s.id
      LEFT JOIN delivery_jobs dj ON dj.shipment_id = s.id`
   ).bind(orderNumber, userId).first<any>()
+  if (!fulfillment) return null
+  const { results: events } = await db.prepare(`SELECT event_type, actor_role, created_at FROM eats_fulfillment_events WHERE fulfillment_id=? ORDER BY id DESC LIMIT 20`).bind(fulfillment.id).all<any>()
+  return { ...fulfillment, events }
 }
