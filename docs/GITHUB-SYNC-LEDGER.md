@@ -50,6 +50,12 @@
 - Browser interactions: Stream search updated the URL and preserved the truthful empty state; Send tracking returned the backend not-found response; no console/page errors or failed requests.
 - Known limitation: authenticated shipment creation, live content playback and creator publishing remain unavailable until their existing backend capabilities are connected.
 
+## Stay and Drive regression verification
+
+- Existing Booking Engine and NaijaDrive pilot implementations were preserved rather than replaced.
+- `/stay` and `/drive` were checked at desktop `1440x900` and mobile `390x844`; screenshots are stored as `qa-screenshots/stay-*.png` and `qa-screenshots/drive-*.png`.
+- Both routes returned their expected titles with no page errors or failed browser requests. Existing Stay date/availability and Drive fare/booking safeguards remain the source of truth.
+
 ## Verification before push
 
 - `npm run build` — passed.
