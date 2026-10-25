@@ -8,10 +8,12 @@
     "deploy": "npm run build && wrangler pages deploy",
     "cf-typegen": "wrangler types --env-interface CloudflareBindings",
     "test:node": "node scripts/test-node.mjs",
-    "test:ts-baseline": "node scripts/tsc-baseline-gate.mjs"
+    "test:ts-baseline": "node scripts/tsc-baseline-gate.mjs",
+    "test:control-center:3d": "node tests/control-center/browser/three-js-control-center-acceptance.mjs"
   },
   "dependencies": {
-    "hono": "^4.13.5"
+    "hono": "^4.13.5",
+    "three": "^0.180.0"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260902.1",

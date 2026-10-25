@@ -336,6 +336,16 @@ controlCenterRoutes.get('/', async (c) => {
   const healthOk = health.filter((h) => h.status === 'operational').length
   const healthAttention = health.filter((h) => h.status === 'attention' || h.status === 'degraded').length
   const healthLabel = healthAttention > 0 ? `${healthAttention} system${healthAttention === 1 ? '' : 's'} need attention` : healthOk === health.length ? 'All monitored systems operational' : 'Monitored systems operational; some checks unavailable'
+  const operationsSceneData = JSON.stringify(registry.map((vertical) => ({
+    key: vertical.key,
+    name: vertical.name,
+    route: vertical.route,
+    productArea: vertical.productArea,
+    capabilityState: vertical.capabilityState,
+    enablementState: vertical.enablementState,
+    operationsState: vertical.operationsState,
+    evidence: vertical.evidence,
+  }))).replaceAll('<', '\\u003c')
 
   return c.render(
     <ControlCenterLayout title="Command Center" user={user} ccAccess={ccAccess} active="overview">
@@ -416,6 +426,54 @@ controlCenterRoutes.get('/', async (c) => {
           </div>
         </div>
       </div>
+
+      {/* ===== Selective 3D operations environment — progressive enhancement only ===== */}
+      <section
+        id="cc-operations-environment"
+        data-cc-3d-root
+        class="cc-3d-shell border-b border-ccborder bg-[#090F0D]"
+        aria-labelledby="cc-operations-environment-title"
+      >
+        <script type="application/json" data-cc-3d-data dangerouslySetInnerHTML={{ __html: operationsSceneData }}></script>
+        <div class="max-w-[110rem] mx-auto px-4 md:px-8 py-6 md:py-8">
+          <div class="flex flex-wrap items-start justify-between gap-4 mb-4">
+            <div>
+              <p class="text-[10px] uppercase tracking-[0.24em] text-ccaccent font-bold">Platform topology · authorized registry</p>
+              <h2 id="cc-operations-environment-title" class="text-xl md:text-2xl font-extrabold text-white mt-1">Operations environment</h2>
+              <p class="text-xs text-gray-500 mt-1 max-w-2xl">A navigable view of configured NaijaDeals verticals and their verified readiness states. This is not a live map, GPS view, or synthetic activity feed.</p>
+            </div>
+            <div class="flex items-center gap-2 text-[10px] text-gray-500" aria-live="polite">
+              <span class="cc-3d-legend-dot cc-3d-legend-live"></span> operational
+              <span class="cc-3d-legend-dot cc-3d-legend-partial ml-2"></span> partial
+              <span class="cc-3d-legend-dot cc-3d-legend-muted ml-2"></span> unavailable
+            </div>
+          </div>
+          <div class="grid lg:grid-cols-[minmax(0,1.65fr)_minmax(18rem,0.75fr)] gap-4 items-stretch">
+            <div data-cc-3d-stage class="cc-3d-stage rounded-2xl border border-ccborder bg-[radial-gradient(circle_at_50%_48%,rgba(23,201,131,0.13),transparent_34%),linear-gradient(135deg,#0d1713,#07100d)] overflow-hidden relative min-h-[310px] md:min-h-[380px]">
+              <canvas data-cc-3d-canvas class="absolute inset-0 w-full h-full" aria-label="Interactive 3D topology of authorized NaijaDeals verticals" role="img"></canvas>
+              <div class="absolute top-4 left-4 text-[10px] text-gray-500 uppercase tracking-widest pointer-events-none">Shared platform core</div>
+              <div class="absolute bottom-4 left-4 right-4 flex items-center justify-between gap-3 pointer-events-none">
+                <span class="text-[10px] text-gray-600">Select a node to inspect its registry evidence</span>
+                <span data-cc-3d-reduced-note hidden class="text-[10px] text-ccaccent">Reduced motion enabled</span>
+              </div>
+              <div data-cc-3d-fallback hidden class="absolute inset-0 p-5 bg-ccpanel/95 overflow-auto">
+                <p data-cc-3d-message class="text-xs text-amber-300 mb-4">The 3D view is unavailable; use the accessible registry.</p>
+                <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {registry.slice(0, 14).map((vertical) => <a href={vertical.route} data-cc-3d-fallback-item data-key={vertical.key} class="cc-3d-fallback-item block text-left rounded-xl border border-ccborder bg-black/20 p-3 hover:border-ccaccent/50 focus-visible:ring-2 focus-visible:ring-ccaccent"><span class="block text-xs font-bold text-white">{vertical.name}</span><span class="block text-[10px] text-gray-500 mt-1">{vertical.capabilityState.replaceAll('_', ' ')}</span></a>)}
+                </div>
+              </div>
+            </div>
+            <aside class="cc-3d-inspector rounded-2xl border border-ccborder bg-ccpanel p-5 flex flex-col" aria-live="polite">
+              <div class="text-[10px] uppercase tracking-widest text-gray-600">Selected registry node</div>
+              <h3 data-cc-3d-selected-name class="text-lg font-extrabold text-white mt-2">Loading topology…</h3>
+              <p data-cc-3d-selected-detail class="text-xs text-gray-400 leading-relaxed mt-3 min-h-[5rem]">The visualization is loading. All details remain available in the ecosystem registry.</p>
+              <a data-cc-3d-selected-link href="/control-center/ecosystem" class="mt-auto pt-4 text-xs font-bold text-ccaccent hover:underline">Open ecosystem registry →</a>
+            </aside>
+          </div>
+          <p class="mt-3 text-[10px] text-gray-600">Keyboard users can use the registry links below and the fallback view. The canvas is an enhancement; it never carries authorization or unique operational data.</p>
+        </div>
+        <script type="module" src="/static/control-center-3d.js"></script>
+      </section>
 
       <div class="max-w-[110rem] mx-auto px-4 md:px-8 py-6 md:py-8">
         {/* ===== KPI strip — supporting metrics, not the centerpiece ===== */}

@@ -1,0 +1,176 @@
+{
+  "baseUrl": "http://localhost:3000",
+  "runNonce": "17929454443286765",
+  "results": [
+    {
+      "name": "desktop-1440x900",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "reducedMotion": false,
+      "result": {
+        "root": true,
+        "canvas": true,
+        "canvasHidden": false,
+        "canvasWidth": 1184,
+        "canvasHeight": 378,
+        "canvasClientWidth": 757,
+        "canvasClientHeight": 378,
+        "fallbackHidden": true,
+        "selectedName": "NaijaShop",
+        "selectedHref": "/",
+        "fallbackItems": 14,
+        "scrollWidth": 1440,
+        "viewportWidth": 1440,
+        "moduleScripts": [
+          "/static/control-center-3d.js"
+        ],
+        "topologyData": 20
+      },
+      "consoleErrors": [],
+      "failedRequests": []
+    },
+    {
+      "name": "small-desktop-1280x800",
+      "viewport": {
+        "width": 1280,
+        "height": 800
+      },
+      "reducedMotion": false,
+      "result": {
+        "root": true,
+        "canvas": true,
+        "canvasHidden": false,
+        "canvasWidth": 1024,
+        "canvasHeight": 378,
+        "canvasClientWidth": 647,
+        "canvasClientHeight": 378,
+        "fallbackHidden": true,
+        "selectedName": "NaijaShop",
+        "selectedHref": "/",
+        "fallbackItems": 14,
+        "scrollWidth": 1280,
+        "viewportWidth": 1280,
+        "moduleScripts": [
+          "/static/control-center-3d.js"
+        ],
+        "topologyData": 20
+      },
+      "consoleErrors": [],
+      "failedRequests": []
+    },
+    {
+      "name": "tablet-768x1024",
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "reducedMotion": false,
+      "result": {
+        "root": true,
+        "canvas": true,
+        "canvasHidden": false,
+        "canvasWidth": 512,
+        "canvasHeight": 378,
+        "canvasClientWidth": 446,
+        "canvasClientHeight": 378,
+        "fallbackHidden": true,
+        "selectedName": "NaijaShop",
+        "selectedHref": "/",
+        "fallbackItems": 14,
+        "scrollWidth": 768,
+        "viewportWidth": 768,
+        "moduleScripts": [
+          "/static/control-center-3d.js"
+        ],
+        "topologyData": 20
+      },
+      "consoleErrors": [],
+      "failedRequests": []
+    },
+    {
+      "name": "mobile-390x844",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "reducedMotion": false,
+      "result": {
+        "root": true,
+        "canvas": true,
+        "canvasHidden": false,
+        "canvasWidth": 390,
+        "canvasHeight": 308,
+        "canvasClientWidth": 356,
+        "canvasClientHeight": 308,
+        "fallbackHidden": true,
+        "selectedName": "NaijaShop",
+        "selectedHref": "/",
+        "fallbackItems": 14,
+        "scrollWidth": 390,
+        "viewportWidth": 390,
+        "moduleScripts": [
+          "/static/control-center-3d.js"
+        ],
+        "topologyData": 20
+      },
+      "consoleErrors": [],
+      "failedRequests": []
+    },
+    {
+      "name": "reduced-motion-1440x900",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "reducedMotion": true,
+      "result": {
+        "root": true,
+        "canvas": true,
+        "canvasHidden": false,
+        "canvasWidth": 1184,
+        "canvasHeight": 378,
+        "canvasClientWidth": 757,
+        "canvasClientHeight": 378,
+        "fallbackHidden": true,
+        "selectedName": "NaijaShop",
+        "selectedHref": "/",
+        "fallbackItems": 14,
+        "scrollWidth": 1440,
+        "viewportWidth": 1440,
+        "moduleScripts": [
+          "/static/control-center-3d.js"
+        ],
+        "topologyData": 20
+      },
+      "consoleErrors": [],
+      "failedRequests": [],
+      "reducedMotionNoteVisible": true
+    },
+    {
+      "name": "forced-module-fallback",
+      "fallbackState": {
+        "fallbackHidden": false,
+        "message": "The 3D module could not be loaded; the accessible registry remains fully usable.",
+        "itemCount": 14
+      },
+      "consoleErrors": [],
+      "failedRequests": []
+    },
+    {
+      "name": "context-loss-and-dispose",
+      "lifecycle": {
+        "before": {
+          "canvasHidden": false,
+          "fallbackHidden": true
+        },
+        "afterLoss": {
+          "canvasHidden": true,
+          "fallbackHidden": false,
+          "message": "WebGL context was lost; use the accessible registry while the 3D view is unavailable."
+        }
+      }
+    }
+  ]
+}

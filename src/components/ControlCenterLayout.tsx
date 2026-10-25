@@ -142,7 +142,7 @@ export const ControlCenterLayout: FC<ControlCenterLayoutProps> = ({ title, user,
   const timeStr = now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
 
   return (
-    <html lang="en" dir="ltr">
+    <html lang="en" dir="ltr" class="cc-control-center-document">
       <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -187,7 +187,7 @@ export const ControlCenterLayout: FC<ControlCenterLayoutProps> = ({ title, user,
           }}
         ></style>
       </head>
-      <body class="min-h-screen flex flex-col bg-ccbg font-sans text-gray-100 cc-scrollbar">
+      <body class="min-h-screen flex flex-col bg-ccbg font-sans text-gray-100 cc-scrollbar cc-control-center-body">
         {/* ===== Top bar ===== */}
         <header id="cc-header" class="sticky top-0 z-40 bg-ccpanel/95 border-b border-ccborder backdrop-blur">
           <div class="max-w-[110rem] mx-auto flex items-center gap-3 px-4 md:px-6 py-2.5">

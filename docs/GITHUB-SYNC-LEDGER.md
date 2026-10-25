@@ -238,3 +238,15 @@
 - `npm run test:ts-baseline` reports existing NestJS decorator/runtime diagnostics; the Worker rollout implementation builds successfully.
 - REA analysis engines Hopper, Ghidra, IDA, JADX and Kuna remain unavailable; public browser research continued through the available Playwright provider.
 - The worktree contains the locally generated untracked `.npm-cache-rea/` directory; it was intentionally excluded from the Batch A commit.
+
+## Three.js Control Center redesign — browser-verified local delivery batch
+
+- Starting checkpoint verified: local and remote `c97a2dbd50a9654eb31f9e511854e88976c04700` on `feat/naijadrive-private-ride-foundation`; existing PM2 `naijadeals` preview reused on port 3000. `.npm-cache-rea/` preserved and excluded.
+- REA: the inherited `npx` path failed safely with `/opt/npm-cache` `EACCES`; an isolated `/tmp/rea-npmrc` plus the preserved project cache succeeded with `rea 6.7.0`. `rea doctor` confirmed aligned OpenCode registration but no configured browser target/provider in this Linux sandbox. No REA browser observation is claimed.
+- Browser acceptance used a real Playwright Chromium session. A test user was registered through `/api/auth/register`, assigned `platform_admin` server-side in local D1 using the existing test fixture pattern, then authenticated through the real Control Center login form. No auth bypass was used.
+- Added `public/static/control-center-3d.js`, local Three.js `0.180.0` ESM assets (`three.module.min.js`, `three.core.min.js`), the Control Center topology section, responsive containment, and `tests/control-center/browser/three-js-control-center-acceptance.mjs`.
+- Browser profiles passed: `1440x900`, `1280x800`, `768x1024`, `390x844`. The suite also passed reduced-motion, forced local module-failure fallback, context-loss, disposal, local-module request, selection/inspector, registry-link and overflow checks. Console errors: 0. Unexpected failed requests: 0.
+- Evidence: `qa-screenshots/three-js-control-center/{desktop-1440x900,small-desktop-1280x800,tablet-768x1024,mobile-390x844,reduced-motion-1440x900,forced-module-fallback}.png`, `three-js-browser-results.json`, and `ts-baseline.txt`.
+- Build passed after the final asset and responsive fixes. `node --check public/static/control-center-3d.js` passed. CC-003/CC-004 focused tests passed 5/5. Integrated relevant matrix passed 26/26.
+- `npm run test:ts-baseline` remains failing: baseline 9, current 34, newly surfaced 25, resolved 0. All listed diagnostics are in existing NestJS/runtime or unrelated route files; no Three.js TypeScript import/configuration change contributed. The gate is explicitly reported failing, not suppressed or rebaselined.
+- No route, API, migration, RBAC, production data, DNS, production deployment, production merge, reset, force-push or hosted publish was performed. This batch is deliverable with the TypeScript baseline debt explicitly unresolved.

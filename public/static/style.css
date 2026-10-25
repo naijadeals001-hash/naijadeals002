@@ -69,6 +69,33 @@ input:focus, select:focus, textarea:focus, button:focus-visible {
   outline: none;
 }
 
+/* Keep wide, content-rich dashboard cards from expanding the page canvas at
+   tablet widths. Their own tables/feed regions retain local overflow behavior. */
+.cc-control-center-document,
+.cc-control-center-body { overflow-x: hidden; }
+
+/* Control Center selective 3D operations environment. The canvas is progressive
+   enhancement; these styles keep the inspector and fallback useful without it. */
+.cc-3d-stage { isolation: isolate; }
+.cc-3d-stage canvas { cursor: crosshair; }
+.cc-3d-stage canvas:focus-visible { outline: 2px solid #17C983; outline-offset: -2px; }
+.cc-3d-legend-dot { display: inline-block; width: 6px; height: 6px; border-radius: 999px; }
+.cc-3d-legend-live { background: #17C983; box-shadow: 0 0 10px rgba(23,201,131,.7); }
+.cc-3d-legend-partial { background: #F59E0B; }
+.cc-3d-legend-muted { background: #64748B; }
+.cc-3d-state-dot { display: inline-block; width: 7px; height: 7px; margin: 0 6px 1px 0; border-radius: 999px; background: #64748B; }
+.cc-3d-state-dot[data-state="operational"] { background: #17C983; box-shadow: 0 0 8px rgba(23,201,131,.7); }
+.cc-3d-state-dot[data-state="partial"] { background: #F59E0B; }
+.cc-3d-detail-muted { color: #6B7280; display: inline-block; margin-top: 8px; }
+.cc-3d-fallback-item[aria-current="true"] { border-color: rgba(23,201,131,.7); background: rgba(23,201,131,.09); }
+@media (max-width: 640px) {
+  .cc-3d-stage { min-height: 300px; }
+  .cc-3d-inspector { min-height: 180px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cc-3d-stage canvas { cursor: pointer; }
+}
+
 /* Sticky header shadow only after scroll would be nicer with JS, but a subtle
    permanent shadow (already applied via Tailwind classes) keeps this file lean. */
 

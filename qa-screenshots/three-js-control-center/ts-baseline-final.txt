@@ -1,0 +1,37 @@
+
+> test:ts-baseline
+> node scripts/tsc-baseline-gate.mjs
+
+TypeScript command exit: 2
+Baseline diagnostics: 9
+Current diagnostics: 34
+New diagnostics: 25
+Resolved baseline diagnostics: 0
+New TypeScript diagnostics detected:
+services/naijadrive-runtime/src/http/driver-presence.controller.ts TS1241: Unable to resolve signature of method decorator when called as an expression.
+services/naijadrive-runtime/src/http/driver-presence.controller.ts TS1270: Decorator function return type 'void | TypedPropertyDescriptor<unknown>' is not assignable to type 'void | ((request: FastifyRequest<RouteGenericInterface, RawServerDefault, IncomingMessage, FastifySchema, FastifyTypeProviderDefault, unknown, FastifyBaseLogger, ResolveFastifyRequestType<...>> & { ...; }, body: { ...; }) => Promise<...>)'.
+services/naijadrive-runtime/src/http/driver-presence.controller.ts TS1206: Decorators are not valid here.
+services/naijadrive-runtime/src/http/health.controller.ts TS1241: Unable to resolve signature of method decorator when called as an expression.
+services/naijadrive-runtime/src/http/health.controller.ts TS1270: Decorator function return type 'void | TypedPropertyDescriptor<unknown>' is not assignable to type 'void | (() => Promise<{ healthy: boolean; postgres: string; redis: string; }>)'.
+services/naijadrive-runtime/src/http/ride.controller.ts TS1241: Unable to resolve signature of method decorator when called as an expression.
+services/naijadrive-runtime/src/http/ride.controller.ts TS1270: Decorator function return type 'void | TypedPropertyDescriptor<unknown>' is not assignable to type 'void | ((req: { user: { id: number; }; }, body: any) => Promise<RideRequest>)'.
+services/naijadrive-runtime/src/http/ride.controller.ts TS1206: Decorators are not valid here.
+services/naijadrive-runtime/src/http/ride.controller.ts TS1270: Decorator function return type 'void | TypedPropertyDescriptor<unknown>' is not assignable to type 'void | ((id: string, req: { user: { id: number; }; }) => Promise<RideRequest | null>)'.
+services/naijadrive-runtime/src/http/ride.controller.ts TS1270: Decorator function return type 'void | TypedPropertyDescriptor<unknown>' is not assignable to type 'void | ((id: string, req: { user: { id: number; role: "system" | "customer" | "driver" | "admin"; }; }, body: { status: RideStatus; note?: string | undefined; }) => Promise<RideRequest>)'.
+services/naijadrive-runtime/src/http/ride.controller.ts TS1270: Decorator function return type 'void | TypedPropertyDescriptor<unknown>' is not assignable to type 'void | ((id: string, req: { user: { id: number; }; }, driver: DriverEligibility) => Promise<RideRequest>)'.
+services/naijadrive-runtime/src/http/ride.gateway.ts TS1240: Unable to resolve signature of property decorator when called as an expression.
+src/pages/send.tsx TS2322: Type 'string' is not assignable to type 'number'.
+src/routes/api-bookings.ts TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string'.
+src/routes/api-bookings.ts TS2345: Argument of type 'string | null' is not assignable to parameter of type 'string'.
+src/routes/api-control-center-naijapay.ts TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string'.
+src/routes/api-control-center.ts TS2532: Object is possibly 'undefined'.
+src/routes/api-control-center.ts TS2322: Type 'Record<string, unknown> | null' is not assignable to type 'Record<string, unknown> | undefined'.
+src/routes/api-control-center.ts TS2322: Type 'null' is not assignable to type 'Record<string, unknown> | undefined'.
+src/routes/api-control-center.ts TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string'.
+src/routes/api-control-center.ts TS2322: Type 'RolloutCountry | null' is not assignable to type 'Record<string, unknown> | undefined'.
+src/routes/api-eats-courier.ts TS2347: Untyped function calls may not accept type arguments.
+src/routes/api-eats.ts TS2339: Property 'country' does not exist on type 'EatsShippingDetails'.
+src/routes/api-naijapay.ts TS18048: 'body.amount_minor' is possibly 'undefined'.
+src/routes/api-naijapay.ts TS2322: Type 'number | undefined' is not assignable to type 'number'.
+
+TS_BASELINE_EXIT=1
