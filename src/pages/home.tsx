@@ -463,7 +463,7 @@ export async function homePage(c: Context<AppEnv>) {
                     <p class="text-white font-bold text-sm leading-tight">{v.name}</p>
                     <p class="text-white/75 text-[10px] mt-0.5 line-clamp-2">{v.tagline}</p>
                     <span class="mt-1.5 inline-flex items-center gap-0.5 text-[10px] font-bold text-primary-fixed bg-black/40 rounded-full px-2 py-0.5 w-fit">
-                      {v.status === 'live' ? 'Open' : 'Coming soon'}
+                      {v.status === 'live' ? 'Open' : v.status === 'beta' ? 'Limited beta' : 'In development'}
                     </span>
                   </div>
                 </a>

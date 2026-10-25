@@ -56,6 +56,7 @@ import { wishlistPage } from './pages/wishlist'
 import { addressesPage } from './pages/addresses'
 import { ecosystemPage } from './pages/ecosystem'
 import { ecosystemPreviewPage } from './pages/ecosystem-preview'
+import { platformLandingPage } from './pages/platform-landing'
 import { freshHomePage, freshProductPage } from './pages/fresh'
 import {
   eatsHomePage,
@@ -289,18 +290,12 @@ app.get('/affiliate', affiliatePage)
 // engine exists, simply repointing that one line to a different handler),
 // never a rebuild of this list.
 app.get('/drive', drivePage)
-app.get('/send', ecosystemPreviewPage)
-app.get('/stream', ecosystemPreviewPage)
-app.get('/auto', ecosystemPreviewPage)
-app.get('/homes', ecosystemPreviewPage)
-app.get('/travel', ecosystemPreviewPage)
-app.get('/events', ecosystemPreviewPage)
-app.get('/learn', ecosystemPreviewPage)
-app.get('/jobs', ecosystemPreviewPage)
-app.get('/health', ecosystemPreviewPage)
-app.get('/farm', ecosystemPreviewPage)
-app.get('/home', ecosystemPreviewPage)
-app.get('/beauty', ecosystemPreviewPage)
+// Consolidated platform landing pages. Existing operational vertical routes
+// remain intact below; these pages are discovery front doors, not fake
+// fulfillment surfaces.
+for (const platform of ['move','market','services','travel','play','property','health','jobs','business','auto','homes','events','learn','farm','home','beauty','send','stream']) {
+  app.get(`/${platform}`, platformLandingPage)
+}
 
 // ---------- NaijaEats — real UI on top of the restaurants/menus schema (migrations 0078-0081) ----------
 // /eats used to route to the static ecosystemPreviewPage placeholder above.

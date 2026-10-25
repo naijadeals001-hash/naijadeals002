@@ -604,7 +604,7 @@ export const Layout: FC<LayoutProps> = async ({ title, description, user, cartCo
               <span>{t('footer_rights')}</span>
               <div class="flex items-center gap-3">
                 <LanguageSelector locale={locale} variant="footer" />
-                <span class="flex items-center gap-1"><span class="material-symbols-outlined text-sm">download</span>Get the app (coming soon)</span>
+                <span class="flex items-center gap-1"><span class="material-symbols-outlined text-sm">download</span>Get the app (web experience)</span>
               </div>
             </div>
           </div>

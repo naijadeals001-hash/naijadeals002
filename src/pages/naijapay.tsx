@@ -33,14 +33,14 @@ import { getEcosystemNavLinks } from '../lib/ecosystem-nav'
  * backend implementation anywhere in this codebase (no P2P transfer table,
  * no bank-payout table for personal wallets — only sellers/affiliates have
  * payout tables, and those are a different account type entirely) — they
- * render as disabled "Coming Soon" actions, never as buttons that silently
+ * render as disabled "Planned" actions, never as buttons that silently
  * no-op or fake a success screen.
  */
 
 function ComingSoonBadge() {
   return (
     <span class="ml-1.5 align-middle text-[9px] font-bold tracking-wide uppercase text-amber-700 bg-amber-100 border border-amber-300 rounded px-1.5 py-0.5">
-      Coming Soon
+      Planned
     </span>
   )
 }
@@ -65,7 +65,7 @@ const SIDEBAR_ITEMS: { key: string; label: string; icon: string; href?: string; 
   // href intentionally omitted — "Add Money" isn't a separate page, it's a
   // real action triggered via the bottom-sheet modal (openAddMoneySheet() in
   // naijapay.js). It is real/implemented, so the sidebar item must NOT fall
-  // into the disabled/"Coming Soon" render branch — see QA fix below.
+  // into the disabled/"Planned" render branch — see QA fix below.
   { key: 'add', label: 'Add Money', icon: 'add_circle', implemented: true },
   { key: 'cards', label: 'Cards & Payment Methods', icon: 'credit_card', implemented: false },
   { key: 'rewards', label: 'Rewards', icon: 'redeem', implemented: false },
@@ -181,14 +181,14 @@ export async function naijapayPage(c: Context<AppEnv>) {
                   // QA fix: real action with NO dedicated page (currently only
                   // "Add Money" — opens the real Paystack top-up sheet via
                   // naijapay.js). Previously this fell into the disabled/
-                  // "coming soon" branch below purely because it lacked an
+                  // "planned" branch below purely because it lacked an
                   // href, which was factually wrong (Add Money IS live).
                   <button type="button" id="np-sidebar-add-money-btn" class="flex items-center justify-center dt:justify-start dt:gap-3 px-0 dt:px-3 py-2 rounded-lg text-gray-200 hover:bg-white/5 hover:text-white transition w-full text-left" title={item.label}>
                     <span class="material-symbols-outlined text-[19px]">{item.icon}</span>
                     <span class="hidden dt:block">{item.label}</span>
                   </button>
                 ) : (
-                  <span class="flex items-center justify-center dt:justify-between dt:gap-3 px-0 dt:px-3 py-2 rounded-lg text-gray-500 cursor-not-allowed" title={`${item.label} — coming soon`}>
+                  <span class="flex items-center justify-center dt:justify-between dt:gap-3 px-0 dt:px-3 py-2 rounded-lg text-gray-500 cursor-not-allowed" title={`${item.label} — planned`}>
                     <span class="flex items-center dt:gap-3">
                       <span class="material-symbols-outlined text-[19px]">{item.icon}</span>
                       <span class="hidden dt:block">{item.label}</span>
@@ -283,7 +283,7 @@ export async function naijapayPage(c: Context<AppEnv>) {
                     {/* QA fix (visual-qa pass): Add Money is the ONLY real
                         action here — it previously rendered as one of three
                         equal-weight pills that wrapped to 3 stacked lines on
-                        mobile, letting two disabled Coming Soon buttons visually
+                        mobile, letting two disabled Planned buttons visually
                         compete with the one thing a user can actually do. Add
                         Money is now a full-width, unmistakably primary CTA;
                         Send Money/Withdraw are demoted to a smaller, muted,
@@ -293,10 +293,10 @@ export async function naijapayPage(c: Context<AppEnv>) {
                       <span class="material-symbols-outlined text-[18px]">add</span>Add Money
                     </button>
                     <div class="grid grid-cols-2 gap-2 mb-4">
-                      <button type="button" disabled class="flex items-center justify-center gap-1 bg-white/5 text-white/40 font-medium text-[11px] rounded-lg px-2 py-1.5 cursor-not-allowed" title="Send Money — coming soon">
+                      <button type="button" disabled class="flex items-center justify-center gap-1 bg-white/5 text-white/40 font-medium text-[11px] rounded-lg px-2 py-1.5 cursor-not-allowed" title="Send Money — planned">
                         <span class="material-symbols-outlined text-[13px]">send</span>Send<ComingSoonBadge />
                       </button>
-                      <button type="button" disabled class="flex items-center justify-center gap-1 bg-white/5 text-white/40 font-medium text-[11px] rounded-lg px-2 py-1.5 cursor-not-allowed" title="Withdraw — coming soon">
+                      <button type="button" disabled class="flex items-center justify-center gap-1 bg-white/5 text-white/40 font-medium text-[11px] rounded-lg px-2 py-1.5 cursor-not-allowed" title="Withdraw — planned">
                         <span class="material-symbols-outlined text-[13px]">account_balance</span>Withdraw<ComingSoonBadge />
                       </button>
                     </div>
@@ -359,7 +359,7 @@ export async function naijapayPage(c: Context<AppEnv>) {
                     { label: 'Request', icon: 'request_quote' },
                     { label: 'Airtime & Bills', icon: 'sim_card' },
                   ].map((a) => (
-                    <button type="button" disabled class="flex flex-col items-center gap-1.5 bg-gray-50 border border-gray-100 rounded-xl p-3 opacity-60 cursor-not-allowed relative" title={`${a.label} — coming soon`}>
+                    <button type="button" disabled class="flex flex-col items-center gap-1.5 bg-gray-50 border border-gray-100 rounded-xl p-3 opacity-60 cursor-not-allowed relative" title={`${a.label} — planned`}>
                       <span class="material-symbols-outlined text-gray-400 text-[20px]">{a.icon}</span>
                       <span class="text-[11px] font-medium text-gray-500">{a.label}</span>
                       <span class="absolute top-1 right-1 text-[7px] font-bold uppercase bg-amber-100 text-amber-700 rounded px-1">Soon</span>

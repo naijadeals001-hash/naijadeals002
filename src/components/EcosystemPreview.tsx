@@ -41,7 +41,7 @@ const ACCENT_CLASSES: Record<string, { badge: string; iconBg: string; heroFrom: 
 }
 
 const STATUS_LABEL: Record<string, string> = {
-  coming_soon: 'Coming Soon',
+  coming_soon: 'In development',
   in_development: 'In Development',
   beta: 'Beta',
   live: 'Live'
@@ -63,7 +63,7 @@ const SERVICE_PRESELECT: Record<string, string> = {
 
 export const EcosystemPreview: FC<EcosystemPreviewProps> = ({ vertical, features }) => {
   const accent = ACCENT_CLASSES[vertical.accent_color] || ACCENT_CLASSES.green
-  const statusLabel = STATUS_LABEL[vertical.status] || 'Coming Soon'
+  const statusLabel = STATUS_LABEL[vertical.status] || 'Status requires verification'
   const waitlistFormId = `waitlist-form-${vertical.slug}`
   const preselectService = SERVICE_PRESELECT[vertical.slug] || 'allServices'
 

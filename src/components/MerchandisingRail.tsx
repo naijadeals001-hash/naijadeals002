@@ -123,7 +123,7 @@ const EcosystemCard: FC<{ card: EcosystemSpotlightCard }> = ({ card }) => {
   return (
     <a
       href={card.route}
-      aria-label={`${card.name}: ${card.status === 'live' ? card.cta_label : 'Coming soon'}`}
+      aria-label={`${card.name}: ${card.status === 'live' ? card.cta_label : 'In development'}`}
       class="group flex flex-col w-[142px] sm:w-[150px] md:w-[164px] h-[154px] md:h-[166px] shrink-0 snap-start rounded-xl overflow-hidden border border-gray-200 bg-white shadow-sm hover:shadow-lg hover:-translate-y-0.5 transition-all"
     >
       <div class="relative flex-1 overflow-hidden bg-gray-100">
@@ -146,7 +146,7 @@ const EcosystemCard: FC<{ card: EcosystemSpotlightCard }> = ({ card }) => {
       </div>
       <div class={`px-2 py-1.5 ${accent.bg}`}>
         <p class={`text-[11px] font-bold ${accent.text} leading-tight line-clamp-1`}>{card.name}</p>
-        <p class="text-[9px] text-gray-500 leading-tight line-clamp-1">{card.status === 'live' ? card.cta_label : 'Coming soon'}</p>
+        <p class="text-[9px] text-gray-500 leading-tight line-clamp-1">{card.status === 'live' ? card.cta_label : 'In development'}</p>
       </div>
     </a>
   )

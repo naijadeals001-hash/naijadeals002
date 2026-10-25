@@ -13,7 +13,7 @@ import { EcosystemWaitlistModal } from '../components/EcosystemWaitlistModal'
  * drift out of sync with each other — same source of truth, same routes.
  */
 const STATUS_BADGE: Record<string, { label: string; cls: string }> = {
-  coming_soon: { label: 'Coming soon', cls: 'bg-gray-100 text-gray-500' },
+  coming_soon: { label: 'In development', cls: 'bg-gray-100 text-gray-500' },
   in_development: { label: 'In development', cls: 'bg-blue-100 text-blue-600' },
   beta: { label: 'Beta', cls: 'bg-amber-100 text-amber-700' },
   live: { label: 'Live now', cls: 'bg-primary-light text-primary-dark' }

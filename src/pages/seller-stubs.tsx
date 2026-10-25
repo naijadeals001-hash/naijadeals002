@@ -13,7 +13,7 @@ import type { AppEnv } from '../types'
  * requireActiveSeller-gated page reflecting the seller's ACTUAL resolved
  * vendor row (real store name, real verification/store status) — nothing
  * fabricated — while being honest that the full feature (product CRUD, order
- * management, payout creation) is "Coming soon" and belongs to Phase 3+.
+ * management, payout creation) is "Feature access is limited to the current seller capability set" and belongs to Phase 3+.
  *
  * These pages are mounted in src/index.tsx behind:
  *   app.get('/seller/dashboard', requireAuthPage, requireActiveSeller, sellerDashboardPage)
@@ -34,7 +34,7 @@ function ComingSoonPanel({ icon, title, desc }: { icon: string; title: string; d
       <p class="text-gray-500 mt-3 text-sm max-w-md mx-auto">{desc}</p>
       <span class="inline-flex items-center gap-1.5 text-xs font-semibold bg-gray-100 text-gray-500 rounded-full px-3 py-1.5 mt-6">
         <span class="material-symbols-outlined text-sm">schedule</span>
-        Coming soon
+        Feature access is limited to the current seller capability set
       </span>
     </div>
   )
@@ -58,7 +58,7 @@ export async function sellerDashboardPage(c: Context<AppEnv>) {
           </p>
           <span class="inline-flex items-center gap-1.5 text-xs font-semibold bg-gray-100 text-gray-500 rounded-full px-3 py-1.5 mt-5">
             <span class="material-symbols-outlined text-sm">schedule</span>
-            Full dashboard — coming soon
+            Full dashboard capability is not enabled for this account
           </span>
         </div>
       </div>
