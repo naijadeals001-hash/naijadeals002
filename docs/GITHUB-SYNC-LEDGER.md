@@ -73,6 +73,14 @@
 - Final acceptance after PM2 hardening: booking matrix `20/20`, CC-003 `4/4`, TypeScript current/new diagnostics `0/0`, build `272` modules, preview `/`, `/drive`, `/eats` all `200`, PM2 error-log delta `0` during booking. Browser-authenticated acceptance remains unavailable.
 - Production deployment, production mutation, DNS change and force-push were not performed. This batch contains the PM2 hardening and updated evidence documentation only.
 
+## Low-token execution sprint — local, pending push
+
+- Baseline verified at local/remote `c973cd5dc0012eaf29c16036b7cf8f2d9b27542`; branch `feat/naijadrive-private-ride-foundation`; `.npm-cache-rea/` preserved; `/home/user/webapp` untouched. PM2 preview remained online and `/`, `/drive`, `/eats` returned 200.
+- Global helper verified NaijaDeals and `/home/user/webapp`: ECC `PASS`, REA `PARTIAL`, Soup `PARTIAL`; no OpenCode model retries were attempted.
+- Selected the highest-priority safe existing slice, `DRIVE-002`: hardened the existing driver offer inbox action handling in `src/pages/drive.tsx`. Buttons now validate identifiers, prevent duplicate clicks, expose busy state, parse non-JSON errors safely, refresh after success, and restore the control after failure. Server-side authorization and offer state rules were unchanged.
+- Focused NaijaDrive regression: **14/14 passed** across private ride, carpool, preview, offer expiry/rejection and concurrent acceptance. TypeScript: current/new diagnostics `0/0`. Build: `272` modules. `git diff --check`: passed.
+- This slice is API/regression verified; authenticated browser acceptance remains unavailable. No production deployment, production mutation, DNS change or force-push performed.
+
 ## TS-001 — TypeScript diagnostic remediation and quality-gate recovery
 
 - Starting checkpoint verified: local and remote `210ad1c5b533d5c4f73e577956c773dda7d64e3c` on `feat/naijadrive-private-ride-foundation`; `.npm-cache-rea/` preserved and unrelated worktrees untouched.

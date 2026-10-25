@@ -145,7 +145,25 @@ export async function drivePage(c: Context<AppEnv>) {
             if (!response.ok) throw new Error(body.error || 'Driver sign-in required.');
             offersList.innerHTML = body.offers.length ? body.offers.map((offer) => '<article class="rounded-2xl border border-slate-200 bg-white p-4"><div class="flex items-center justify-between gap-2"><strong>' + offer.pickup_zone + ' → ' + offer.dropoff_zone + '</strong><span class="text-xs font-bold uppercase text-slate-500">' + offer.status + '</span></div><p class="mt-2 text-sm text-slate-500">Ride #' + offer.ride_id + ' · ₦' + (Number(offer.fare_kobo) / 100).toLocaleString('en-NG') + ' · ' + offer.vehicle_category + '</p>' + (offer.status === 'offered' ? '<div class="mt-3 flex gap-2"><button data-offer-action="accept" data-offer-id="' + offer.id + '" class="rounded-lg bg-[#0b7a3b] px-3 py-2 text-xs font-bold text-white">Accept</button><button data-offer-action="reject" data-offer-id="' + offer.id + '" class="rounded-lg border border-slate-300 px-3 py-2 text-xs font-bold">Reject</button></div>' : '') + '</article>').join('') : '<div class="rounded-2xl border border-dashed border-slate-300 bg-white p-5 text-sm text-slate-500">No persisted offers for this driver.</div>';
             offersStatus.textContent = body.offers.length + ' persisted offer(s). Expiry is enforced server-side after ' + body.offer_expiry_minutes + ' minutes.';
-            offersList.querySelectorAll('[data-offer-action]').forEach((button) => button.addEventListener('click', async () => { const action = button.getAttribute('data-offer-action'); const id = button.getAttribute('data-offer-id'); const endpoint = action === 'accept' ? '/api/drive/driver/offers/' + id + '/accept' : '/api/drive/driver/offers/' + id + '/reject'; const res = await fetch(endpoint, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ reason: 'Driver decision' }) }); if (!res.ok) { offersStatus.textContent = (await res.json()).error || 'Offer action failed.'; return; } loadDriverOffers(); }));
+            offersList.querySelectorAll('[data-offer-action]').forEach((button) => button.addEventListener('click', async () => {
+              const action = button.getAttribute('data-offer-action');
+              const id = button.getAttribute('data-offer-id');
+              if (!action || !id || button.disabled) return;
+              const endpoint = action === 'accept' ? '/api/drive/driver/offers/' + id + '/accept' : '/api/drive/driver/offers/' + id + '/reject';
+              button.disabled = true;
+              button.setAttribute('aria-busy', 'true');
+              offersStatus.textContent = action === 'accept' ? 'Accepting persisted offer…' : 'Rejecting persisted offer…';
+              try {
+                const res = await fetch(endpoint, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ reason: 'Driver decision' }) });
+                const result = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(result.error || 'Offer action failed.');
+                await loadDriverOffers();
+              } catch (error) {
+                offersStatus.textContent = error instanceof Error ? error.message : 'Offer action failed.';
+                button.disabled = false;
+                button.removeAttribute('aria-busy');
+              }
+            }));
           } catch (error) { offersStatus.textContent = error instanceof Error ? error.message : 'Driver sign-in required.'; }
         }
         document.getElementById('load-driver-offers')?.addEventListener('click', loadDriverOffers);
