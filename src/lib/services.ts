@@ -215,7 +215,7 @@ export async function getListingsForProvider(db: D1Database, providerProfileId: 
 /** Public discovery — active/approved listings only, joined with provider + category for the card view. Used by GET /api/services and GET /api/services/:id. */
 export async function getPublicServiceListings(
   db: D1Database,
-  opts: { categorySlug?: string; city?: string; countryIso?: string; limit?: number; offset?: number } = {}
+  opts: { categorySlug?: string; city?: string; q?: string; countryIso?: string; limit?: number; offset?: number } = {}
 ): Promise<ServiceListingRow[]> {
   const limit = opts.limit ?? 20
   const offset = opts.offset ?? 0
@@ -229,6 +229,11 @@ export async function getPublicServiceListings(
   if (opts.city) {
     clauses.push(`EXISTS (SELECT 1 FROM service_areas sa WHERE sa.provider_profile_id = pp.id AND sa.city = ?)`)
     binds.push(opts.city)
+  }
+  if (opts.q?.trim()) {
+    clauses.push(`(LOWER(sl.title) LIKE ? OR LOWER(sl.description) LIKE ? OR LOWER(pp.display_name) LIKE ? OR LOWER(c.name) LIKE ?)`)
+    const query = `%${opts.q.trim().toLowerCase()}%`
+    binds.push(query, query, query, query)
   }
   if (opts.countryIso) {
     clauses.push(`pp.country_iso = ?`)

@@ -128,7 +128,7 @@ export async function gigsHomePage(c: Context<AppEnv>) {
 
   const [categories, featured, countRows] = await Promise.all([
     getTopLevelServiceCategories(db),
-    getPublicServiceListings(db, { countryIso: 'NG', limit: 12 }),
+    getPublicServiceListings(db, { countryIso: 'NG', q: c.req.query('q') || undefined, city: c.req.query('city') || undefined, limit: 12 }),
     db
       .prepare(
         `SELECT COALESCE(parent.id, c.id) AS root_id, COUNT(sl.id) AS cnt
@@ -149,52 +149,41 @@ export async function gigsHomePage(c: Context<AppEnv>) {
       user={user}
       locale={locale}
     >
-      <div class="max-w-[80rem] mx-auto px-4 md:px-6 lg:px-8 py-6">
-        {/* Hero */}
-        <section id="gigs-hero" class="bg-primary-dark text-white rounded-2xl px-6 py-8 md:px-10 md:py-12 mb-8">
-          <span class="inline-flex items-center gap-1.5 text-xs font-semibold bg-white/10 px-2.5 py-1 rounded-full mb-3">
-            <span class="material-symbols-outlined text-sm">handyman</span>NaijaGigs
-          </span>
-          <h1 class="text-2xl md:text-3xl font-bold max-w-xl">Hire trusted professionals for any job, anywhere in Nigeria.</h1>
-          <p class="text-white/70 text-sm mt-2 max-w-lg">Plumbers, electricians, cleaners, mechanics, tutors, makeup artists and more — verified providers, transparent quotes, escrow-protected payment.</p>
-          <a href="/gigs/request" class="inline-flex items-center gap-1.5 mt-5 bg-primary-fixed text-primary-dark font-semibold px-5 py-2.5 rounded-lg hover:brightness-95 transition">
-            <span class="material-symbols-outlined text-lg">post_add</span>Post a job &amp; get quotes
-          </a>
-        </section>
-
-        {/* Category grid */}
-        <section id="gigs-categories" class="mb-10">
-          <h2 class="text-lg font-bold text-gray-900 mb-4">Browse by category</h2>
-          <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
-            {categories.map((cat) => (
-              <a href={`/gigs/category/${cat.slug}`} class="flex flex-col items-center gap-2 bg-white border border-gray-200 rounded-xl px-3 py-5 hover:shadow-md hover:border-primary transition-all text-center">
-                <span class="w-12 h-12 rounded-full bg-primary-light flex items-center justify-center">
-                  <span class="material-symbols-outlined text-primary text-2xl">{cat.icon}</span>
-                </span>
-                <span class="text-sm font-semibold text-gray-800">{cat.name}</span>
-                <span class="text-[11px] text-gray-400">{countByCategory.get(cat.id) ?? 0} provider{(countByCategory.get(cat.id) ?? 0) === 1 ? '' : 's'}</span>
-              </a>
-            ))}
+      <main class="min-h-screen bg-[#f5f7f4]">
+        <section id="gigs-hero" class="relative overflow-hidden bg-[#102d1c] text-white">
+          <div class="absolute -right-20 -top-28 h-80 w-80 rounded-full border-[28px] border-[#e8b923]/25" aria-hidden="true"></div>
+          <div class="absolute bottom-0 right-1/3 h-32 w-32 rounded-full bg-[#1e7b4b]/30 blur-3xl" aria-hidden="true"></div>
+          <div class="relative mx-auto max-w-[80rem] px-4 py-12 md:px-8 md:py-16">
+            <div class="max-w-3xl">
+              <div class="flex flex-wrap items-center gap-3 text-sm"><span class="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 font-semibold"><span class="material-symbols-outlined text-base text-[#f3c744]">handyman</span>NaijaGigs</span><span class="text-white/60">Services for real life in Nigeria</span></div>
+              <h1 class="mt-5 max-w-2xl text-3xl font-bold leading-tight md:text-5xl">Find the right hands for the job.</h1>
+              <p class="mt-4 max-w-xl text-base leading-7 text-white/75">From a quick repair to a bigger project, discover professionals, compare written quotes and keep the work journey in one place.</p>
+              <form id="gigs-discovery-form" action="/gigs" method="get" class="mt-7 grid gap-2 rounded-2xl bg-white p-2 shadow-2xl md:grid-cols-[1fr_170px_auto]">
+                <label class="flex items-center gap-2 rounded-xl px-3 py-2 text-gray-800"><span class="material-symbols-outlined text-gray-400">search</span><span class="sr-only">Search services</span><input name="q" value={c.req.query('q') ?? ''} placeholder="What do you need help with?" class="w-full bg-transparent text-sm outline-none" /></label>
+                <label class="flex items-center gap-2 rounded-xl border-t border-gray-100 px-3 py-2 text-gray-800 md:border-l md:border-t-0"><span class="material-symbols-outlined text-gray-400">location_on</span><span class="sr-only">City</span><input name="city" value={c.req.query('city') ?? ''} placeholder="City" class="w-full bg-transparent text-sm outline-none" /></label>
+                <button class="inline-flex min-h-[46px] items-center justify-center gap-2 rounded-xl bg-[#e8b923] px-5 font-bold text-[#102d1c] transition hover:bg-[#f3c744]"><span class="material-symbols-outlined text-lg">search</span>Find a pro</button>
+              </form>
+              <div class="mt-5 flex flex-wrap gap-2 text-xs text-white/70"><span>Popular:</span>{categories.slice(0, 4).map((cat) => <a href={`/gigs/category/${cat.slug}`} class="rounded-full border border-white/15 px-3 py-1 hover:bg-white/10">{cat.name}</a>)}</div>
+            </div>
           </div>
         </section>
 
-        {/* Featured listings */}
-        <section id="gigs-featured">
-          <div class="flex items-center justify-between mb-4">
-            <h2 class="text-lg font-bold text-gray-900">Top-rated professionals</h2>
-          </div>
-          {featured.length === 0 ? (
-            <div class="text-center py-16 bg-white border border-gray-200 rounded-xl text-gray-400">
-              <span class="material-symbols-outlined text-4xl mb-2">search_off</span>
-              <p>No active service listings yet.</p>
+        <div class="mx-auto max-w-[80rem] px-4 py-8 md:px-8 md:py-12">
+          <section id="gigs-categories" aria-labelledby="gigs-categories-title">
+            <div class="mb-4 flex items-end justify-between gap-4"><div><p class="text-xs font-bold uppercase tracking-[.18em] text-[#1e7b4b]">Start here</p><h2 id="gigs-categories-title" class="mt-1 text-2xl font-bold text-gray-900">What do you need done?</h2></div><a href="/gigs/request" class="hidden text-sm font-bold text-[#1e7b4b] hover:underline sm:inline-flex">Post a custom request <span class="material-symbols-outlined text-base">arrow_forward</span></a></div>
+            <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5">
+              {categories.map((cat) => <a href={`/gigs/category/${cat.slug}`} class="group rounded-2xl border border-gray-200 bg-white p-4 transition hover:-translate-y-0.5 hover:border-[#1e7b4b] hover:shadow-lg"><span class="flex h-11 w-11 items-center justify-center rounded-xl bg-[#e7f3ea] text-[#1e7b4b]"><span class="material-symbols-outlined text-2xl">{cat.icon}</span></span><span class="mt-3 block text-sm font-bold text-gray-900">{cat.name}</span><span class="mt-1 block text-xs text-gray-500">{countByCategory.get(cat.id) ?? 0} active listing{(countByCategory.get(cat.id) ?? 0) === 1 ? '' : 's'}</span></a>)}
             </div>
-          ) : (
-            <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-              {featured.map((listing) => <ServiceListingCard listing={listing} />)}
-            </div>
-          )}
-        </section>
-      </div>
+          </section>
+
+          <section id="gigs-featured" class="mt-12" aria-labelledby="gigs-featured-title">
+            <div class="mb-4 flex items-end justify-between gap-4"><div><p class="text-xs font-bold uppercase tracking-[.18em] text-[#1e7b4b]">Real listings</p><h2 id="gigs-featured-title" class="mt-1 text-2xl font-bold text-gray-900">Professionals ready to help</h2></div><span class="text-sm text-gray-500">{featured.length} shown</span></div>
+            {featured.length === 0 ? <div class="rounded-2xl border border-dashed border-gray-300 bg-white px-6 py-16 text-center"><span class="material-symbols-outlined text-4xl text-gray-300">search_off</span><p class="mt-3 font-semibold text-gray-700">No active listings match this search.</p><p class="mt-1 text-sm text-gray-500">Try another city or post a custom request for providers to respond to.</p><a href="/gigs/request" class="mt-5 inline-flex rounded-xl bg-[#1e7b4b] px-4 py-2.5 text-sm font-bold text-white">Post a request</a></div> : <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">{featured.map((listing) => <ServiceListingCard listing={listing} />)}</div>}
+          </section>
+
+          <section class="mt-12 grid gap-4 md:grid-cols-3" aria-label="How NaijaGigs works"><div class="rounded-2xl bg-[#102d1c] p-5 text-white"><span class="material-symbols-outlined text-[#f3c744]">edit_note</span><h3 class="mt-3 font-bold">1. Tell us the job</h3><p class="mt-1 text-sm leading-6 text-white/70">Share the brief, location and timing. Your request stays tied to your account.</p></div><div class="rounded-2xl border border-gray-200 bg-white p-5"><span class="material-symbols-outlined text-[#1e7b4b]">compare_arrows</span><h3 class="mt-3 font-bold">2. Compare quotes</h3><p class="mt-1 text-sm leading-6 text-gray-600">Providers send written offers. Review scope, price and terms before accepting.</p></div><div class="rounded-2xl border border-gray-200 bg-white p-5"><span class="material-symbols-outlined text-[#1e7b4b]">verified_user</span><h3 class="mt-3 font-bold">3. Keep the record</h3><p class="mt-1 text-sm leading-6 text-gray-600">Orders, status updates and completion confirmation use the existing Service Engine.</p></div></section>
+        </div>
+      </main>
     </Layout>
   )
 }
