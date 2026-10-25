@@ -156,7 +156,7 @@ export const Layout: FC<LayoutProps> = async ({ title, description, user, cartCo
               </a>
               <label class="hidden lg:flex flex-col justify-center leading-tight px-2 py-1 rounded-lg hover:bg-white/10 transition-colors shrink-0 cursor-pointer">
                 <span class="text-[11px] text-white/70">{t('nav_deliver_to')}</span>
-                <select id="city-selector" class="text-sm font-semibold bg-transparent outline-none cursor-pointer [&>option]:text-gray-900">
+                  <select id="city-selector" aria-label="Deliver to city" class="text-sm font-semibold bg-transparent outline-none cursor-pointer [&>option]:text-gray-900">
                   {CITIES.map((city) => <option value={city} selected={city === selectedCity}>{city}</option>)}
                 </select>
               </label>
@@ -165,6 +165,7 @@ export const Layout: FC<LayoutProps> = async ({ title, description, user, cartCo
                   type="text"
                   name="q"
                   placeholder="Search products, brands, sellers..."
+                  aria-label="Search products, brands, and sellers"
                   class="flex-1 px-4 py-2.5 text-sm text-gray-800 outline-none min-w-0"
                 />
                 <button type="submit" class="flex items-center justify-center px-4 bg-primary-fixed text-primary-dark shrink-0">
