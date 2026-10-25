@@ -5,10 +5,10 @@
 - Repository: `https://github.com/naijadeals001-hash/naijadeals002.git`
 - Local worktree: `/home/user/worktrees/release-naijaeats-phase1`
 - Branch: `feat/naijadrive-private-ride-foundation`
-- Commit: `395bd1e3f768ac2094a3274b99f0ca77c7e8ec06`
-- Commit message: `feat(stream-send): add truthful discovery and logistics surfaces`
+- Commit: `b8428dad9eb68197cc6e71ec0c3e5bfd8bd3ce42`
+- Commit message: `feat(control-center): persist ecosystem development registry`
 - Remote branch: `origin/feat/naijadrive-private-ride-foundation`
-- Remote SHA verified: `395bd1e3f768ac2094a3274b99f0ca77c7e8ec06`
+- Remote SHA verified: `b8428dad9eb68197cc6e71ec0c3e5bfd8bd3ce42`
 - Push result: successful
 - Batches delivered: A — NaijaGigs; D/E foundation — NaijaStream and NaijaSend
 - Prior Batch B implementation commit: `0f7d51d7faff74793e43ad192054b995c56d16fc` (remote verified)
