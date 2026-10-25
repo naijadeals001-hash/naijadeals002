@@ -105,6 +105,8 @@ import {
 } from '../lib/category-nav-admin'
 import { invalidateEcosystemNavCache } from '../lib/ecosystem-nav'
 import { getCategoryPillNav, invalidateCategoryPillNavCache } from '../lib/category-pill-nav'
+import { getUnifiedEcosystemRegistry } from '../lib/control-center-ecosystem'
+import { listRolloutCountries, listRolloutVerticals, getCountryRollout, setCountryStatus, setVerticalCountryOverride, type CountryRolloutStatus } from '../lib/control-center-rollout'
 
 export const apiControlCenterRoutes = new Hono<AppEnv>()
 
@@ -281,6 +283,93 @@ apiControlCenterRoutes.post(
 // resolved permission set already allows them to see (see
 // control-center-search.ts) — this endpoint cannot be used to discover
 // data a role couldn't otherwise reach through the normal nav.
+
+apiControlCenterRoutes.get('/ecosystem', async (c) => {
+  const registry = await getUnifiedEcosystemRegistry(c.env.DB)
+  return c.json({
+    identityBoundary: 'shared_engine_1_session',
+    authorizationBoundary: 'control_center_rbac',
+    auditBoundary: 'cc_audit_logs',
+    financeEntryPoint: '/control-center/finance',
+    registry,
+  })
+})
+
+// ---------- Pan-African rollout controls ----------
+// Country and vertical activation are server-side controls. The preview may
+// display a disabled surface, but these endpoints are the authoritative write
+// boundary and every mutation records an immutable Central Admin audit event.
+apiControlCenterRoutes.get('/rollout/countries', requireControlCenterPermission('configuration.countries.read'), async (c) => {
+  return c.json({ countries: await listRolloutCountries(c.env.DB) })
+})
+
+apiControlCenterRoutes.get('/rollout/verticals', requireControlCenterPermission('configuration.countries.read'), async (c) => {
+  const countryIso = c.req.query('country')
+  return c.json({ country: countryIso?.toUpperCase() ?? null, verticals: await listRolloutVerticals(c.env.DB, countryIso) })
+})
+
+apiControlCenterRoutes.get('/rollout/countries/:iso', requireControlCenterPermission('configuration.countries.read'), async (c) => {
+  const rollout = await getCountryRollout(c.env.DB, c.req.param('iso'))
+  if (!rollout.country) return c.json({ error: 'Country not found' }, 404)
+  return c.json(rollout)
+})
+
+apiControlCenterRoutes.patch('/rollout/countries/:id/status', requireControlCenterPermission('country.status.manage'), async (c) => {
+  const admin = c.get('user')!
+  const countryId = Number(c.req.param('id'))
+  const body = await c.req.json<{ status?: CountryRolloutStatus; reason?: string }>().catch(() => null)
+  const allowed: CountryRolloutStatus[] = ['PLANNED', 'PRE-LAUNCH', 'BETA', 'LIVE', 'PAUSED', 'SUSPENDED']
+  if (!Number.isInteger(countryId) || countryId <= 0) return c.json({ error: 'Invalid country id' }, 400)
+  if (!body?.status || !allowed.includes(body.status)) return c.json({ error: `status must be one of: ${allowed.join(', ')}` }, 400)
+
+  const before = await c.env.DB.prepare('SELECT id, iso_code, name, status FROM cc_countries WHERE id = ?').bind(countryId).first<any>()
+  if (!before) return c.json({ error: 'Country not found' }, 404)
+  const country = await setCountryStatus(c.env.DB, countryId, body.status)
+  await recordControlCenterAction(c.env.DB, {
+    actorUserId: admin.id,
+    actorName: admin.name,
+    action: 'country_rollout_status_changed',
+    entityType: 'cc_country',
+    entityId: String(countryId),
+    beforeState: before,
+    afterState: country,
+    context: { permission_used: 'country.status.manage', reason: body.reason ?? null },
+    success: true,
+    ipAddress: getClientIp(c.req.header('cf-connecting-ip') ?? null),
+  })
+  return c.json({ success: true, country })
+})
+
+apiControlCenterRoutes.patch('/rollout/countries/:id/verticals/:verticalKey', requireControlCenterPermission('configuration.write'), async (c) => {
+  const admin = c.get('user')!
+  const countryId = Number(c.req.param('id'))
+  const verticalKey = c.req.param('verticalKey')
+  const body = await c.req.json<{ enabled?: boolean; reason?: string }>().catch(() => null)
+  if (!Number.isInteger(countryId) || countryId <= 0) return c.json({ error: 'Invalid country id' }, 400)
+  if (typeof body?.enabled !== 'boolean') return c.json({ error: 'enabled must be boolean' }, 400)
+  const country = await c.env.DB.prepare('SELECT id, iso_code, name FROM cc_countries WHERE id = ?').bind(countryId).first<any>()
+  const capability = await c.env.DB.prepare('SELECT id, key, name, enabled FROM cc_capabilities WHERE key = ? OR key = ?').bind(verticalKey, `ecosystem.${verticalKey}`).first<any>()
+  if (!country) return c.json({ error: 'Country not found' }, 404)
+  if (!capability || !capability.key.startsWith('ecosystem.')) return c.json({ error: 'Ecosystem vertical not found' }, 404)
+
+  const before = await c.env.DB.prepare(`
+    SELECT enabled FROM cc_capability_country_overrides WHERE capability_id = ? AND country_id = ?
+  `).bind(capability.id, countryId).first<any>()
+  await setVerticalCountryOverride(c.env.DB, capability.key, countryId, body.enabled, admin.id, body.reason ?? null)
+  await recordControlCenterAction(c.env.DB, {
+    actorUserId: admin.id,
+    actorName: admin.name,
+    action: 'vertical_country_override_changed',
+    entityType: 'cc_capability_country_override',
+    entityId: `${capability.key}:${country.iso_code}`,
+    beforeState: before,
+    afterState: { country_id: countryId, country_iso: country.iso_code, capability_key: capability.key, enabled: body.enabled },
+    context: { permission_used: 'configuration.write', reason: body.reason ?? null },
+    success: true,
+    ipAddress: getClientIp(c.req.header('cf-connecting-ip') ?? null),
+  })
+  return c.json({ success: true, country, vertical: capability.key, enabled: body.enabled })
+})
 
 apiControlCenterRoutes.get('/search', async (c) => {
   const ccAccess = c.get('ccAccess')!

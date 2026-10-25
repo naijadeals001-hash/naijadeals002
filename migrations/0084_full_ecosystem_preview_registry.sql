@@ -1,0 +1,38 @@
+-- NaijaDeals full ecosystem registry expansion.
+--
+-- This migration adds honest, shared preview metadata for the reserved verticals
+-- that were already part of the central product registry but had no public route
+-- or persisted ecosystem record. It does not claim that these verticals are live.
+-- Empty hero paths are intentional: the shared preview component renders an
+-- original gradient/icon surface when no approved vertical-specific art exists.
+-- NaijaShop remains the real marketplace route and is intentionally not inserted
+-- into ecosystem_verticals, matching migration 0010's architecture.
+
+INSERT OR IGNORE INTO ecosystem_verticals
+  (slug, route, name, tagline, description, icon, accent_color, hero_image_desktop, hero_image_mobile, status, cta_label, seo_title, seo_description, display_order)
+VALUES
+  ('pay', '/naijapay', 'NaijaPay', 'One trusted wallet for everyday Nigeria.', 'NaijaPay is the shared finance entry point for wallet activity, payment history and future merchant services. Existing wallet data remains the canonical source; no second ledger is created here.', 'account_balance_wallet', 'indigo', '', '', 'in_development', 'Open NaijaPay', 'NaijaPay — Shared Payments & Finance for Nigeria', 'NaijaPay is the shared NaijaDeals finance experience for wallet activity, payment history and future merchant services.', 90),
+  ('auto', '/auto', 'NaijaAuto', 'Buy, maintain and move with confidence.', 'NaijaAuto will connect vehicle listings, parts and verified automotive services through the shared marketplace, service and logistics engines.', 'directions_car', 'slate', '', '', 'coming_soon', 'Notify me', 'NaijaAuto — Vehicles, Parts & Services in Nigeria', 'NaijaAuto will bring vehicles, parts, repairs and automotive services into the NaijaDeals ecosystem.', 100),
+  ('homes', '/homes', 'NaijaHomes', 'Find property for the next chapter.', 'NaijaHomes is the long-term property layer for homes, land, rentals and agents. It remains distinct from short-stay reservations in NaijaStay.', 'home_work', 'orange', '', '', 'coming_soon', 'Notify me', 'NaijaHomes — Property, Rentals & Land in Nigeria', 'NaijaHomes will support Nigerian property discovery, rentals, land and agent workflows.', 110),
+  ('travel', '/travel', 'NaijaTravel', 'Plan the journey, not just the ticket.', 'NaijaTravel will coordinate travel discovery and booking integrations across transport, stays, transfers and experiences without creating duplicate payment or booking engines.', 'travel_explore', 'blue', '', '', 'coming_soon', 'Notify me', 'NaijaTravel — Travel Search & Booking in Nigeria', 'NaijaTravel will connect travel discovery, stays, transfers and experiences through shared NaijaDeals engines.', 120),
+  ('events', '/events', 'NaijaEvents', 'Discover what is happening around you.', 'NaijaEvents will support event discovery, ticketing and organizer workflows using capacity-aware booking primitives and shared payments.', 'event', 'purple', '', '', 'coming_soon', 'Notify me', 'NaijaEvents — Nigerian Events & Experiences', 'NaijaEvents will support event discovery, tickets, venues and organizer workflows.', 130),
+  ('learn', '/learn', 'NaijaLearn', 'Learn skills that move you forward.', 'NaijaLearn will combine courses, tutors, live sessions and progress tracking with shared identity, booking and payment services.', 'school', 'green', '', '', 'coming_soon', 'Notify me', 'NaijaLearn — Courses, Tutors & Skills in Nigeria', 'NaijaLearn will connect learners with courses, tutors, vocational training and progress tools.', 140),
+  ('jobs', '/jobs', 'NaijaJobs', 'Find work. Find talent. Build better.', 'NaijaJobs will support formal recruitment with employer profiles, job listings, applications and candidate workflows distinct from task-based NaijaGigs services.', 'work', 'indigo', '', '', 'coming_soon', 'Notify me', 'NaijaJobs — Jobs & Recruitment in Nigeria', 'NaijaJobs will support Nigerian employers, candidates, job listings and applications.', 150),
+  ('health', '/health', 'NaijaHealth', 'Care discovery with trust built in.', 'NaijaHealth will connect people with verified providers, pharmacies, diagnostics and appointments while respecting Nigerian health-data and regulatory requirements.', 'health_and_safety', 'red', '', '', 'coming_soon', 'Notify me', 'NaijaHealth — Healthcare Discovery & Appointments', 'NaijaHealth will support healthcare discovery, verified providers, appointments and health services.', 160),
+  ('farm', '/farm', 'NaijaFarm', 'From Nigerian producers to trusted markets.', 'NaijaFarm will connect farmers, suppliers and bulk buyers and can later supply NaijaFresh through shared marketplace and logistics contracts.', 'agriculture', 'green', '', '', 'coming_soon', 'Notify me', 'NaijaFarm — Agricultural Products & Suppliers in Nigeria', 'NaijaFarm will support agricultural products, suppliers, bulk buyers and farm-to-market logistics.', 170),
+  ('home', '/home', 'NaijaHome', 'Trusted help for the place you live.', 'NaijaHome is the home-services presentation layer for cleaning, repairs, maintenance and local professionals, reusing the shared service, booking and trust engines.', 'home_repair_service', 'orange', '', '', 'coming_soon', 'Notify me', 'NaijaHome — Home Services in Nigeria', 'NaijaHome will connect households with trusted local repair, maintenance and home-service providers.', 180),
+  ('beauty', '/beauty', 'NaijaBeauty', 'Look and feel your best, locally.', 'NaijaBeauty will combine beauty products, providers, appointments and at-home services through the shared marketplace, service and booking engines.', 'content_cut', 'purple', '', '', 'coming_soon', 'Notify me', 'NaijaBeauty — Beauty & Wellness Services in Nigeria', 'NaijaBeauty will support Nigerian salons, barbers, spas, beauty products and appointments.', 190);
+
+INSERT INTO ecosystem_vertical_features (vertical_id, icon, title, description, display_order)
+SELECT id, 'account_balance', 'Shared finance foundation', 'Uses the existing NaijaDeals identity, permissions and finance boundaries rather than a separate platform.', 10 FROM ecosystem_verticals WHERE slug = 'pay'
+UNION ALL SELECT id, 'verified', 'Verified ecosystem participants', 'Future providers, sellers and organizations will use shared verification and trust controls.', 10 FROM ecosystem_verticals WHERE slug IN ('auto','homes','travel','events','learn','jobs','health','farm','home','beauty');
+
+INSERT INTO ecosystem_vertical_features (vertical_id, icon, title, description, display_order)
+SELECT id, 'search', 'Discovery and comparison', 'Find relevant offers, providers or opportunities with Nigeria-aware filters.', 20 FROM ecosystem_verticals WHERE slug IN ('auto','homes','travel','events','learn','jobs','health','farm','home','beauty')
+UNION ALL SELECT id, 'payments', 'Auditable payments', 'Payment and settlement workflows will reuse the shared NaijaDeals finance engine.', 20 FROM ecosystem_verticals WHERE slug = 'pay';
+
+INSERT INTO ecosystem_vertical_features (vertical_id, icon, title, description, display_order)
+SELECT id, 'admin_panel_settings', 'Central operations', 'Operational workflows will be governed from the existing protected Control Center.', 30 FROM ecosystem_verticals WHERE slug IN ('pay','auto','homes','travel','events','learn','jobs','health','farm','home','beauty');
+
+INSERT INTO ecosystem_vertical_features (vertical_id, icon, title, description, display_order)
+SELECT id, 'construction', 'Implementation status is explicit', 'This surface is a product registry and preview, not proof that the vertical is live.', 40 FROM ecosystem_verticals WHERE slug IN ('pay','auto','homes','travel','events','learn','jobs','health','farm','home','beauty');

@@ -1,0 +1,67 @@
+# Central Admin Compliance Matrix
+
+**Target architecture:** `admin.naijadeals.com`  
+**Temporary preview entry:** `/control-center`  
+**Evidence scope:** current working tree, source, migrations, tests, local preview.  
+**Important:** this matrix measures implementation, not architectural intention.
+
+## 1. Shared-boundary assessment
+
+| Requirement | Evidence | Current result | Compliance |
+|---|---|---|---|
+| One shared identity/session | `src/lib/auth.ts`; global `attachUser` in `src/index.tsx`; `nd_session` cookie; `getUserFromToken()` | Public verticals, APIs and Control Center resolve the same `users`/`sessions` identity boundary. | **Pass** |
+| One central admin page boundary | `src/index.tsx` mounts `app.route('/control-center', controlCenterRoutes)`; `src/routes/control-center.tsx` | One SSR Control Center shell contains dashboard, ecosystem, finance, verification, vendors, providers, customers, audit, operations and other admin pages. | **Pass** |
+| One central admin API boundary | `app.route('/api/control-center', apiControlCenterRoutes)`; `apiControlCenterRoutes.use('*', requireControlCenterApiAuth)` | CC APIs have a shared 401/403 gate before route-specific permissions. | **Pass** |
+| Granular permissions | `src/lib/control-center-rbac.ts::requireControlCenterPermission`; `cc_permissions`, `cc_roles`, `cc_role_permissions`, `cc_user_roles` | Permissions are resolved server-side and unioned across a user's CC roles. `super_admin` receives current permissions dynamically. | **Pass, with legacy exception below** |
+| Shared audit trail | `src/lib/control-center-audit.ts`; `cc_audit_logs`, `cc_domain_events` | Control Center mutations and selected domain mutations write central audit records. Several legacy/domain mutations do not. | **Partial** |
+| Shared finance layer | `src/lib/wallet.ts`, `src/lib/refunds.ts`, `src/lib/orders.ts`, `src/routes/control-center.tsx` finance route | Wallet, payment transaction, refund, dispute and seller finance records are shared; NaijaPay is the front-door concept. | **Partial-to-pass for existing records; incomplete for future rails** |
+| Shared vertical registry | `src/lib/control-center-ecosystem.ts`, `src/routes/control-center.tsx`, `GET /api/control-center/ecosystem` | All required vertical names are discoverable in one registry with explicit capability states. | **Pass for discoverability only** |
+| Scoped team access | `cc_permissions` plus role keys in `src/components/ControlCenterLayout.tsx` | Server-side role/permission model exists and nav hides/marks unavailable modules. | **Pass for CC surfaces; not universal across legacy admin API** |
+| Admin hostname | `src/lib/admin-host.ts`, `src/index.tsx` | Canonical host is prepared in code; DNS/Cloudflare binding was not configured during audit. | **Prepared, not live** |
+
+## 2. Vertical compliance matrix
+
+| Vertical / engine | Existing customer/provider routes | Existing admin route/API | Identity enforcement | Permission enforcement | Audit coverage | Operational capability | Central-admin assessment |
+|---|---|---|---|---|---|---|---|
+| **NaijaShop / Marketplace** | `/`, `/shop`, `/shop/:slug`, `/cart`, `/checkout`; `/seller/*`; `api-catalog`, `api-cart`, `api-orders`, `api-seller` | `/control-center/vendors`, `/control-center/customers`, `/control-center/moderation`, `/control-center/finance`, `/api/control-center/*`; legacy `/api/admin/*` also touches moderation/refunds/user status | Shared `nd_session`; seller/provider and organization checks where applicable | CC vendor/customer/moderation/finance permissions; legacy admin uses `users.role='admin'` | Moderation/user lifecycle/vendor verification central; order/refund paths have domain logs or incomplete CC audit | Marketplace, checkout, wallet/payment, seller operations, moderation | **Central shell connected; legacy admin bypass remains.** |
+| **NaijaFresh** | `/fresh`, `/fresh/:slug`; `src/pages/fresh.tsx`, `src/lib/fresh.ts`; shared cart/checkout | No Fresh-specific admin page; can be managed only through shared catalog/vendor/finance/moderation surfaces | Shared identity through Layout and shared APIs | Shared catalog/vendor/finance permissions; no Fresh-specific permission | Shared product/vendor actions only; no Fresh-specific audit namespace | Fresh catalog, freshness/unit/wholesale UI; delivery is shared/incomplete | **Central registry and shared-engine coverage; no dedicated vertical operations.** |
+| **NaijaEats** | `/eats/*`, `/eats/operator/*`; `api-eats.ts`, `api-eats-operator.ts` | No dedicated Eats Control Center page; provider/vendor, orders/operations and finance surfaces are shared | `requireAuth`; operator/provider checks in Eats APIs | Operator/provider permissions; no dedicated Eats admin permission | Operator lifecycle has domain events; central CC audit coverage must be checked per mutation | Customer menu/cart/checkout/order and operator lifecycle exist; dispatch is shared/incomplete | **Shared admin dependency is real; vertical-specific admin is missing.** |
+| **NaijaDrive** | `/drive`; `api-drive-preview.ts`; NestJS runtime in `services/naijadrive-runtime` | No live ride admin surface; Control Center ecosystem/operations can show readiness, but no ride operations exist | Worker preview has global identity available; NestJS runtime has its own bearer/cookie identity client | `rides.*` permissions seeded in migration 0083, but no Worker ride admin route verified | Preview does not create rides; runtime audit repository exists but runtime unavailable here | Fare preview, typed routing adapter, explicit simulated/routed modes; booking/dispatch/presence/payments disabled | **Central admin target is correct, but mobility operations are unavailable. Do not present as live.** |
+| **NaijaGigs / Service** | `/gigs/*`; provider/service request APIs | Provider/vendor/admin shared surfaces; no dedicated Gigs admin page | Shared auth, provider profile and organization checks | Provider/vendor permissions; no Gigs-specific admin permission | Provider/vendor verification central; service/order audit coverage needs cross-check | Provider onboarding, listings/requests/quotes/orders exist in current worktree; vertical polish varies | **Shared provider/admin foundation exists; dedicated Gigs oversight incomplete.** |
+| **NaijaStay / Booking** | `/stay/*`; `api-bookings.ts` | No dedicated Stay admin page; booking engine not represented as a full CC console | Shared auth, provider/org membership | Booking permissions exist in CC catalog; no dedicated Stay admin scope | Booking status/domain events exist; not all events mirror `cc_audit_logs` | Booking engine is real; customer-facing/admin parity is incomplete | **Central admin can reach shared entities/finance, but booking operations need a dedicated console.** |
+| **NaijaSend / Logistics** | `/send` preview/registry route; `api-logistics.ts` and logistics libs/tables in current worktree | No dedicated Control Center logistics console verified | Shared auth for logistics route scopes | No complete verified `logistics.read/manage` CC UI/API boundary found | Logistics domain logs exist; central CC audit coverage is incomplete | Delivery/driver/dispatch backend exists in current worktree, but vertical UI and admin operations are incomplete | **Partial shared-engine integration; not a complete central logistics admin.** |
+| **NaijaPay / Payment & Finance** | `/naijapay`, `/wallet`; `api-wallet`, payment APIs | `/control-center/finance`; `/api/control-center/disputes`, refund and finance-related routes | Shared session and ownership checks | `payments.*`, `refunds.*`, `disputes.*`, `wallets.*` CC permissions | Wallet ledger is an append-only domain record; refunds/dispute actions require explicit audit remediation | Wallet, transactions, refunds, disputes, seller finance and escrow status exist; bills/QR/merchant rails not complete | **Strongest shared-engine integration; central finance is real but not complete settlement operations.** |
+| **NaijaAuto** | No dedicated route/API | No dedicated admin route | No vertical identity surface | No vertical permission | None | Registry only | **Not implemented; central admin registry only.** |
+| **NaijaHomes** | No dedicated route/API | No dedicated admin route | No vertical identity surface | No vertical permission | None | Registry only | **Not implemented; must not be represented as operational.** |
+| **NaijaTravel** | No dedicated route/API | No dedicated admin route | No vertical identity surface | No vertical permission | None | Registry only; architecture calls for cross-vertical orchestration | **Not implemented; future shared booking/finance integration.** |
+| **NaijaEvents** | No dedicated route/API | No dedicated admin route | No vertical identity surface | No vertical permission | None | Registry only | **Not implemented; ticketing extension required.** |
+| **NaijaLearn** | No dedicated route/API | No dedicated admin route | No vertical identity surface | No vertical permission | None | Registry only | **Not implemented; course/enrollment model required.** |
+| **NaijaJobs** | No dedicated route/API | No dedicated admin route | No vertical identity surface | No vertical permission | None | Registry only | **Not implemented; must remain distinct from Gigs service orders.** |
+| **NaijaHealth** | No dedicated route/API | No dedicated admin route | No vertical identity surface | No vertical permission | None | Registry only | **Not implemented; regulated provider/health-data controls required.** |
+| **NaijaFarm** | No dedicated route/API | No dedicated admin route | No vertical identity surface | No vertical permission | None | Registry only; some Marketplace data primitives support future bulk supply | **Not implemented; farm supply chain and wholesale operations required.** |
+| **NaijaStream** | `/stream` preview route | No dedicated admin route | Shared public shell only | No vertical permission | None | Preview only; no media pipeline | **Not implemented; content/media operations missing.** |
+| **NaijaHome** | No dedicated route/API | No dedicated admin route | No vertical identity surface | No vertical permission | None | Registry only; architecture says reuse Gigs Service/Booking | **Not implemented; should not create duplicate provider engine.** |
+| **NaijaBeauty** | No dedicated route/API | No dedicated admin route | No vertical identity surface | No vertical permission | None | Registry only; architecture says reuse Marketplace + Service + Booking | **Not implemented; shared-engine composition planned.** |
+| **Aura AI** | `/aura`, `/api/aura/chat` | `/control-center/aura` shell | Aura resolves optional shared session identity; guest access intentionally allowed | No dedicated CC permission for model operations verified | No complete AI tool/action audit trail | LLM call path exists when configured; no persisted history/tools/orchestration | **Central admin shell exists; AI operations are incomplete and must remain honest.** |
+
+## 3. Legacy and potentially disconnected admin paths
+
+| Path / mechanism | Gate | Domain coverage | Central CC status | Risk |
+|---|---|---|---|---|
+| `/api/admin/*` via `src/routes/api-admin.ts` | `requireAuth` + `requirePlatformRole('admin')` | Moderation listing read/decision, notification process/retry, user status; comments document routes moved to CC | **Legacy parallel gate**; not automatically replaced during this audit | A user with `users.role='admin'` is not necessarily a CC role holder; CC-only operators may be denied; permissions are coarser. |
+| `/control-center/*` | `requireControlCenterAuth`, then route-specific CC permissions | SSR admin pages | Canonical central shell | Good boundary; several pages expose read-only/partial modules whose backend coverage varies. |
+| `/api/control-center/*` | `requireControlCenterApiAuth`, then route-specific CC permission | Verifications, moderation, communications, user lifecycle, refunds/disputes, catalog, ecosystem, search and more | Canonical central API | Strongest admin API path; audit wiring differs by domain. |
+| Organization APIs | `requireAuth` + organization membership/permission/role | Organization membership, stores, providers, settings | Shared identity/tenant layer, not a replacement for CC | Must not be confused with global Super Admin; useful for vertical/country scoping. |
+| Seller/provider self-service APIs | Auth/provider/organization gates | Seller products/orders/finance; service/provider workflows | Domain surfaces used by vertical operators, not Central Admin | Need central read/oversight rather than duplicating entities. |
+
+## 4. Compliance verdict
+
+The repository satisfies the architectural direction of one Central Admin for the surfaces that are actually connected to the Control Center. It does **not** yet satisfy complete ecosystem-wide administrative compliance because:
+
+1. Several verticals are registry-only.
+2. The legacy `/api/admin` route remains separately gated by `users.role='admin'`.
+3. Finance, logistics, order, booking and wallet mutations do not all write the canonical CC audit log.
+4. Some operational surfaces are server-rendered directly from domain libraries instead of having an explicitly versioned CC API boundary.
+5. Vertical-specific permissions for future products are not yet present because those products do not yet have backend entities.
+
+The recommended remediation is consolidation and audit propagation, not creation of additional admin dashboards.

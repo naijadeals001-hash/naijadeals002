@@ -5,6 +5,7 @@ import type { AppEnv } from './types'
 import { attachUser, attachLocale, requireAuthPage } from './lib/auth'
 import { requireActiveSeller } from './lib/seller'
 import { affiliateClickMiddleware } from './lib/affiliate'
+import { isCanonicalAdminHost, ADMIN_PATH_ENTRY } from './lib/admin-host'
 
 // API sub-apps
 import { catalogApi } from './routes/api-catalog'
@@ -114,6 +115,17 @@ app.use('*', attachLocale)
 // src/lib/affiliate.ts's affiliateClickMiddleware doc comment. MUST run after
 // attachUser (reads c.get('user') to opportunistically attach customer_user_id).
 app.use('*', affiliateClickMiddleware)
+
+// The dedicated admin hostname is configured outside this preview through the
+// hosting provider's custom-domain/DNS settings. Once bound, its root becomes
+// the canonical admin entry point while all existing /control-center routes
+// remain available and keep their normal session/RBAC gates.
+app.use('*', async (c, next) => {
+  if (isCanonicalAdminHost(c.req.header('host')) && (c.req.path === '/' || c.req.path === '')) {
+    return c.redirect(ADMIN_PATH_ENTRY)
+  }
+  await next()
+})
 
 // Static assets (public/static/* -> /static/*)
 app.use('/static/*', serveStatic({ root: './public' }))
@@ -265,8 +277,8 @@ app.get('/seller-terms', sellerTermsPage)
 app.get('/affiliate', affiliatePage)
 
 // ---------- Ecosystem Preview Pages — one handler, remaining routes ----------
-// Every planned NaijaDeals vertical that isn't built yet gets a real, honest
-// product-preview page instead of a 404. Content for these routes is
+// Every planned NaijaDeals vertical that isn't backed by a dedicated customer
+// engine yet gets a real, honest product-preview page instead of a 404. Content for these routes is
 // 100% config-driven from ecosystem_verticals (migration 0010) via
 // ecosystemPreviewPage — there is no per-vertical page file. Flipping any of
 // these from coming_soon -> live later is a data change (and, when a real
@@ -275,6 +287,16 @@ app.get('/affiliate', affiliatePage)
 app.get('/drive', drivePage)
 app.get('/send', ecosystemPreviewPage)
 app.get('/stream', ecosystemPreviewPage)
+app.get('/auto', ecosystemPreviewPage)
+app.get('/homes', ecosystemPreviewPage)
+app.get('/travel', ecosystemPreviewPage)
+app.get('/events', ecosystemPreviewPage)
+app.get('/learn', ecosystemPreviewPage)
+app.get('/jobs', ecosystemPreviewPage)
+app.get('/health', ecosystemPreviewPage)
+app.get('/farm', ecosystemPreviewPage)
+app.get('/home', ecosystemPreviewPage)
+app.get('/beauty', ecosystemPreviewPage)
 
 // ---------- NaijaEats — real UI on top of the restaurants/menus schema (migrations 0078-0081) ----------
 // /eats used to route to the static ecosystemPreviewPage placeholder above.

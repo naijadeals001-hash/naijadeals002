@@ -109,9 +109,10 @@ export async function registerUser(label) {
   return { client, userId: res.body.user.id, email }
 }
 
-/** Promotes a user to platform role 'admin' directly via D1 (there is no public self-service "become admin" endpoint by design — mirrors booking-engine's creditWalletDirect's rationale for bypassing the app for a role only an existing admin/ops process would ever set). */
+/** Test-only platform-admin fixture. Legacy admin compatibility routes now use canonical Control Center RBAC, so grant the broad operational platform_admin CC role as well. */
 export async function promoteToAdmin(userId) {
-  await execD1(`UPDATE users SET role = 'admin' WHERE id = ${Number(userId)}`)
+  const id = Number(userId)
+  await execD1(`UPDATE users SET role = 'admin' WHERE id = ${id}; INSERT OR IGNORE INTO cc_user_roles (user_id, role_id, assigned_by_user_id) SELECT ${id}, id, ${id} FROM cc_roles WHERE key = 'platform_admin'`)
 }
 
 /**

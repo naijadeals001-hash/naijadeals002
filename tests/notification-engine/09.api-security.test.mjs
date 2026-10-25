@@ -45,7 +45,7 @@ async function grantPlatformAdminCcRole(userId) {
   const roleRow = await queryOneD1(`SELECT id FROM cc_roles WHERE key = 'platform_admin'`)
   assert.ok(roleRow, `grantPlatformAdminCcRole: 'platform_admin' not found in cc_roles — check migration 0050's seed data`)
   await execD1(
-    `INSERT INTO cc_user_roles (user_id, role_id, assigned_by_user_id) VALUES (${Number(userId)}, ${roleRow.id}, ${Number(userId)})`
+    `INSERT OR IGNORE INTO cc_user_roles (user_id, role_id, assigned_by_user_id) VALUES (${Number(userId)}, ${roleRow.id}, ${Number(userId)})`
   )
 }
 

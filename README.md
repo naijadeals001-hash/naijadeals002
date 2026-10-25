@@ -10,6 +10,8 @@
 > "Phase 1" as historical, and see the **Changelog** section near the
 > bottom for what has actually shipped since.
 
+> **Full ecosystem execution update (2026-10-25)**: The coordinated execution pass preserved the existing worktree and preview, added persisted registry metadata and honest public preview routes for the remaining reserved verticals, and added protected Pan-African country/vertical rollout controls backed by the existing Control Center capability and audit engines. The local preview and focused tests passed; this does **not** mean every vertical is operational. The authoritative status is in [`docs/FULL-ECOSYSTEM-BASELINE-2026-10-25.md`](docs/FULL-ECOSYSTEM-BASELINE-2026-10-25.md) and [`docs/REA-ECOSYSTEM-COVERAGE-MATRIX.md`](docs/REA-ECOSYSTEM-COVERAGE-MATRIX.md). No production deployment was performed.
+
 > **Ecosystem architecture**: NaijaDeals is being built as a Super Ecosystem — one platform,
 > a set of shared engines (identity, marketplace, payments, bookings, logistics, trust,
 > search, etc.), and many vertical product layers (NaijaShop, NaijaEats, NaijaPay, and 19
@@ -749,6 +751,51 @@ was touched (explicitly out of scope, see below).
   `disposeTestDb()` not deleting fixture rows across all 7 search-engine
   test files, 2 stale Control Center test assertions, 1 transient test flake
   resolved by re-run.
+
+## Central administration hostname separation
+
+The production target is:
+
+- Public marketplace: `https://naijadeals.com/`
+- NaijaDrive: `https://naijadeals.com/drive`
+- Central administration: `https://admin.naijadeals.com/`
+
+The current preview remains path-based at `/control-center` because no DNS or
+Cloudflare custom-domain binding was changed in this no-deploy worktree. The
+Worker now reserves `admin.naijadeals.com` as the canonical admin host and
+redirects that host's root to `/control-center/login` when the host is actually
+bound. To activate the production hostname, the hosting owner must bind
+`admin.naijadeals.com` to the same Worker/Pages project, provision TLS, create
+the DNS record, redeploy the current build, and verify both the public hostname
+and the admin hostname. Authentication and Control Center RBAC remain required
+on every `/control-center` page and `/api/control-center/*` endpoint.
+
+## REA Ecosystem Audit artifacts
+
+The current repository audit deliverables are:
+
+- [`docs/REA-ECOSYSTEM-AUDIT.md`](docs/REA-ECOSYSTEM-AUDIT.md) — scope, evidence method, repository findings, and limitations.
+- [`docs/REA-VERTICAL-REFERENCE-MATRIX.md`](docs/REA-VERTICAL-REFERENCE-MATRIX.md) — vertical-by-vertical reference hypotheses, repository evidence, gaps, and REA blockers.
+- [`docs/CENTRAL-ADMIN-COMPLIANCE-MATRIX.md`](docs/CENTRAL-ADMIN-COMPLIANCE-MATRIX.md) — shared identity, RBAC, audit, finance, vertical and legacy-admin assessment.
+- [`docs/REA-GAPS-AND-ROADMAP.md`](docs/REA-GAPS-AND-ROADMAP.md) — prioritized evidence, consolidation, shared-engine, and vertical roadmap.
+
+The audit explicitly does not claim competitor REA completion because no authorized REA target/session/tool was available in this sandbox.
+
+## Phase 9B-5 — Unified Admin Foundation (local implementation)
+
+- Added a single Control Center ecosystem registry covering NaijaShop,
+  NaijaFresh, NaijaEats, NaijaDrive, NaijaGigs, NaijaStay, NaijaSend, NaijaPay,
+  NaijaAuto, NaijaHomes, NaijaTravel, NaijaEvents, NaijaLearn, NaijaJobs,
+  NaijaHealth, NaijaFarm, NaijaStream, NaijaHome, NaijaBeauty, and Aura AI.
+- Registry cards explicitly distinguish partial, incomplete, and unavailable
+  capabilities; discoverability is not treated as proof of integration.
+- Added permission-scoped `GET /api/control-center/ecosystem` metadata using
+  the existing session, Control Center RBAC, and audit/finance boundaries.
+- Existing Customers, Vendors, Providers, Audit, Finance, Verification,
+  Moderation, and Communications surfaces remain the operational admin paths.
+- No deployment, production migration, live payment movement, or live
+  NaijaDrive operation was activated. See
+  `tests/control-center-unified-admin.test.mjs` for focused coverage.
 
 **Stage 2C status: CLOSED.** Live production verification passed before
 closure was declared, per the governing rule for this release.

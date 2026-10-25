@@ -79,6 +79,8 @@ import { getAllHeroCampaignsForAdmin, computeCampaignLifecycleState, type HeroCa
 import { HERO_IMAGE_LIBRARY } from '../lib/hero-image-library'
 import { getAllCountries } from '../lib/country'
 import { getCategoryNavTreeForAdmin, getEcosystemNavConfigForAdmin, type CategoryNavAdminRow } from '../lib/category-nav-admin'
+import { getUnifiedEcosystemRegistry, ECOSYSTEM_STATE_LABELS } from '../lib/control-center-ecosystem'
+import { listRolloutVerticals } from '../lib/control-center-rollout'
 
 export const controlCenterRoutes = new Hono<AppEnv>()
 
@@ -914,14 +916,47 @@ controlCenterRoutes.get('/verification', async (c) => {
 controlCenterRoutes.get('/ecosystem', async (c) => {
   const user = c.get('user')!
   const ccAccess = c.get('ccAccess')!
-  const verticals = await getEcosystemOverview(c.env.DB)
+  const [verticals, registry] = await Promise.all([
+    getEcosystemOverview(c.env.DB),
+    getUnifiedEcosystemRegistry(c.env.DB),
+  ])
 
   return c.render(
     <ControlCenterLayout title="Ecosystem" user={user} ccAccess={ccAccess} active="ecosystem">
       <div class="max-w-[110rem] mx-auto px-4 md:px-8 py-8">
         <h1 class="text-3xl font-extrabold text-white tracking-tight mb-1">NaijaDeals Ecosystem</h1>
-        <p class="text-sm text-gray-500 mb-8 max-w-2xl">9 launch verticals, one platform. Real status from the ecosystem_verticals table — nothing here is fabricated as "Live" unless it genuinely is.</p>
+        <p class="text-sm text-gray-500 mb-4 max-w-3xl">One central administration system for every NaijaDeals vertical. The portfolio below is intentionally broader than the set of operational modules: discoverability is not a claim of integration.</p>
+        <div class="flex flex-wrap items-center gap-2 mb-8 text-[11px]">
+          <span class="rounded-full bg-ccaccent/10 border border-ccaccent/25 text-ccaccent px-3 py-1.5">Shared identity + Control Center RBAC</span>
+          <span class="rounded-full bg-white/5 border border-ccborder text-gray-400 px-3 py-1.5">Shared audit trail</span>
+          <span class="rounded-full bg-white/5 border border-ccborder text-gray-400 px-3 py-1.5">NaijaPay finance entry point</span>
+        </div>
         <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
+          {registry.map((v) => (
+            <a href={v.route} class="relative rounded-2xl border border-ccborder bg-ccpanel p-5 hover:border-ccaccent/40 transition-colors group">
+              <div class="flex items-start justify-between gap-2 mb-4">
+                <span class="material-symbols-outlined text-ccaccent text-2xl">{v.key === 'aura' ? 'auto_awesome' : v.key === 'pay' ? 'payments' : 'apps'}</span>
+                <span class={`text-[9px] font-bold uppercase px-2 py-1 rounded-full ${v.capabilityState === 'partial' ? 'bg-amber-500/10 text-amber-400' : v.capabilityState === 'operational' ? 'bg-ccaccent/10 text-ccaccent' : 'bg-white/5 text-gray-500'}`}>{ECOSYSTEM_STATE_LABELS[v.capabilityState]}</span>
+              </div>
+              <div class="text-base font-extrabold text-white">{v.name}</div>
+              <div class="text-[10px] uppercase tracking-wide text-gray-600 mt-1">{v.productArea}</div>
+              <div class="text-xs text-gray-500 mt-3 leading-snug">{v.adminSurface}</div>
+              <div class="text-[10px] text-gray-600 mt-3 leading-snug">{v.evidence}</div>
+            </a>
+          ))}
+        </div>
+        <h2 class="text-sm font-bold text-gray-400 uppercase tracking-wider mt-10 mb-3">Existing registry records</h2>
+        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+          {verticals.map((v) => (
+            <div class="bg-ccpanel/60 border border-ccborder/70 rounded-xl p-4">
+              <div class="text-sm font-semibold text-white">{v.name}</div>
+              <div class="text-[11px] text-gray-500 mt-1">Registry status: {v.status}</div>
+              <div class="text-[10px] text-gray-600 mt-2">{v.metricLabel}: {v.metricValue}</div>
+            </div>
+          ))}
+        </div>
+        <div class="border-t border-ccborder mt-10 pt-5 text-xs text-gray-500">Operational actions remain permission-gated in the existing Customers, Vendors, Providers, Finance, Verification, Moderation, and Communications surfaces. This page is a read-only portfolio registry.</div>
+        {/*
           {verticals.map((v) => (
             <div class="relative rounded-2xl overflow-hidden border border-ccborder bg-ccpanel group hover:border-ccaccent/30 transition-colors">
               <div class="h-36 bg-cover bg-center relative" style={`background-image: linear-gradient(to top, rgba(8,11,10,0.97), rgba(8,11,10,0.15)); background-image: linear-gradient(to top, rgba(8,11,10,0.97), rgba(8,11,10,0.1)), url(${v.heroImage}); background-size: cover; background-position: center;`}>
@@ -945,6 +980,7 @@ controlCenterRoutes.get('/ecosystem', async (c) => {
             </div>
           ))}
         </div>
+        */}
       </div>
     </ControlCenterLayout>
   )
@@ -1135,7 +1171,11 @@ controlCenterRoutes.get('/aura', async (c) => {
 controlCenterRoutes.get('/countries', async (c) => {
   const user = c.get('user')!
   const ccAccess = c.get('ccAccess')!
-  const countries = await getCountryOperationalStatus(c.env.DB)
+  const [countries, rolloutVerticals] = await Promise.all([
+    getCountryOperationalStatus(c.env.DB),
+    listRolloutVerticals(c.env.DB, 'NG'),
+  ])
+  const canManageVerticalCountryOverrides = ccAccess.permissionKeys.has('configuration.write')
 
   return c.render(
     <ControlCenterLayout title="Countries" user={user} ccAccess={ccAccess} active="countries">
@@ -1145,6 +1185,59 @@ controlCenterRoutes.get('/countries', async (c) => {
           Real data from cc_countries — country/state-level status only. No map pins are rendered: 0 bookable
           listings in this database currently have resolvable coordinates.
         </p>
+        <section class="mb-8 rounded-xl border border-ccborder bg-ccpanel p-5" id="cc-rollout-controls">
+          <div class="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <h2 class="text-base font-bold text-white">Country &amp; vertical rollout controls</h2>
+              <p class="mt-1 max-w-2xl text-xs leading-5 text-gray-500">Changes are persisted through the protected Control Center API and audited. A registry row or preview route never makes a vertical operational by itself.</p>
+            </div>
+            <span id="cc-rollout-status" class="text-xs text-gray-500" role="status">Select a country to inspect overrides.</span>
+          </div>
+          <div class="mt-5 grid gap-4 md:grid-cols-[1fr_1fr_auto]">
+            <label class="text-xs text-gray-400">Country<select id="cc-rollout-country" class="mt-1 w-full rounded-lg border border-ccborder bg-black/30 px-3 py-2 text-sm text-gray-200">
+              {(countries as any[]).map((country) => <option value={country.id} data-iso={country.iso_code} data-status={country.status}>{country.name} ({country.iso_code}) — {country.status}</option>)}
+            </select></label>
+            <label class="text-xs text-gray-400">Vertical<select id="cc-rollout-vertical" class="mt-1 w-full rounded-lg border border-ccborder bg-black/30 px-3 py-2 text-sm text-gray-200">
+              {rolloutVerticals.map((vertical) => <option value={vertical.key}>{vertical.name}</option>)}
+            </select></label>
+            <button id="cc-rollout-toggle" type="button" class="self-end rounded-lg bg-ccaccent px-4 py-2 text-xs font-bold text-ccbg disabled:cursor-not-allowed disabled:opacity-40" disabled={!canManageVerticalCountryOverrides}>Toggle vertical in country</button>
+          </div>
+          <p class="mt-3 text-[11px] text-gray-600">Vertical overrides require <code>configuration.write</code>. This control does not create bookings, payments, dispatch or provider records.</p>
+          <script dangerouslySetInnerHTML={{__html: `
+            (() => {
+              const country = document.getElementById('cc-rollout-country');
+              const vertical = document.getElementById('cc-rollout-vertical');
+              const toggle = document.getElementById('cc-rollout-toggle');
+              const status = document.getElementById('cc-rollout-status');
+              const setStatus = (message, error = false) => { if (status) { status.textContent = message; status.className = error ? 'text-xs text-red-400' : 'text-xs text-gray-500'; } };
+              const inspect = async () => {
+                if (!country || !vertical) return;
+                const selected = country.options[country.selectedIndex];
+                try {
+                  const response = await fetch('/api/control-center/rollout/countries/' + selected.dataset.iso);
+                  if (!response.ok) throw new Error('Could not load rollout state');
+                  const body = await response.json();
+                  const row = body.verticals.find((item) => item.key === vertical.value);
+                  setStatus(row ? row.name + ': ' + (row.enabledInCountry ? 'enabled' : 'disabled') + (row.countryOverride === null ? ' (country default)' : ' (explicit override)') : 'No rollout record');
+                } catch (error) { setStatus(error instanceof Error ? error.message : 'Could not load rollout state', true); }
+              };
+              country?.addEventListener('change', inspect); vertical?.addEventListener('change', inspect);
+              toggle?.addEventListener('click', async () => {
+                const selected = country.options[country.selectedIndex];
+                try {
+                  const current = await fetch('/api/control-center/rollout/countries/' + selected.dataset.iso).then((response) => response.json());
+                  const row = current.verticals.find((item) => item.key === vertical.value);
+                  const next = !(row && row.enabledInCountry);
+                  const response = await fetch('/api/control-center/rollout/countries/' + selected.value + '/verticals/' + encodeURIComponent(vertical.value), { method: 'PATCH', headers: {'content-type':'application/json'}, body: JSON.stringify({enabled: next, reason: 'Control Center rollout control'}) });
+                  const body = await response.json();
+                  if (!response.ok) throw new Error(body.error || 'Rollout update failed');
+                  setStatus(vertical.options[vertical.selectedIndex].text + ': ' + (next ? 'enabled' : 'disabled') + ' for ' + selected.dataset.iso);
+                } catch (error) { setStatus(error instanceof Error ? error.message : 'Rollout update failed', true); }
+              });
+              inspect();
+            })();
+          `}}></script>
+        </section>
         <table class="w-full text-sm bg-ccpanel border border-ccborder rounded-xl overflow-hidden">
           <thead>
             <tr class="text-left text-gray-500 border-b border-ccborder text-xs">

@@ -123,9 +123,10 @@ export async function registerUser(label) {
   return { client, userId: res.body.user.id, email, password, sessionCookie: client.getCookie('nd_session') }
 }
 
-/** Promotes a user to platform role 'admin' directly via D1 (there is no public self-service "become admin" endpoint by design — mirrors notification-engine's promoteToAdmin rationale exactly). */
+/** Test-only platform-admin fixture. The legacy admin compatibility routes now use the canonical Control Center RBAC boundary, so the fixture grants the broad operational platform_admin CC role as well as users.role='admin'. */
 export async function promoteToAdmin(userId) {
-  await execD1(`UPDATE users SET role = 'admin' WHERE id = ${Number(userId)}`)
+  const id = Number(userId)
+  await execD1(`UPDATE users SET role = 'admin' WHERE id = ${id}; INSERT OR IGNORE INTO cc_user_roles (user_id, role_id, assigned_by_user_id) SELECT ${id}, id, ${id} FROM cc_roles WHERE key = 'platform_admin'`)
 }
 
 /** Reads a user's current users.status directly via D1 (ground truth, bypassing any HTTP caching concerns). */

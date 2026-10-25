@@ -61,6 +61,9 @@ export default defineConfig({
     __EXPECTED_MIGRATIONS__: JSON.stringify(getExpectedMigrations()),
     __BUILD_PROVENANCE__: JSON.stringify(buildProvenance)
   },
+  server: {
+    allowedHosts: ['3000-iczi23g6xsyfxghci7ivc-02b9cc79.sandbox.novita.ai']
+  },
   plugins: [
     build(),
     devServer({

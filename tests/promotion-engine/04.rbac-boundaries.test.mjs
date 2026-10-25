@@ -100,7 +100,8 @@ async function registerUser(label) {
 }
 
 async function promoteToAdmin(userId) {
-  await execD1(`UPDATE users SET role = 'admin' WHERE id = ${Number(userId)}`)
+  const id = Number(userId)
+  await execD1(`UPDATE users SET role = 'admin' WHERE id = ${id}; INSERT OR IGNORE INTO cc_user_roles (user_id, role_id, assigned_by_user_id) SELECT ${id}, id, ${id} FROM cc_roles WHERE key = 'platform_admin'`)
 }
 
 let createdUserIds = []
@@ -128,7 +129,7 @@ test('existing admin API: authenticated non-admin user is rejected from a real a
   createdUserIds.push(userId)
   const res = await client.post('/api/admin/collections', { name: 'x', slug: `promotest-rbac-${RUN_NONCE}` })
   assert.equal(res.status, 403)
-  assert.match(res.body.error, /permission/i)
+  assert.match(res.body.error, /Control Center access|permission/i)
 })
 
 // ---------- 3. Existing admin API remains protected: authenticated admin succeeds ----------
@@ -202,8 +203,8 @@ test('no client-supplied identity bypass: a non-admin cannot self-declare admin 
   createdUserIds.push(userId)
 
   // Attempt to forge admin identity via a spoofed header and a spoofed body field --
-  // the real requirePlatformRole('admin') middleware reads ONLY the server-resolved
-  // session user (c.get('user').role from the DB), never client-supplied claims.
+  // the real Control Center middleware reads ONLY the server-resolved
+  // session user and cc_user_roles grants, never client-supplied claims.
   const res = await fetch(`${BASE_URL}/api/admin/collections`, {
     method: 'POST',
     headers: {

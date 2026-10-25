@@ -4,8 +4,8 @@ import { EcosystemWaitlistModal } from './EcosystemWaitlistModal'
 
 /**
  * EcosystemPreview — the ONE reusable component that renders every planned
- * NaijaDeals vertical (/fresh, /eats, /gigs, /stay, /drive, /send, /stream,
- * /aura). Driven entirely by an EcosystemVerticalRow + its feature rows
+ * NaijaDeals vertical that is not yet backed by a dedicated customer engine.
+ * Driven entirely by an EcosystemVerticalRow + its feature rows
  * (migration 0010) — there is deliberately no per-vertical TSX file. Adding
  * a 9th vertical, or flipping one from coming_soon -> live, is a data change
  * in ecosystem_verticals, never a new component.
@@ -71,10 +71,12 @@ export const EcosystemPreview: FC<EcosystemPreviewProps> = ({ vertical, features
       {/* ============ Hero ============ */}
       <section class={`relative overflow-hidden bg-gradient-to-br ${accent.heroFrom} ${accent.heroTo} text-white`}>
         <div class="absolute inset-0">
-          <picture>
-            <source media="(max-width: 767px)" srcset={vertical.hero_image_mobile} />
-            <img src={vertical.hero_image_desktop} alt="" class="w-full h-full object-cover opacity-35" />
-          </picture>
+          {vertical.hero_image_desktop && vertical.hero_image_mobile ? (
+            <picture>
+              <source media="(max-width: 767px)" srcset={vertical.hero_image_mobile} />
+              <img src={vertical.hero_image_desktop} alt="" class="w-full h-full object-cover opacity-35" />
+            </picture>
+          ) : null}
           <div class={`absolute inset-0 bg-gradient-to-r ${accent.heroFrom} via-black/40 to-transparent`}></div>
         </div>
         <div class="relative max-w-[80rem] mx-auto px-4 md:px-6 lg:px-8 py-16 md:py-24">

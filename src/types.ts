@@ -3,6 +3,9 @@ export type Bindings = {
   SELLER_UPLOADS: R2Bucket
   PAYOUT_ENCRYPTION_KEY: string
   NAIJADEAL_IDENTITY_SERVICE_TOKEN?: string
+  NAIJADRIVE_ROUTING_PROVIDER?: string
+  NAIJADRIVE_ROUTING_URL?: string
+  NAIJADRIVE_ROUTING_TIMEOUT_MS?: string
 }
 
 export type AppEnv = {

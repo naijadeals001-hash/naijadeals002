@@ -1,14 +1,13 @@
 /**
  * Marketplace Engine 2.1 — Admin & Operations API (spec section 16).
  *
- * Every route here is gated by `requirePlatformRole('admin')`
- * (src/lib/rbac.ts) — the FIRST real caller of that function, which has
- * existed since migration 0037 with zero callers until this pass
- * (confirmed via grep during inspection). This is the Marketplace-facing
- * slice of the Admin & Operations Command Center — it operates on the
- * SAME authoritative tables customers/sellers use (product_listings,
- * orders), never a parallel admin_* copy, per the Master Ecosystem
- * Directive section 11's explicit prohibition.
+ * This compatibility router preserves the historical `/api/admin/*` URLs while
+ * using the canonical Control Center session/RBAC boundary. It operates on the
+ * SAME authoritative tables customers/sellers use (product_listings, orders),
+ * never a parallel admin_* copy, per the Master Ecosystem Directive section 11.
+ * New privileged routes must be added to `/api/control-center/*`; these aliases
+ * exist only so existing clients can migrate without retaining a second role
+ * system.
  *
  * ADR-001 STEP 2 (docs/ADR-001-IMPLEMENTATION-PLAN.md §4): this file
  * originally held 24 routes (Collections spec section 10, Category
@@ -23,15 +22,14 @@
  */
 import { Hono } from 'hono'
 import type { AppEnv } from '../types'
-import { requireAuth } from '../lib/auth'
-import { requirePlatformRole } from '../lib/rbac'
+import { requireControlCenterApiAuth, requireControlCenterPermission } from '../lib/control-center-rbac'
 import { getListingForModeration, applyModerationDecision } from '../lib/moderation'
 import { applyUserStatusDecision, isValidAccountStatus, UserNotFoundError, InvalidStatusError } from '../lib/user-lifecycle'
+import { recordControlCenterAction } from '../lib/control-center-audit'
 
 export const adminApi = new Hono<AppEnv>()
 
-adminApi.use('*', requireAuth)
-adminApi.use('*', requirePlatformRole('admin'))
+adminApi.use('*', requireControlCenterApiAuth)
 
 // ---------- Product moderation (spec section 16) ----------
 //
@@ -52,13 +50,13 @@ adminApi.use('*', requirePlatformRole('admin'))
 // api-admin.ts routes" — this makes it 5, not 4, a finding for that
 // step's own authorization, not addressed here).
 
-adminApi.get('/moderation/listings/:id', async (c) => {
+adminApi.get('/moderation/listings/:id', requireControlCenterPermission('moderation.read'), async (c) => {
   const listing = await getListingForModeration(c.env.DB, Number(c.req.param('id')))
   if (!listing) return c.json({ error: 'Listing not found' }, 404)
   return c.json({ listing })
 })
 
-adminApi.post('/moderation/listings/:id/decision', async (c) => {
+adminApi.post('/moderation/listings/:id/decision', requireControlCenterPermission('moderation.manage'), async (c) => {
   const user = c.get('user')!
   const listingId = Number(c.req.param('id'))
   const body = await c.req.json<{ decision: string; reason?: string }>().catch(() => null)
@@ -83,18 +81,40 @@ adminApi.post('/moderation/listings/:id/decision', async (c) => {
 // existing CC equivalent, to be RETIRED not re-homed), not Step 2's.
 
 /** Bounded catch-up trigger for the durable outbox (see notifications.ts's module doc comment on why this project uses a request-triggered catch-up pass instead of a cron/Queue binding). Admin-only, never automatic/hidden. */
-adminApi.post('/notifications/process-outbox', async (c) => {
+adminApi.post('/notifications/process-outbox', requireControlCenterPermission('notifications.manage'), async (c) => {
+  const user = c.get('user')!
   const { processOutboxBatch } = await import('../lib/notifications')
   const limit = Math.min(Number(c.req.query('limit') ?? 25) || 25, 100)
   const result = await processOutboxBatch(c.env.DB, limit)
+  await recordControlCenterAction(c.env.DB, {
+    actorUserId: user.id,
+    actorName: user.name,
+    action: 'notifications_process_outbox',
+    entityType: 'notification_outbox',
+    entityId: null,
+    context: { limit, attempted: result.attempted, processed: result.processed, compatibilityPath: '/api/admin' },
+    success: true,
+    ipAddress: c.req.header('cf-connecting-ip') ?? null,
+  })
   return c.json(result)
 })
 
 /** Bounded retry pass for transiently-failed deliveries whose next_retry_at has arrived (Phase 8's explicit retry-scheduler decision — see notifications.ts's retryFailedDeliveries doc comment). Admin-only, never automatic/hidden, never re-delivers a permanently-failed or already-delivered row. */
-adminApi.post('/notifications/retry-failed', async (c) => {
+adminApi.post('/notifications/retry-failed', requireControlCenterPermission('notifications.manage'), async (c) => {
+  const user = c.get('user')!
   const { retryFailedDeliveries } = await import('../lib/notifications')
   const limit = Math.min(Number(c.req.query('limit') ?? 25) || 25, 100)
   const result = await retryFailedDeliveries(c.env.DB, limit)
+  await recordControlCenterAction(c.env.DB, {
+    actorUserId: user.id,
+    actorName: user.name,
+    action: 'notifications_retry_failed',
+    entityType: 'notification_deliveries',
+    entityId: null,
+    context: { limit, attempted: result.attempted, retried: result.retried, compatibilityPath: '/api/admin' },
+    success: true,
+    ipAddress: c.req.header('cf-connecting-ip') ?? null,
+  })
   return c.json(result)
 })
 
@@ -104,13 +124,13 @@ adminApi.post('/notifications/retry-failed', async (c) => {
 // already read by Engine 11's search-eligibility.ts, but nothing could
 // ever transition it, and auth.ts never enforced it. This is the ONLY
 // route in the codebase permitted to change a user's account lifecycle
-// status — gated by the same requireAuth + requirePlatformRole('admin')
-// mounted for this whole router above, so ordinary customers/sellers/
-// providers structurally cannot reach it (never a self-service or
-// cross-user mutation path). See src/lib/user-lifecycle.ts for the
-// atomic status-change + audit-log + session-revocation implementation.
+// status — gated by the canonical Control Center session and
+// customers.suspend permission mounted for this route, so ordinary
+// customers/sellers/providers structurally cannot reach it (never a
+// self-service or cross-user mutation path). See src/lib/user-lifecycle.ts
+// for the atomic status-change + audit-log + session-revocation implementation.
 
-adminApi.post('/users/:id/status', async (c) => {
+adminApi.post('/users/:id/status', requireControlCenterPermission('customers.suspend'), async (c) => {
   const admin = c.get('user')!
   const targetUserId = Number(c.req.param('id'))
   if (!targetUserId || Number.isNaN(targetUserId)) {

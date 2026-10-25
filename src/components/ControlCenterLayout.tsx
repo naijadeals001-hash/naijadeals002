@@ -30,10 +30,21 @@ interface ControlCenterLayoutProps {
  * entry — the visual upgrade does NOT relax the "modules not yet real must
  * not be presented as operational" rule from Phase 1 Section 16.
  */
-const NAV_GROUPS: {
+export type ControlCenterNavItem = {
+  key: string
+  label: string
+  icon: string
+  href?: string
+  permission?: string
+  implemented: boolean
+}
+
+export type ControlCenterNavGroup = {
   group: string
-  items: { key: string; label: string; icon: string; href?: string; permission?: string; implemented: boolean }[]
-}[] = [
+  items: ControlCenterNavItem[]
+}
+
+export const NAV_GROUPS: ControlCenterNavGroup[] = [
   {
     group: 'Monitor & Analyze',
     items: [
