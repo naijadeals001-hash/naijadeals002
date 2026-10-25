@@ -105,6 +105,7 @@ import { organizationPage } from './pages/organization'
 import { controlCenterRoutes } from './routes/control-center'
 import { auraApi } from './routes/api-aura'
 import { drivePreviewApi } from './routes/api-drive-preview'
+import { carpoolApi } from './routes/api-carpool'
 
 type Bindings = AppEnv['Bindings'] & { PAYSTACK_SECRET_KEY?: string; OPENAI_API_KEY?: string; OPENAI_BASE_URL?: string }
 type Env = { Bindings: Bindings; Variables: AppEnv['Variables'] }
@@ -169,6 +170,7 @@ app.route('/api/aura', auraApi)
 // serviceRequestsApi/providerApi must not intercept this endpoint; real ride
 // APIs remain behind the NestJS identity/RBAC boundary.
 app.route('/api/drive', drivePreviewApi)
+app.route('/api/carpool', carpoolApi)
 // NaijaEats Phase 1 cart/checkout mutation API — MUST be registered here,
 // alongside bookingsApi/logisticsApi/auraApi, and BEFORE servicesApi/
 // serviceRequestsApi/providerApi below. Those three register a bare
@@ -187,7 +189,7 @@ app.route('/api/drive', drivePreviewApi)
 // original design intent.
 app.route('/api/eats', eatsApi)
 app.route('/api/eats', eatsOperatorApi)
-app.route('/api', freightApi)
+app.route('/api/freight', freightApi)
 app.route('/api/catalog', catalogApi)
 app.route('/api/cart', cartApi)
 app.route('/api/auth', authApi)

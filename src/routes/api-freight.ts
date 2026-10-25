@@ -3,13 +3,11 @@ import type { AppEnv } from '../types'
 import { requireAuth } from '../lib/auth'
 
 export const freightApi = new Hono<AppEnv>()
-freightApi.use('*', requireAuth)
-
 function json(value: unknown, fallback: unknown) {
   try { return JSON.stringify(value ?? fallback) } catch { return JSON.stringify(fallback) }
 }
 
-freightApi.post('/freight/loads', async (c) => {
+freightApi.post('/loads', requireAuth, async (c) => {
   const user = c.get('user')!
   const body = await c.req.json<any>().catch(() => null)
   if (!body?.origin_country_iso || !body?.destination_country_iso || !body?.pickup_address || !body?.delivery_address || !body?.transport_mode || !body?.cargo_category || !body?.cargo_description || !Number.isFinite(Number(body.weight_kg)) || Number(body.weight_kg) <= 0) {
@@ -23,12 +21,12 @@ freightApi.post('/freight/loads', async (c) => {
   return c.json({ id: Number(result.meta.last_row_id), status: 'open_for_bids' }, 201)
 })
 
-freightApi.get('/freight/loads/open', async (c) => {
+freightApi.get('/loads/open', requireAuth, async (c) => {
   const { results } = await c.env.DB.prepare(`SELECT fl.*, COUNT(fb.id) AS bid_count FROM freight_loads fl LEFT JOIN freight_bids fb ON fb.load_id = fl.id AND fb.status = 'submitted' WHERE fl.status = 'open_for_bids' GROUP BY fl.id ORDER BY fl.created_at DESC LIMIT 100`).all()
   return c.json({ loads: results })
 })
 
-freightApi.post('/freight/loads/:id/bids', async (c) => {
+freightApi.post('/loads/:id/bids', requireAuth, async (c) => {
   const user = c.get('user')!
   const loadId = Number(c.req.param('id'))
   const body = await c.req.json<any>().catch(() => null)
@@ -47,7 +45,7 @@ freightApi.post('/freight/loads/:id/bids', async (c) => {
   }
 })
 
-freightApi.get('/freight/loads/:id/bids', async (c) => {
+freightApi.get('/loads/:id/bids', requireAuth, async (c) => {
   const user = c.get('user')!
   const loadId = Number(c.req.param('id'))
   const owned = await c.env.DB.prepare('SELECT id FROM freight_loads WHERE id = ? AND customer_user_id = ?').bind(loadId, user.id).first()
@@ -56,7 +54,7 @@ freightApi.get('/freight/loads/:id/bids', async (c) => {
   return c.json({ bids: results })
 })
 
-freightApi.post('/freight/loads/:id/award', async (c) => {
+freightApi.post('/loads/:id/award', requireAuth, async (c) => {
   const user = c.get('user')!
   const loadId = Number(c.req.param('id'))
   const body = await c.req.json<{ bid_id?: number }>().catch(() => null)

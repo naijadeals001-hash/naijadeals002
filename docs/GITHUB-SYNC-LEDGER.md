@@ -111,6 +111,19 @@
 - Build: `npm run build` passed (267 modules). Regression: `tests/naijaeats-operator.test.mjs` — 10 passed, 0 failed.
 - This batch is accepted only for Bolt/uShip-mapped behavior. Uber Eats remains inaccessible; no Uber-specific parity claim is made.
 
+## Five-vertical autonomous sprint — fresh REA and NaijaDrive carpool batch
+
+- Starting checkpoint verified: branch `feat/naijadrive-private-ride-foundation`, HEAD/remote `2bef0d77fc498d8790f2d8998a84f023a8f793f5`, existing PM2 `naijadeals` preview online, `/eats` and `/send` HTTP 200. No reset/clean/stash/duplicate server/production operation.
+- Fresh REA preflight and browser research completed before application edits. Full record: `docs/REFERENCE-EVIDENCE-2026-10-25-SPRINT.md`.
+- Fresh evidence IDs: Shop/Jumia `ev_fba5a71f746a59e57bf9e640e36260f179a600e01873a497fbe75b1494912d9a` (Cloudflare blocked); Drive/Bolt cities `ev_d8befc0cf22b7ec8ca283f124f8d231507cfcd8b4dd8eb4a35696d106af74470`; food/Bolt Food `ev_d71162b15ccf2e2a972d7f945d1ba864d709435023cdfaaf9e0087b8c357f02e`; grocery/Glovo `ev_47cbd593feae86670b0da0cefc539412cb639334a3d7780209f9e4dce48c9ec8`; Send/uShip `ev_feafa6d3921f2310a1578f06c3cc86e870a69ba143ed49fe291410438a79e896`; Gigs/Fiverr `ev_bf1e13b566f1456d246cd5b37ae7795192e47122986c4ee9e5cd79356c74d4c9` (human verification blocked); Stay/Airbnb `ev_c976c18378f3d2f525de4a9355a11045566223c107ce55030a966d0c66845540`.
+- Added `migrations/0094_naijadrive_carpool.sql`: separate persisted carpool trips and seat requests, no private-cab aliasing.
+- Added scoped `src/routes/api-carpool.ts`: authenticated trip publishing, route discovery, seat requests with inventory CAS, driver accept/reject decisions and rejection seat restoration.
+- Added NaijaDrive carpool discovery UI in `/drive`; it renders only persisted published trips and clearly reports no fabricated driver supply.
+- Fixed a route-isolation regression discovered during acceptance: the previous bare `/api` freight auth middleware intercepted public `/api/auth/register`. Freight is now mounted under `/api/freight` with explicit route auth, and carpool is mounted under `/api/carpool` with explicit route auth. Public registration restored to HTTP 200.
+- Browser QA: `/shop`, `/drive`, `/eats`, `/fresh`, `/send`, `/gigs`, `/stay` all passed desktop `1440x900` and mobile `390x844` with zero failed requests; screenshots `qa-screenshots/sprint-{shop,drive,eats,fresh,send,gigs,stay}-{desktop,mobile}.png`.
+- Tests: marketplace templates 3 passed; Drive preview/routing 9 passed; carpool inventory 1 passed; Eats operator 10 passed; Gigs lifecycle 1 passed after route isolation fix; Stay availability 1 passed. Combined initial run exposed the freight auth regression; isolated rerun passed after the fix.
+- This sprint checkpoint advances all five mandatory areas through fresh REA evidence and browser verification. Shop, Gigs and Stay existing persisted journeys remain active; the principal new implementation in this batch is NaijaDrive carpooling. Full cab dispatch, grocery checkout/fulfillment, freight carrier award/dispatch, Gigs milestones/messaging and Stay host management remain incomplete.
+
 ## Known gates not green
 
 - Whole-repository `npm run test:node` has existing unrelated production waitlist and NestJS TypeScript source-loader failures.
