@@ -10,7 +10,7 @@ import {
   execD1,
 } from '../helpers/client.mjs'
 
-const evidenceDir = new URL('../../../../qa-screenshots/three-js-control-center/', import.meta.url).pathname
+const evidenceDir = new URL('../../../qa-screenshots/three-js-control-center/', import.meta.url).pathname
 const profiles = [
   ['desktop-1440x900', 1440, 900],
   ['small-desktop-1280x800', 1280, 800],
@@ -130,10 +130,36 @@ async function run() {
     await fallbackContext.close()
 
     const lifecycleContext = await browser.newContext({ viewport: { width: 1440, height: 900 } })
+    await lifecycleContext.addInitScript(() => {
+      const nativeRequestAnimationFrame = window.requestAnimationFrame.bind(window)
+      window.__cc3dFrameSchedules = 0
+      window.requestAnimationFrame = (callback) => {
+        window.__cc3dFrameSchedules += 1
+        return nativeRequestAnimationFrame(callback)
+      }
+    })
     const lifecyclePage = await lifecycleContext.newPage()
     await loginControlCenter(lifecyclePage, fixture.email, fixture.password)
     await lifecyclePage.locator('#cc-operations-environment').scrollIntoViewIfNeeded()
     await lifecyclePage.waitForTimeout(1200)
+    const visibility = await lifecyclePage.evaluate(async () => {
+      const root = document.querySelector('[data-cc-3d-root]')
+      const canvas = root?.querySelector('[data-cc-3d-canvas]')
+      if (canvas?.hidden) return { skipped: true }
+      const before = window.__cc3dFrameSchedules
+      Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' })
+      document.dispatchEvent(new Event('visibilitychange'))
+      await new Promise((resolve) => setTimeout(resolve, 150))
+      const hidden = window.__cc3dFrameSchedules
+      Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' })
+      document.dispatchEvent(new Event('visibilitychange'))
+      await new Promise((resolve) => setTimeout(resolve, 150))
+      return { skipped: false, before, hidden, resumed: window.__cc3dFrameSchedules }
+    })
+    if (!visibility.skipped) {
+      assert.equal(visibility.hidden, visibility.before, 'visibility: animation scheduling continued while hidden')
+      assert.ok(visibility.resumed > visibility.hidden, 'visibility: animation loop did not resume')
+    }
     const lifecycle = await lifecyclePage.evaluate(() => {
       const root = document.querySelector('[data-cc-3d-root]')
       const canvas = root?.querySelector('[data-cc-3d-canvas]')
@@ -149,7 +175,7 @@ async function run() {
       assert.equal(lifecycle.afterLoss.fallbackHidden, false, 'context loss: fallback did not activate')
       assert.match(lifecycle.afterLoss.message, /context was lost/i)
     }
-    results.push({ name: 'context-loss-and-dispose', lifecycle })
+    results.push({ name: 'context-loss-and-dispose', lifecycle, visibility })
     await lifecycleContext.close()
   } finally {
     await browser.close()

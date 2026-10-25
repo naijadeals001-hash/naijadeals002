@@ -1,6 +1,6 @@
 {
   "baseUrl": "http://localhost:3000",
-  "runNonce": "17929454443286765",
+  "runNonce": "179294617816230377",
   "results": [
     {
       "name": "desktop-1440x900",
@@ -170,6 +170,12 @@
           "fallbackHidden": false,
           "message": "WebGL context was lost; use the accessible registry while the 3D view is unavailable."
         }
+      },
+      "visibility": {
+        "skipped": false,
+        "before": 53,
+        "hidden": 53,
+        "resumed": 59
       }
     }
   ]
