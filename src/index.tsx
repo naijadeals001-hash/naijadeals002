@@ -36,6 +36,7 @@ import { apiControlCenterRoutes } from './routes/api-control-center'
 import { naijaPayControlCenterApi } from './routes/api-control-center-naijapay'
 import { eatsApi } from './routes/api-eats'
 import { eatsOperatorApi } from './routes/api-eats-operator'
+import { freightApi } from './routes/api-freight'
 
 // SSR pages
 import { homePage } from './pages/home'
@@ -186,6 +187,7 @@ app.route('/api/drive', drivePreviewApi)
 // original design intent.
 app.route('/api/eats', eatsApi)
 app.route('/api/eats', eatsOperatorApi)
+app.route('/api', freightApi)
 app.route('/api/catalog', catalogApi)
 app.route('/api/cart', cartApi)
 app.route('/api/auth', authApi)

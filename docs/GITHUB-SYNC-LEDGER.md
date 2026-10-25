@@ -85,6 +85,15 @@
 - Screenshots: not captured for this API/schema-only batch; browser E2E dispatch remains pending until a test courier/vehicle fixture is wired without presenting it as live inventory.
 - Known limitation: restaurant menu/profile editing, Eats courier UI, automatic dispatch and NaijaSend carrier bidding are not completed by this batch.
 
+## NaijaSend freight marketplace foundation (uncommitted local batch)
+
+- Added `migrations/0093_naijasend_freight_marketplace_foundation.sql` with persisted customer loads and carrier bids. Modes are explicitly `road`, `air`, `water`, `rail` or `intermodal`; loads are not treated as generic parcels.
+- Added authenticated `src/routes/api-freight.ts` mounted at `/api`: customer load publication, open-load discovery, active logistics-provider bid submission, customer bid comparison and atomic award/rejection state.
+- Server checks prevent unauthenticated posting, bidding without an active logistics provider, self-bidding, duplicate provider bids, invalid weight/price and awarding non-submitted bids.
+- This is a foundation batch, not a completed freight marketplace: carrier capability matching, vehicle/document qualification, automated dispatch offers/fallback, shipment handoffs, proof of delivery, payment intents and Control Center freight administration remain pending.
+- Build passed after adding the route; local migration `0093_naijasend_freight_marketplace_foundation.sql` applied successfully.
+- No production deployment or remote D1 mutation performed.
+
 ## Known gates not green
 
 - Whole-repository `npm run test:node` has existing unrelated production waitlist and NestJS TypeScript source-loader failures.
