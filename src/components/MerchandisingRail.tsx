@@ -10,6 +10,7 @@ export interface EcosystemSpotlightCard {
   icon: string
   cta_label: string
   hero_image_desktop: string
+  hero_image_mobile?: string
   status: 'live' | 'beta' | 'in_development' | 'coming_soon'
   /** Real per-vertical accent (ecosystem_verticals.accent_color, migration 0010) — e.g.
    * 'green', 'amber', 'blue', 'purple', 'slate', 'orange', 'red', 'indigo'. Drives the
@@ -122,16 +123,20 @@ const EcosystemCard: FC<{ card: EcosystemSpotlightCard }> = ({ card }) => {
   return (
     <a
       href={card.route}
-      class="group flex flex-col w-[132px] md:w-[148px] h-[128px] md:h-[140px] shrink-0 snap-start rounded-xl overflow-hidden border border-gray-200 bg-white hover:shadow-md hover:-translate-y-0.5 transition-all"
+      aria-label={`${card.name}: ${card.status === 'live' ? card.cta_label : 'Coming soon'}`}
+      class="group flex flex-col w-[142px] sm:w-[150px] md:w-[164px] h-[154px] md:h-[166px] shrink-0 snap-start rounded-xl overflow-hidden border border-gray-200 bg-white shadow-sm hover:shadow-lg hover:-translate-y-0.5 transition-all"
     >
       <div class="relative flex-1 overflow-hidden bg-gray-100">
-        <img
-          src={card.hero_image_desktop}
-          alt=""
-          aria-hidden="true"
-          loading="lazy"
-          class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-        />
+        <picture>
+          {card.hero_image_mobile && <source media="(max-width: 767px)" srcset={card.hero_image_mobile} />}
+          <img
+            src={card.hero_image_desktop}
+            alt={`${card.name} ecosystem`}
+            loading="lazy"
+            decoding="async"
+            class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+          />
+        </picture>
         <span class={`absolute top-1.5 left-1.5 w-6 h-6 rounded-full ${accent.iconBg} flex items-center justify-center`}>
           <span class={`material-symbols-outlined text-[13px] ${accent.text}`}>{card.icon}</span>
         </span>
