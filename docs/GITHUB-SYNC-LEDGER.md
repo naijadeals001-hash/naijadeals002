@@ -85,8 +85,9 @@
 - Screenshots: not captured for this API/schema-only batch; browser E2E dispatch remains pending until a test courier/vehicle fixture is wired without presenting it as live inventory.
 - Known limitation: restaurant menu/profile editing, Eats courier UI, automatic dispatch and NaijaSend carrier bidding are not completed by this batch.
 
-## NaijaSend freight marketplace foundation (uncommitted local batch)
+## NaijaSend freight marketplace foundation
 
+- Commit: `bc691c53613a2215e939e7219198b84e3ee6fb8c` (`feat(send): add persisted freight loads and carrier bids`); remote SHA verified on `origin/feat/naijadrive-private-ride-foundation`.
 - Added `migrations/0093_naijasend_freight_marketplace_foundation.sql` with persisted customer loads and carrier bids. Modes are explicitly `road`, `air`, `water`, `rail` or `intermodal`; loads are not treated as generic parcels.
 - Added authenticated `src/routes/api-freight.ts` mounted at `/api`: customer load publication, open-load discovery, active logistics-provider bid submission, customer bid comparison and atomic award/rejection state.
 - Server checks prevent unauthenticated posting, bidding without an active logistics provider, self-bidding, duplicate provider bids, invalid weight/price and awarding non-submitted bids.
