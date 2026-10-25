@@ -39,8 +39,8 @@ export async function categoriesPage(c: Context<AppEnv>) {
           {directory.map((dept) => (
             <section class="bg-white border border-gray-200 rounded-lg overflow-hidden">
               <a href={`/shop?category=${dept.slug}`} class="flex items-center gap-3 px-4 py-3 bg-gray-50 border-b border-gray-200 hover:bg-gray-100 transition-colors">
-                {dept.image_url ? (
-                  <img src={dept.image_url} alt="" loading="lazy" class="w-9 h-9 rounded-lg object-cover shrink-0" />
+                {dept.directory_image_url ? (
+                  <img src={dept.directory_image_url} alt={`${dept.name} category`} loading="lazy" class="w-9 h-9 rounded-lg object-cover shrink-0" />
                 ) : (
                   <span class="material-symbols-outlined text-primary shrink-0">{dept.icon}</span>
                 )}

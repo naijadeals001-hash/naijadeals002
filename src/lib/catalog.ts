@@ -363,9 +363,33 @@ export async function getShopByInterest(db: D1Database, limit = 8): Promise<Arra
  * so every real department the business sells in is discoverable even
  * before it has homepage-grade photography.
  */
-export async function getCategoryDirectory(db: D1Database): Promise<Array<CategoryRow & { children: CategoryRow[] }>> {
+export async function getCategoryDirectory(db: D1Database): Promise<Array<CategoryRow & { children: CategoryRow[]; directory_image_url?: string | null }>> {
   const [{ results: departments }, { results: groups }] = await Promise.all([
-    db.prepare(`SELECT * FROM categories WHERE parent_id IS NULL AND category_type = 'product' ORDER BY sort_order ASC`).all<CategoryRow>(),
+    // Directory imagery is hydrated from the first real active product below each
+    // department when taxonomy metadata has no curated image yet. This keeps the
+    // discovery page image-rich without inventing category art or showing icons as
+    // if they were product photography.
+    db.prepare(`
+      SELECT c.*,
+             COALESCE(
+               c.image_url,
+               (
+                 SELECT p.image_url
+                 FROM products p
+                 JOIN categories pc ON pc.id = p.category_id
+                 JOIN product_listings pl ON pl.product_id = p.id AND pl.is_primary = 1 AND pl.is_active = 1
+                 WHERE p.is_active = 1
+                   AND p.image_url IS NOT NULL
+                   AND p.image_url NOT LIKE '/ph.svg%'
+                   AND (pc.id = c.id OR pc.path LIKE COALESCE(c.path, CAST(c.id AS TEXT)) || '/%')
+                 ORDER BY p.rating_count DESC, p.id DESC
+                 LIMIT 1
+               )
+             ) AS directory_image_url
+      FROM categories c
+      WHERE c.parent_id IS NULL AND c.category_type = 'product'
+      ORDER BY c.sort_order ASC
+    `).all<CategoryRow & { directory_image_url?: string | null }>(),
     db
       .prepare(
         `SELECT c.* FROM categories c

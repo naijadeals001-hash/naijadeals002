@@ -1,6 +1,7 @@
 import type { FC } from 'hono/jsx'
 import type { EcosystemVerticalRow, EcosystemVerticalFeatureRow } from '../types'
 import { EcosystemWaitlistModal } from './EcosystemWaitlistModal'
+import { UnavailableVerticalState } from './UnavailableVerticalState'
 
 /**
  * EcosystemPreview — the ONE reusable component that renders every planned
@@ -74,7 +75,7 @@ export const EcosystemPreview: FC<EcosystemPreviewProps> = ({ vertical, features
           {vertical.hero_image_desktop && vertical.hero_image_mobile ? (
             <picture>
               <source media="(max-width: 767px)" srcset={vertical.hero_image_mobile} />
-              <img src={vertical.hero_image_desktop} alt="" class="w-full h-full object-cover opacity-35" />
+              <img src={vertical.hero_image_desktop} alt={`${vertical.name} preview`} class="w-full h-full object-cover opacity-35" />
             </picture>
           ) : null}
           <div class={`absolute inset-0 bg-gradient-to-r ${accent.heroFrom} via-black/40 to-transparent`}></div>
@@ -106,6 +107,14 @@ export const EcosystemPreview: FC<EcosystemPreviewProps> = ({ vertical, features
           </div>
         </div>
       </section>
+
+      {vertical.status !== 'live' && (
+        <UnavailableVerticalState
+          name={vertical.name}
+          status={vertical.status}
+          waitlistId={waitlistFormId}
+        />
+      )}
 
       {/* ============ What's coming: feature cards ============ */}
       <section class="py-14 md:py-20 border-b border-gray-100">
