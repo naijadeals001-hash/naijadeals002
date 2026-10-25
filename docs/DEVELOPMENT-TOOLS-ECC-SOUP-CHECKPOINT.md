@@ -10,7 +10,7 @@ ECC 2.2.3 is installed and its deterministic tooling is healthy, but the real Op
 
 Soup `v0.2.1` was verified from the official repository and its official test suite passed. An isolated six-task proof of concept achieved 100% required-skill recall and deterministic results, but selected irrelevant context for one cross-cutting task. Soup is not integrated because no native OpenCode adapter was found and the caller must own security policy, provenance, conflict handling and fallback.
 
-No NaijaDeals production behavior, deployment configuration, secrets, D1/R2 data, routes, schemas, or OpenCode/REA configuration was changed.
+No NaijaDeals production behavior, deployment configuration, secrets, D1/R2 data, routes, or schemas were changed. A reversible shared OpenCode instruction-path update was made outside the repository and backed up before modification; the existing REA registration was preserved.
 
 ## Status matrix
 
@@ -111,3 +111,43 @@ The disposable POC and virtual environment remain outside the repository. Existi
 3. If Soup remains interesting, expand the golden-task set and create an opt-in, local-allowlist-only adapter experiment outside production.
 4. Keep mandatory security instructions outside Soup-selected content and fall back to the fixed baseline on any routing error.
 5. Do not mark ECC or Soup production-ready until the blocked workflow and security governance gates pass.
+
+## Follow-up checkpoint — 2026-10-25
+
+### ECC provider diagnosis
+
+OpenCode `1.18.18` was tested with explicit `openai/gpt-4.1`, `opencode/big-pickle`, and `anthropic/claude-haiku-4-5` models, plus `--pure` with the Anthropic model. All runs loaded configuration, reached `init`, timed out between 45 and 75 seconds, and produced zero output. An independent minimal request to the configured Anthropic-compatible endpoint returned HTTP 200 and `OK` in approximately 2.5 seconds. The OpenAI-compatible endpoint returned HTTP 400 for the test model because it was not allowed. The current blocker is therefore narrowed to OpenCode request dispatch/provider integration; no credentials or TLS settings were changed. ECC remains **BLOCKED** for LLM-backed workflow acceptance.
+
+### AgentShield disposition
+
+The scan was reproduced at Grade D `(59/100)` before the global policy update, then final-rescanned afterward at Grade D `(58/100)`: 133 → 134 findings, 32 critical, 0 high, 48 → 49 medium, 46 low, and 7 info. All 32 critical findings are `integrity` fields in `/home/user/.config/opencode/package-lock.json`; each is an npm `sha512-...` integrity digest. They are classified as scanner false positives, not Azure credentials. The lockfile was not changed and `--fix` was not run. The new medium finding reports the shared global instruction file is outside the repository and is retained as an expected shared-policy condition. Other medium and low findings concerning example prompt-injection content, inline hooks, template MCP URLs, auto-install/unversioned packages, broad environment inheritance, missing timeouts, and hook coverage remain open. AgentShield remains **PARTIAL**, not a security approval.
+
+### Soup token benchmark
+
+A direct provider benchmark used the same Anthropic-compatible model, task wording, mandatory security baseline, and six representative tasks:
+
+| Workflow | Provider input | Cache creation | Cache read | Output | Total input accounting |
+|---|---:|---:|---:|---:|---:|
+| Fixed all-five-skill context | 24 | 3,276 | 0 | 1,536 | 3,300 |
+| Soup-selected context | 1,564 | 0 | 0 | 1,536 | 1,564 |
+
+Soup reduced provider-reported input accounting by 52.6% and total input-plus-output token accounting by 35.9% in this small six-call run. No currency cost was claimed because pricing metadata was not independently verified. Soup required-skill recall was 5/6 in this benchmark: the cross-cutting task omitted the required database migration skill. This omission prevents adoption despite measurable context reduction.
+
+### Global policy and project verification
+
+The shared policy is now loaded through:
+
+```text
+/home/user/.config/opencode/instructions/DEVELOPMENT-TOOLS-GLOBAL-POLICY.md
+```
+
+A backup exists at `/tmp/opencode.json.pre-global-tools-20261025`. The reusable acceptance helper is `/home/user/.config/opencode/tools/verify-global-development-tools.mjs`.
+
+Verified accessible projects:
+
+| Project | REA | ECC | Soup | Notes |
+|---|---|---|---|---|
+| NaijaDeals worktree | PARTIAL | PASS for installation/deterministic checks; LLM workflow BLOCKED | PARTIAL | Tooling-documentation batch is dirty until commit; preserved `.npm-cache-rea/` remains excluded |
+| `/home/user/webapp` | PARTIAL | PASS for shared installation/deterministic checks | PARTIAL | Existing dirty changes preserved; no files modified |
+
+The global policy does not falsely mark either project fully compliant. Soup remains an isolated candidate and REA remains provider-limited.

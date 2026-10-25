@@ -89,3 +89,20 @@ Soup is technically suitable as a small, provider-neutral context router. The is
 - The test fixture is small and synthetic; it does not establish production accuracy or token savings.
 
 The smallest safe next step, if desired, is a non-production adapter experiment that accepts an OpenCode task description, selects only from a versioned local allowlist, appends a fixed trusted security baseline, logs only skill names and hashes, and falls back to the existing fixed context on any error. It should remain behind an opt-in feature flag and pass a larger golden-task evaluation before any developer workflow adoption.
+
+## Provider token benchmark
+
+Date: 2026-10-25. This benchmark used the same Anthropic-compatible provider, model `claude-haiku-4-5`, task wording, mandatory security baseline, and `max_tokens=256` for six representative tasks. It was a direct provider measurement, not a successful OpenCode/ECC run; OpenCode remained blocked at initialization. The benchmark script and raw result were kept outside the repository at `/tmp/soup-token-benchmark.py` and `/tmp/soup-token-benchmark-results.json`.
+
+Soup routing recall for the benchmark was `5/6` required-task sets. The five single-domain tasks retained the required skill; the cross-cutting task omitted the required database migration skill while selecting four related skills. This is a regression from the earlier synthetic POC's manually defined expected set and is material to the adoption decision.
+
+| Mode | Provider input tokens | Cache-creation input tokens | Cache-read input tokens | Output tokens | Total input accounting |
+|---|---:|---:|---:|---:|---:|
+| Fixed all-five-skill context | 24 | 3,276 | 0 | 1,536 | 3,300 |
+| Soup-selected context | 1,564 | 0 | 0 | 1,536 | 1,564 |
+
+Using provider-reported token fields, Soup reduced input accounting by `1,736` tokens (`52.6%`) in this six-call run. Including output tokens, total reported token accounting fell from `4,836` to `3,100` (`35.9%`). The fixed-context numbers include Anthropic prompt-cache creation tokens; the raw `input_tokens` field alone is therefore misleading. No cache reads were reported.
+
+Latency was approximately `2.52s` mean for fixed context and `2.67s` mean for Soup context. Output tokens were equal because both calls reached the explicit 256-token cap; this benchmark does not establish task quality, completion correctness, or tool-call efficiency. Provider pricing metadata was not independently verified, so no currency cost or ROI claim is made.
+
+**Decision:** Soup demonstrates measurable context-token reduction in a direct provider experiment, but adoption remains **NOT READY** because the cross-cutting required-skill omission, absent native OpenCode adapter, lexical routing, and caller-owned security boundary outweigh the small synthetic benchmark. Any future adapter must add required-skill validation, safe fallback, and a larger golden-task acceptance suite before use.

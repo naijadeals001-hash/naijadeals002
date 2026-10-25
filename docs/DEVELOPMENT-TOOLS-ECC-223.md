@@ -132,3 +132,83 @@ The untracked `.npm-cache-rea/` directory remains preserved and unstaged.
 2. If provider execution becomes available, rerun the disposable workflow and capture plan, implementation, tests, review, and security output separately.
 3. Validate every AgentShield critical match against package-lock provenance before applying any fix.
 4. Keep ECC and AgentShield outside NaijaDeals production code until provider execution and security findings are resolved.
+
+## Follow-up verification: provider diagnosis and AgentShield classification
+
+Date: 2026-10-25
+
+### Provider diagnosis
+
+OpenCode `1.18.18` was re-tested with explicit models and a 45–75 second bound:
+
+| Attempt | Result |
+|---|---|
+| `openai/gpt-4.1` | `BLOCKED`, exit `124`, 75 seconds, zero output |
+| `opencode/big-pickle` | `BLOCKED`, exit `124`, 60 seconds, zero output |
+| `anthropic/claude-haiku-4-5` | `BLOCKED`, exit `124`, 60 seconds, zero output |
+| `--pure` + `anthropic/claude-haiku-4-5` | `BLOCKED`, exit `124`, 45 seconds, zero output |
+
+Every run loaded the OpenCode and ECC configuration and reached `init`, but emitted no provider request/error and no model output. The same configured Anthropic-compatible endpoint was tested independently with a minimal request and returned HTTP 200 with a valid `OK` response in approximately 2.5 seconds. The OpenAI-compatible endpoint rejected the test model with HTTP 400 because the model was not allowed. This narrows the blocker to OpenCode runtime/provider integration or request dispatch, not general network reachability or invalid Anthropic credentials. No configuration or credentials were changed because the safe correction is not established.
+
+Provider credentials were never printed. No `opencode auth login`, credential rewrite, TLS change, or plugin removal was performed.
+
+### AgentShield critical disposition
+
+The scan was reproduced on `2026-10-25T17:34:41Z` at Grade D `(59/100)`, 133 findings, 32 critical, 0 high, 48 medium, 46 low, and 7 info. After adding the shared policy, a final rescan at `2026-10-25T17:39:03Z` remained failing at Grade D `(58/100)`, 134 findings, 32 critical, 0 high, 49 medium, 46 low, and 7 info. The added medium finding reports that the global instruction file is outside the repository; this is expected for a shared global policy and remains documented rather than suppressed. All 32 critical locations are `integrity` fields in `/home/user/.config/opencode/package-lock.json` at lines `14, 26, 39, 52, 65, 78, 91, 104, 132, 141, 147, 161, 171, 189, 211, 217, 226, 232, 238, 244, 253, 275, 281, 296, 305, 321, 333, 342, 351, 364, 379, 394`.
+
+Each value is an npm `sha512-...` package integrity digest. The scanner is interpreting base64 characters in these integrity digests as Azure storage-key patterns. The values are package integrity metadata, not Azure connection strings, account names, or usable credentials. Disposition for all 32: **false positive, documented; no remediation applied**. The lockfile was not rewritten and AgentShield `--fix` was not used.
+
+Critical finding disposition table:
+
+| ID | Location | Classification | Supporting evidence | Remediation | Residual risk |
+|---:|---|---|---|---|---|
+| AS-CRIT-01 | `package-lock.json:14` | False positive | JSON field is npm `integrity`; value begins `sha512-` | None; preserve lockfile | Scanner pattern remains |
+| AS-CRIT-02 | `package-lock.json:26` | False positive | JSON field is npm `integrity`; value begins `sha512-` | None; preserve lockfile | Scanner pattern remains |
+| AS-CRIT-03 | `package-lock.json:39` | False positive | JSON field is npm `integrity`; value begins `sha512-` | None; preserve lockfile | Scanner pattern remains |
+| AS-CRIT-04 | `package-lock.json:52` | False positive | JSON field is npm `integrity`; value begins `sha512-` | None; preserve lockfile | Scanner pattern remains |
+| AS-CRIT-05 | `package-lock.json:65` | False positive | JSON field is npm `integrity`; value begins `sha512-` | None; preserve lockfile | Scanner pattern remains |
+| AS-CRIT-06 | `package-lock.json:78` | False positive | JSON field is npm `integrity`; value begins `sha512-` | None; preserve lockfile | Scanner pattern remains |
+| AS-CRIT-07 | `package-lock.json:91` | False positive | JSON field is npm `integrity`; value begins `sha512-` | None; preserve lockfile | Scanner pattern remains |
+| AS-CRIT-08 | `package-lock.json:104` | False positive | JSON field is npm `integrity`; value begins `sha512-` | None; preserve lockfile | Scanner pattern remains |
+| AS-CRIT-09 | `package-lock.json:132` | False positive | JSON field is npm `integrity`; value begins `sha512-` | None; preserve lockfile | Scanner pattern remains |
+| AS-CRIT-10 | `package-lock.json:141` | False positive | JSON field is npm `integrity`; value begins `sha512-` | None; preserve lockfile | Scanner pattern remains |
+| AS-CRIT-11 | `package-lock.json:147` | False positive | JSON field is npm `integrity`; value begins `sha512-` | None; preserve lockfile | Scanner pattern remains |
+| AS-CRIT-12 | `package-lock.json:161` | False positive | JSON field is npm `integrity`; value begins `sha512-` | None; preserve lockfile | Scanner pattern remains |
+| AS-CRIT-13 | `package-lock.json:171` | False positive | JSON field is npm `integrity`; value begins `sha512-` | None; preserve lockfile | Scanner pattern remains |
+| AS-CRIT-14 | `package-lock.json:189` | False positive | JSON field is npm `integrity`; value begins `sha512-` | None; preserve lockfile | Scanner pattern remains |
+| AS-CRIT-15 | `package-lock.json:211` | False positive | JSON field is npm `integrity`; value begins `sha512-` | None; preserve lockfile | Scanner pattern remains |
+| AS-CRIT-16 | `package-lock.json:217` | False positive | JSON field is npm `integrity`; value begins `sha512-` | None; preserve lockfile | Scanner pattern remains |
+| AS-CRIT-17 | `package-lock.json:226` | False positive | JSON field is npm `integrity`; value begins `sha512-` | None; preserve lockfile | Scanner pattern remains |
+| AS-CRIT-18 | `package-lock.json:232` | False positive | JSON field is npm `integrity`; value begins `sha512-` | None; preserve lockfile | Scanner pattern remains |
+| AS-CRIT-19 | `package-lock.json:238` | False positive | JSON field is npm `integrity`; value begins `sha512-` | None; preserve lockfile | Scanner pattern remains |
+| AS-CRIT-20 | `package-lock.json:244` | False positive | JSON field is npm `integrity`; value begins `sha512-` | None; preserve lockfile | Scanner pattern remains |
+| AS-CRIT-21 | `package-lock.json:253` | False positive | JSON field is npm `integrity`; value begins `sha512-` | None; preserve lockfile | Scanner pattern remains |
+| AS-CRIT-22 | `package-lock.json:275` | False positive | JSON field is npm `integrity`; value begins `sha512-` | None; preserve lockfile | Scanner pattern remains |
+| AS-CRIT-23 | `package-lock.json:281` | False positive | JSON field is npm `integrity`; value begins `sha512-` | None; preserve lockfile | Scanner pattern remains |
+| AS-CRIT-24 | `package-lock.json:296` | False positive | JSON field is npm `integrity`; value begins `sha512-` | None; preserve lockfile | Scanner pattern remains |
+| AS-CRIT-25 | `package-lock.json:305` | False positive | JSON field is npm `integrity`; value begins `sha512-` | None; preserve lockfile | Scanner pattern remains |
+| AS-CRIT-26 | `package-lock.json:321` | False positive | JSON field is npm `integrity`; value begins `sha512-` | None; preserve lockfile | Scanner pattern remains |
+| AS-CRIT-27 | `package-lock.json:333` | False positive | JSON field is npm `integrity`; value begins `sha512-` | None; preserve lockfile | Scanner pattern remains |
+| AS-CRIT-28 | `package-lock.json:342` | False positive | JSON field is npm `integrity`; value begins `sha512-` | None; preserve lockfile | Scanner pattern remains |
+| AS-CRIT-29 | `package-lock.json:351` | False positive | JSON field is npm `integrity`; value begins `sha512-` | None; preserve lockfile | Scanner pattern remains |
+| AS-CRIT-30 | `package-lock.json:364` | False positive | JSON field is npm `integrity`; value begins `sha512-` | None; preserve lockfile | Scanner pattern remains |
+| AS-CRIT-31 | `package-lock.json:379` | False positive | JSON field is npm `integrity`; value begins `sha512-` | None; preserve lockfile | Scanner pattern remains |
+| AS-CRIT-32 | `package-lock.json:394` | False positive | JSON field is npm `integrity`; value begins `sha512-` | None; preserve lockfile | Scanner pattern remains |
+
+Remaining findings are not dismissed globally:
+
+- Medium: example prompt-injection/configuration detections, inline hook payloads, risky/template MCP servers and external URLs, chained hooks, and missing permission configuration.
+- Low: template MCP auto-install/unversioned-package warnings, broad environment inheritance, large template MCP surface, missing timeouts, and absent Stop hooks.
+- Info: informational/template observations.
+
+Because the remaining findings concern templates and managed hook/configuration surface, the overall scan remains **PARTIAL / Grade D** even after critical false-positive classification. The report is not a clean security approval.
+
+### Global policy
+
+The shared policy is now loaded by the global OpenCode configuration:
+
+```text
+/home/user/.config/opencode/instructions/DEVELOPMENT-TOOLS-GLOBAL-POLICY.md
+```
+
+The project copy and acceptance helper are documented separately in `docs/DEVELOPMENT-TOOLS-GLOBAL-POLICY.md`. The global configuration was backed up to `/tmp/opencode.json.pre-global-tools-20261025` before adding the policy path. No unrelated OpenCode tools or REA registration were removed.
