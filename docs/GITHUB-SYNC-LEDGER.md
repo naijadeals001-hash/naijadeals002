@@ -23,7 +23,7 @@
 - Documentation added: `docs/DEVELOPMENT-TOOLS-ECC-223.md`, `docs/DEVELOPMENT-TOOLS-SOUP.md`, and `docs/DEVELOPMENT-TOOLS-ECC-SOUP-CHECKPOINT.md`. The Control Center registry was not changed because this is an isolated tooling evaluation with blocked/partial acceptance; no fake completion event was created.
 - No production deployment, remote D1 mutation, DNS/secrets change, merge, force-push or application behavior change performed. The tooling batch was pushed in `c660259d8c46ab7671342d0d4f5fdffdd718123a` and remains in the final branch ancestry.
 
-## Global tooling policy and follow-up verification — local, pending push
+## Global tooling policy and follow-up verification — pushed and remotely verified
 
 - OpenCode global configuration was backed up to `/tmp/opencode.json.pre-global-tools-20261025` before adding the shared instruction `/home/user/.config/opencode/instructions/DEVELOPMENT-TOOLS-GLOBAL-POLICY.md`. The existing REA MCP registration and unrelated ECC tools were preserved.
 - Added repository policy `docs/DEVELOPMENT-TOOLS-GLOBAL-POLICY.md` and documented the reusable acceptance helper `/home/user/.config/opencode/tools/verify-global-development-tools.mjs`.
@@ -31,7 +31,7 @@
 - ECC explicit-model retries and independent provider probes narrowed the timeout to OpenCode request dispatch/provider integration: direct Anthropic-compatible request returned HTTP 200, while all OpenCode planner attempts still timed out after initialization with zero output. ECC LLM workflow remains `BLOCKED`.
 - AgentShield rescan reproduced Grade D `(59/100)`. All 32 critical matches are npm `sha512` integrity fields in `package-lock.json`, classified as scanner false positives; the lockfile was not changed and `--fix` was not run. Medium/low template, hook, and MCP risks remain open.
 - Soup direct provider benchmark measured six tasks with the same Anthropic-compatible model: fixed context input accounting 3,300 tokens versus Soup 1,564 (52.6% reduction); total input-plus-output accounting 4,836 versus 3,100 (35.9% reduction). Required-skill recall was 5/6 because the cross-cutting task omitted database migration context. No currency cost claim or integration approval was made.
-- This global-policy/benchmark batch is local and pending commit/push. No production deployment, remote D1 mutation, DNS/secrets change, merge, force-push or application behavior change performed.
+- This global-policy/benchmark batch was pushed in `5d4e83603bb5d465ffae43f78a8d116efbc48d59`; the ledger-only follow-up commit is pending. No production deployment, remote D1 mutation, DNS/secrets change, merge, force-push or application behavior change performed.
 
 ## D1-001 — Historical SQL binding investigation — pushed and remotely verified
 
