@@ -88,7 +88,7 @@
 - Implemented the smallest vertical slice in `src/pages/drive.tsx`: after a persisted request, the customer can refresh status, see the current server state, and cancel only while the existing state machine permits cancellation. Failed requests preserve actionable status feedback and controls recover.
 - Added focused coverage for persisted status reads, customer cancellation, terminal-state rejection, and cross-user access denial in `tests/naijadrive-private-ride.test.mjs`. Browser acceptance remains pending authorized test access.
 
-## Autonomous NaijaDrive milestone increment — local, pending push
+## Autonomous NaijaDrive milestone increment — pushed and remotely verified
 
 - Reverified starting local/remote `cb441a75c864386bb4d435e90d800e68b1f9fa60`; branch and preview remained healthy; `.npm-cache-rea/` and `/home/user/webapp` were preserved.
 - Corrected a demonstrated authorization defect in customer cancellation: cross-user cancellation now returns `404 Ride not found` before lifecycle evaluation instead of exposing a `409` transition response. Added a regression assertion.
