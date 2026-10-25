@@ -29,6 +29,7 @@ import {
   type EatsShippingDetails,
 } from '../lib/eats-cart'
 import type { EatsSelectedOption } from '../types'
+import { getEatsFulfillmentForCustomer } from '../lib/eats-fulfillment'
 
 export const eatsApi = new Hono<AppEnv>()
 
@@ -225,6 +226,13 @@ eatsApi.post('/checkout', async (c) => {
   })
 
   return c.json({ success: true, orderNumber, paid: false, authorization_url: init.authorization_url })
+})
+
+eatsApi.get('/orders/:orderNumber/fulfillment', async (c) => {
+  const user = c.get('user')!
+  const fulfillment = await getEatsFulfillmentForCustomer(c.env.DB, c.req.param('orderNumber'), user.id)
+  if (!fulfillment) return c.json({ error: 'Delivery fulfillment not found' }, 404)
+  return c.json(fulfillment)
 })
 
 eatsApi.post('/orders/:orderNumber/cancel', async (c) => {

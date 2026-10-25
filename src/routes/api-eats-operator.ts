@@ -14,6 +14,7 @@ import {
   resolveEatsOperatorProfile,
   transitionEatsOrderForOperator,
 } from '../lib/eats-operator'
+import { dispatchEatsOrder, EatsFulfillmentError } from '../lib/eats-fulfillment'
 
 export const eatsOperatorApi = new Hono<AppEnv>()
 eatsOperatorApi.use('*', requireAuth)
@@ -88,6 +89,32 @@ eatsOperatorApi.post('/operator/orders/:id/transition', async (c) => {
   } catch (err) {
     if (err instanceof EatsOperatorNotFoundError) return c.json({ error: err.message }, 404)
     if (err instanceof EatsOperatorStateError) return c.json({ error: err.message }, 409)
+    throw err
+  }
+})
+
+/** Bridge a ready, paid restaurant order into the existing Logistics Engine. */
+eatsOperatorApi.post('/operator/orders/:id/dispatch', async (c) => {
+  const profile = profileOf(c)
+  const orderId = positiveInteger(c.req.param('id'))
+  if (!orderId) return c.json({ error: 'Invalid order id' }, 400)
+  const owned = await getOwnedEatsOrderForOperator(c.env.DB, profile.id, orderId)
+  if (!owned) return c.json({ error: 'Order not found' }, 404)
+  const body = await c.req.json<{ vehicle_type_id?: number; quoted_price_kobo?: number; speed_tier?: string; pickup?: { line1?: string; city?: string; state?: string; phone?: string }; delivery_instructions?: string }>().catch(() => null)
+  if (!body?.vehicle_type_id || !body.quoted_price_kobo || body.quoted_price_kobo < 1) {
+    return c.json({ error: 'vehicle_type_id and a positive quoted_price_kobo are required; no courier or price is invented' }, 400)
+  }
+  try {
+    const fulfillment = await dispatchEatsOrder(c.env.DB, orderId, {
+      vehicleTypeId: body.vehicle_type_id,
+      quotedPriceKobo: body.quoted_price_kobo,
+      speedTier: body.speed_tier,
+      pickup: body.pickup,
+      deliveryInstructions: body.delivery_instructions,
+    })
+    return c.json({ success: true, fulfillment }, 201)
+  } catch (err) {
+    if (err instanceof EatsFulfillmentError) return c.json({ error: err.message }, 409)
     throw err
   }
 })

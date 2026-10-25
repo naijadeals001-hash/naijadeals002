@@ -51,6 +51,7 @@ export interface CreateStandaloneShipmentInput {
   specialHandlingNotes?: string | null
   quotedPriceKobo: number
   currency?: string
+  sourceType?: LogisticsSourceVertical
   rateCardId?: number | null
   logisticsQuoteId?: number | null
   pickup: { recipientName: string; phone: string; line1: string; city: string; state: string; countryIso: string; deliveryInstructions?: string | null }
@@ -78,7 +79,7 @@ export async function createStandaloneShipment(
          vehicle_type_id, speed_tier, origin_country_iso, destination_country_iso, origin_zone_key, destination_zone_key,
          declared_weight_kg, package_count, declared_value_kobo, is_fragile, is_temperature_sensitive,
          special_handling_notes, parcel_description, quoted_price_kobo, currency, status, source_type)
-       VALUES (?, 'standalone', ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'created', 'naijasend')`
+       VALUES (?, 'standalone', ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'created', ?)`
     )
     .bind(
       trackingNumber,
@@ -100,7 +101,8 @@ export async function createStandaloneShipment(
       input.specialHandlingNotes ?? null,
       input.parcelDescription ?? null,
       input.quotedPriceKobo,
-      input.currency ?? 'NGN'
+      input.currency ?? 'NGN',
+      input.sourceType ?? 'naijasend'
     )
     .run()
 

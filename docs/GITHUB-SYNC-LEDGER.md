@@ -68,6 +68,22 @@
 - Browser Control Center verification — 54 country rows, 20 vertical options, rollout controls visible, authenticated rollout API returned 200.
 - Unauthenticated rollout API returned 401.
 
+## Batch 0 audit + NaijaEats fulfillment bridge (local verification)
+
+- Audit added: `docs/PRODUCT-REALITY-AUDIT.md` with current route/API/schema gaps, truthful limitations and the reference-to-feature matrix.
+- REA re-verified locally at `6.7.0`; `rea doctor` confirmed aligned MCP registration and available browser provider. Native Hopper/Ghidra/IDA/JADX/Kuna engines remain unavailable; no protected workflow was bypassed.
+- Added `migrations/0092_naijaeats_fulfillment_bridge.sql`: one-to-one `eats_order_fulfillments` bridge to existing `shipments`, with dispatch status and ownership-safe indexes.
+- Added `src/lib/eats-fulfillment.ts`: a ready + paid/escrow-held Eats order can create a real Logistics Engine shipment, pickup/delivery jobs and a persisted bridge. It requires an explicit supported vehicle and quoted price; it does not invent a courier, rate or GPS position.
+- Extended `src/lib/logistics-shipments.ts` with an optional source vertical so Eats shipments are recorded as `naijaeats` rather than mislabeled as NaijaSend.
+- Extended `src/routes/api-eats-operator.ts`: `POST /api/eats/operator/orders/:id/dispatch`, protected by verified operator ownership and state/payment checks.
+- Extended `src/routes/api-eats.ts`: authenticated `GET /api/eats/orders/:orderNumber/fulfillment` for customer-safe fulfillment status.
+- Local migration `0092_naijaeats_fulfillment_bridge.sql`: passed via `wrangler d1 migrations apply naijadeals-production --local`.
+- Build: `npm run build` passed (266 modules).
+- Regression: `node --experimental-strip-types --test tests/naijaeats-operator.test.mjs` — 10 passed, 0 failed.
+- Preview refreshed through the existing PM2 `naijadeals` process; `/eats` and `/send` returned HTTP 200 after restart. No duplicate server was started.
+- Screenshots: not captured for this API/schema-only batch; browser E2E dispatch remains pending until a test courier/vehicle fixture is wired without presenting it as live inventory.
+- Known limitation: restaurant menu/profile editing, Eats courier UI, automatic dispatch and NaijaSend carrier bidding are not completed by this batch.
+
 ## Known gates not green
 
 - Whole-repository `npm run test:node` has existing unrelated production waitlist and NestJS TypeScript source-loader failures.
