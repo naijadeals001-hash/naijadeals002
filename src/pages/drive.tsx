@@ -103,6 +103,12 @@ export async function drivePage(c: Context<AppEnv>) {
                 <div class="rounded-xl border border-[#b8dfc1] bg-[#f4fbf5] p-4"><div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><p class="text-sm font-bold text-[#062d17]">Fare estimate modes</p><p class="mt-1 text-xs leading-5 text-slate-600">Routed estimates require a configured provider. Demo estimates use clearly labelled fixtures and never become live quotes.</p></div><div class="flex flex-wrap gap-2"><button id="routed-fare-button" type="button" class="min-h-[44px] rounded-lg bg-[#0b7a3b] px-4 text-sm font-bold text-white hover:bg-[#062d17]">Get routed fare</button><button id="simulated-fare-button" type="button" class="min-h-[44px] rounded-lg border border-[#0b7a3b] px-4 text-sm font-bold text-[#0b7a3b] hover:bg-white">Use demo estimate</button></div></div><p id="drive-fare-status" class="hidden mt-3 rounded-xl p-3 text-sm" role="status"></p></div>
                 <div class="flex flex-col gap-3 rounded-xl border border-[#b8dfc1] bg-[#f4fbf5] p-4 sm:flex-row sm:items-center sm:justify-between"><div><p class="text-sm font-bold text-[#062d17]">Private ride request is available in pilot mode</p><p class="mt-1 text-xs leading-5 text-slate-600">Your request is persisted with a simulated quote. Driver supply, GPS and external payment remain explicitly separate runtime states.</p></div><button type="submit" class="min-h-[44px] rounded-lg bg-[#0b7a3b] px-4 text-sm font-bold text-white">Request ride</button></div>
                 <p id="drive-booking-status" class="hidden rounded-xl p-3 text-sm" role="status"></p>
+                <section id="drive-ride-status-panel" class="hidden rounded-xl border border-slate-200 bg-slate-50 p-4" aria-labelledby="drive-ride-status-heading">
+                  <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div><h3 id="drive-ride-status-heading" class="text-sm font-bold text-slate-900">Persisted ride status</h3><p id="drive-ride-status" class="mt-1 text-sm text-slate-600" role="status"></p></div>
+                    <div class="flex gap-2"><button id="refresh-drive-ride" type="button" class="min-h-[40px] rounded-lg border border-slate-300 px-3 text-xs font-bold text-slate-700">Refresh</button><button id="cancel-drive-ride" type="button" class="hidden min-h-[40px] rounded-lg border border-red-200 px-3 text-xs font-bold text-red-700">Cancel ride</button></div>
+                  </div>
+                </section>
               </form>
             </div>
             <aside class="space-y-4"><div class="rounded-2xl bg-[#062d17] p-6 text-white"><div class="flex items-center justify-between"><h3 class="text-lg font-bold">Fare &amp; route readiness</h3><span class="material-symbols-outlined text-[#ffc72c]">calculate</span></div><div class="mt-5 space-y-4 text-sm"><div class="flex items-start gap-3"><span class="material-symbols-outlined text-[#ffc72c]">check_circle</span><div><p class="font-bold">Integer-kobo fare service connected</p><p class="mt-1 text-white/60">The preview reuses the existing runtime fare formula in both routed and explicitly simulated modes.</p></div></div><div class="flex items-start gap-3"><span class="material-symbols-outlined text-amber-300">pending</span><div><p class="font-bold">Live road distance and duration</p><p id="hero-route-status" class="mt-1 text-white/60">Routed mode is unavailable until a verified provider is configured. No silent simulation fallback is used.</p></div></div></div></div><div class="rounded-2xl border border-slate-200 bg-white p-6"><h3 class="text-lg font-bold text-slate-900">Active Abuja pilot zones</h3><div class="mt-4 space-y-3">{PILOT_ZONES.map((zone) => <div class="flex items-center justify-between rounded-xl bg-[#f6f8f6] px-3 py-3"><span class="text-sm font-semibold text-slate-700">{zone.label}</span><span class="text-xs font-bold text-[#0b7a3b]">Configured</span></div>)}<div class="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-3"><span class="text-sm font-semibold text-slate-500">Airport axis</span><span class="text-xs font-bold text-slate-500">Inactive</span></div></div></div></aside>
@@ -172,6 +178,12 @@ export async function drivePage(c: Context<AppEnv>) {
         const simulatedButton = document.getElementById('simulated-fare-button');
         const fareStatus = document.getElementById('drive-fare-status');
         const bookingStatus = document.getElementById('drive-booking-status');
+        const rideStatusPanel = document.getElementById('drive-ride-status-panel');
+        const rideStatus = document.getElementById('drive-ride-status');
+        const refreshRideButton = document.getElementById('refresh-drive-ride');
+        const cancelRideButton = document.getElementById('cancel-drive-ride');
+        let activeRideId = null;
+        let rideStatusRequest = 0;
         const heroFare = document.getElementById('hero-fare-estimate');
         const heroFareMode = document.getElementById('hero-fare-mode');
         const heroRouteStatus = document.getElementById('hero-route-status');
@@ -205,6 +217,40 @@ export async function drivePage(c: Context<AppEnv>) {
         }
         routedButton?.addEventListener('click', () => requestFare('routed'));
         simulatedButton?.addEventListener('click', () => requestFare('simulated'));
+        async function loadRideStatus() {
+          if (!activeRideId || !rideStatusPanel || !rideStatus) return;
+          const requestId = ++rideStatusRequest;
+          rideStatus.textContent = 'Refreshing persisted ride status…';
+          try {
+            const response = await fetch('/api/drive/rides/' + activeRideId);
+            const body = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(body.error || 'Ride status unavailable.');
+            if (requestId !== rideStatusRequest) return;
+            const status = body.ride.status;
+            rideStatus.textContent = 'Ride #' + body.ride.id + ' is ' + status.replaceAll('_', ' ') + '. Last updated ' + new Date(body.ride.updated_at).toLocaleString('en-NG') + '.';
+            cancelRideButton?.classList.toggle('hidden', !['requested','searching','offered','accepted','driver_arriving','driver_arrived'].includes(status));
+          } catch (error) {
+            if (requestId === rideStatusRequest) rideStatus.textContent = error instanceof Error ? error.message : 'Ride status unavailable.';
+          }
+        }
+        refreshRideButton?.addEventListener('click', loadRideStatus);
+        cancelRideButton?.addEventListener('click', async () => {
+          if (!activeRideId || cancelRideButton.disabled) return;
+          cancelRideButton.disabled = true;
+          cancelRideButton.setAttribute('aria-busy', 'true');
+          if (rideStatus) rideStatus.textContent = 'Cancelling persisted ride…';
+          try {
+            const response = await fetch('/api/drive/rides/' + activeRideId + '/cancel', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({}) });
+            const body = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(body.error || 'Ride cancellation unavailable.');
+            await loadRideStatus();
+          } catch (error) {
+            if (rideStatus) rideStatus.textContent = error instanceof Error ? error.message : 'Ride cancellation unavailable.';
+          } finally {
+            cancelRideButton.disabled = false;
+            cancelRideButton.removeAttribute('aria-busy');
+          }
+        });
         form?.addEventListener('submit', async (event) => {
           event.preventDefault();
           const data = new FormData(form);
@@ -220,6 +266,9 @@ export async function drivePage(c: Context<AppEnv>) {
             if (!response.ok) throw new Error(body.error || 'Ride request unavailable.');
             bookingStatus.className = 'rounded-xl bg-green-100 p-3 text-sm text-green-800';
             bookingStatus.textContent = 'Ride request #' + body.ride.id + ' persisted as ' + body.ride.status + '. Quote: ₦' + (Number(body.ride.fare_kobo) / 100).toLocaleString('en-NG') + '. Driver matching is refresh-based; no GPS or driver supply is fabricated.';
+            activeRideId = body.ride.id;
+            rideStatusPanel?.classList.remove('hidden');
+            await loadRideStatus();
           } catch {
             bookingStatus.className = 'rounded-xl bg-red-100 p-3 text-sm text-red-800';
             bookingStatus.textContent = 'The preview could not reach the booking service. No booking was created.';

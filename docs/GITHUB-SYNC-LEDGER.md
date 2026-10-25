@@ -81,6 +81,13 @@
 - Focused NaijaDrive regression: **14/14 passed** across private ride, carpool, preview, offer expiry/rejection and concurrent acceptance. TypeScript: current/new diagnostics `0/0`. Build: `272` modules. `git diff --check`: passed.
 - This slice is API/regression verified; authenticated browser acceptance remains unavailable. No production deployment, production mutation, DNS change or force-push performed.
 
+## DRIVE-003 discovery and implementation — local, pending push
+
+- Authenticated browser acceptance is `BLOCKED`: the available browser probe could not establish a usable authorized session, and the protected offer API returns HTTP 401. No credentials were invented and no authentication boundary was bypassed.
+- The next dependency-ready ride slice is `DRIVE-003`: persisted customer ride status and cancellation controls. This is supported by the existing `/api/drive/rides/:id` read endpoint, customer-owned authorization, `/api/drive/rides/:id/cancel`, and the existing server state machine; it does not add GPS, dispatch, payment, or new schema.
+- Implemented the smallest vertical slice in `src/pages/drive.tsx`: after a persisted request, the customer can refresh status, see the current server state, and cancel only while the existing state machine permits cancellation. Failed requests preserve actionable status feedback and controls recover.
+- Added focused coverage for persisted status reads, customer cancellation, terminal-state rejection, and cross-user access denial in `tests/naijadrive-private-ride.test.mjs`. Browser acceptance remains pending authorized test access.
+
 ## TS-001 — TypeScript diagnostic remediation and quality-gate recovery
 
 - Starting checkpoint verified: local and remote `210ad1c5b533d5c4f73e577956c773dda7d64e3c` on `feat/naijadrive-private-ride-foundation`; `.npm-cache-rea/` preserved and unrelated worktrees untouched.

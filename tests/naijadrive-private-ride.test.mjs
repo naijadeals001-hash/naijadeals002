@@ -87,6 +87,24 @@ test('offer inbox, expiry, rejection and no-driver recovery are persisted', asyn
   assert.equal(events.count, 1)
 })
 
+test('customer can refresh and cancel a persisted ride without bypassing ownership', async () => {
+  const created = await customer.client.post('/api/drive/rides', { pickupZone: 'abuja-central', dropoffZone: 'lokogoma', vehicleCategory: 'car', idempotencyKey: `cancel-${RUN_NONCE}` })
+  assert.equal(created.status, 201, JSON.stringify(created.body))
+  const rideId = created.body.ride.id
+  const before = await customer.client.get(`/api/drive/rides/${rideId}`)
+  assert.equal(before.status, 200)
+  assert.equal(before.body.ride.status, 'searching')
+  assert.ok(Array.isArray(before.body.events))
+  const cancelled = await customer.client.post(`/api/drive/rides/${rideId}/cancel`, {})
+  assert.equal(cancelled.status, 200, JSON.stringify(cancelled.body))
+  assert.equal(cancelled.body.status, 'cancelled')
+  const after = await customer.client.get(`/api/drive/rides/${rideId}`)
+  assert.equal(after.status, 200)
+  assert.equal(after.body.ride.status, 'cancelled')
+  assert.equal((await customer.client.post(`/api/drive/rides/${rideId}/cancel`, {})).status, 409)
+  assert.equal((await driver.client.get(`/api/drive/rides/${rideId}`)).status, 404)
+})
+
 test('invalid zones and unauthenticated ride creation fail closed', async () => {
   const bad = await customer.client.post('/api/drive/rides', { pickupZone: 'unknown', dropoffZone: 'gwarinpa', idempotencyKey: `bad-${RUN_NONCE}` })
   assert.equal(bad.status, 400)
