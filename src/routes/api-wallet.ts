@@ -3,6 +3,7 @@ import type { AppEnv } from '../types'
 import { requireAuth } from '../lib/auth'
 import { getWalletBalance, getWalletHistory, creditWallet } from '../lib/wallet'
 import { initializePaystackTransaction, verifyPaystackTransaction } from '../lib/paystack'
+import { createPaymentIntent, IdempotencyConflictError } from '../lib/payment-engine'
 
 export const walletApi = new Hono<AppEnv & { Bindings: AppEnv['Bindings'] & { PAYSTACK_SECRET_KEY?: string } }>()
 
@@ -26,10 +27,34 @@ walletApi.post('/topup/initialize', async (c) => {
   const secretKey = c.env.PAYSTACK_SECRET_KEY
   if (!secretKey) return c.json({ error: 'Wallet funding is not configured yet' }, 503)
 
-  const reference = `ND-TOPUP-${user.id}-${Date.now()}`
+  const idempotencyKey = c.req.header('Idempotency-Key')?.trim()
+  if (!idempotencyKey) return c.json({ error: 'Idempotency-Key header is required for wallet funding' }, 400)
+
+  let intent
+  try {
+    intent = await createPaymentIntent(c.env.DB, {
+      idempotencyKey,
+      userId: user.id,
+      verticalKey: 'ecosystem.naijapay',
+      countryIso: 'NG',
+      currency: 'NGN',
+      amountMinor: body.amount_kobo,
+      fundingMethod: 'paystack',
+      lineItems: [{ code: 'wallet_topup', description: 'NaijaPay wallet funding', amountMinor: body.amount_kobo }],
+    })
+  } catch (error) {
+    if (error instanceof IdempotencyConflictError) return c.json({ error: error.message, code: 'IDEMPOTENCY_CONFLICT' }, 409)
+    throw error
+  }
+
+  const reference = intent.intent.transactionReference
+  const existing = await c.env.DB.prepare('SELECT provider_reference FROM payment_transactions WHERE intent_id = ?').bind(intent.intent.id).first<{ provider_reference: string }>()
+  if (existing) return c.json({ reference: existing.provider_reference, transaction_reference: reference, already_initialized: true }, 200)
+
   await c.env.DB.prepare(
-    'INSERT INTO payment_transactions (user_id, provider, provider_reference, amount_kobo, status) VALUES (?, ?, ?, ?, ?)'
-  ).bind(user.id, 'paystack', reference, body.amount_kobo, 'initiated').run()
+    'INSERT INTO payment_transactions (user_id, provider, provider_reference, amount_kobo, status, currency, idempotency_key, transaction_reference, intent_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+  ).bind(user.id, 'paystack', reference, body.amount_kobo, 'initiated', 'NGN', idempotencyKey, reference, intent.intent.id).run()
+  await c.env.DB.prepare("UPDATE payment_intents SET status = 'pending', updated_at = datetime('now') WHERE id = ? AND status = 'created'").bind(intent.intent.id).run()
 
   const origin = new URL(c.req.url).origin
   const init = await initializePaystackTransaction(secretKey, {

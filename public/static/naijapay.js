@@ -56,7 +56,8 @@
       showToast('Minimum top-up is ₦100.', true);
       return;
     }
-    const res = await api('/api/wallet/topup/initialize', { method: 'POST', body: JSON.stringify({ amount_kobo: amountKobo }) });
+    const idempotencyKey = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : ('topup-' + Date.now() + '-' + Math.random().toString(36).slice(2));
+    const res = await api('/api/wallet/topup/initialize', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': idempotencyKey }, body: JSON.stringify({ amount_kobo: amountKobo }) });
     if (res.ok && res.data && res.data.authorization_url) {
       location.href = res.data.authorization_url;
     } else {
