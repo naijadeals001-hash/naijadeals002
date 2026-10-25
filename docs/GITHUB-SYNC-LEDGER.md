@@ -5,12 +5,12 @@
 - Repository: `https://github.com/naijadeals001-hash/naijadeals002.git`
 - Local worktree: `/home/user/worktrees/release-naijaeats-phase1`
 - Branch: `feat/naijadrive-private-ride-foundation`
-- Commit: `dc8276c9722b459ef4e317b409c0796b9dfa8bf7`
-- Commit message: `feat(gigs): redesign service discovery experience`
+- Commit: `395bd1e3f768ac2094a3274b99f0ca77c7e8ec06`
+- Commit message: `feat(stream-send): add truthful discovery and logistics surfaces`
 - Remote branch: `origin/feat/naijadrive-private-ride-foundation`
-- Remote SHA verified: `dc8276c9722b459ef4e317b409c0796b9dfa8bf7`
+- Remote SHA verified: `395bd1e3f768ac2094a3274b99f0ca77c7e8ec06`
 - Push result: successful
-- Batch: A — NaijaGigs discovery redesign
+- Batches delivered: A — NaijaGigs; D/E foundation — NaijaStream and NaijaSend
 - Prior Batch B implementation commit: `0f7d51d7faff74793e43ad192054b995c56d16fc` (remote verified)
 - Prior service-location commit: `cc2dcd3e03bc3436a43ae13d8d820c43439df786` (remote verified)
 - Prior navigation accessibility commit: `eb125827ffff8184cc2a94b4ba517dd3ac89ecb8` (remote verified)
@@ -39,6 +39,16 @@
 - Browser interactions: search form changed URL and filtered real Service Engine listings; no console/page errors or failed requests.
 - Lifecycle regression: `tests/naijagigs-lifecycle.e2e.mjs` — 1 passed, 0 failed.
 - Known limitation: no matching local listing for the test term `plumber`, so the filtered result correctly showed the empty state rather than fabricated data.
+
+## Stream and Send verification
+
+- Added dedicated `/stream` and `/send` routes without replacing the generic ecosystem registry.
+- Stream search preserves the honest empty state because no dedicated content catalogue backend was found; no viewer, subscriber, like, earnings or monetization metrics were fabricated.
+- Send tracking calls the public `/api/track/:trackingNumber` endpoint and correctly displayed `Tracking number not found` for `ND-NOT-REAL`.
+- Send authenticated quote form targets the existing `/api/logistics/quotes` engine; guest users receive a sign-in boundary instead of a fake quote.
+- Browser: desktop `1440x900` and mobile `390x844`; screenshots `qa-screenshots/stream-*.png` and `qa-screenshots/send-*.png`.
+- Browser interactions: Stream search updated the URL and preserved the truthful empty state; Send tracking returned the backend not-found response; no console/page errors or failed requests.
+- Known limitation: authenticated shipment creation, live content playback and creator publishing remain unavailable until their existing backend capabilities are connected.
 
 ## Verification before push
 
