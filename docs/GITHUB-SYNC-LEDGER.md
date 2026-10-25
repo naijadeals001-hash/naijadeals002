@@ -5,10 +5,10 @@
 - Repository: `https://github.com/naijadeals001-hash/naijadeals002.git`
 - Local worktree: `/home/user/worktrees/release-naijaeats-phase1`
 - Branch: `feat/naijadrive-private-ride-foundation`
-- Commit: `e80e70ac6e25fe69e17b3b43e3e183449a5626fb`
-- Commit message: `feat(ecosystem): add consolidated vertical landing pages`
+- Commit: `ae2dd918d71d2c6418bfd9c22cef2a62040e5ba3`
+- Commit message: `fix(ecosystem): harden shared layout and browser flows`
 - Remote branch: `origin/feat/naijadrive-private-ride-foundation`
-- Remote SHA verified: `e80e70ac6e25fe69e17b3b43e3e183449a5626fb`
+- Remote SHA verified: `ae2dd918d71d2c6418bfd9c22cef2a62040e5ba3`
 - Push result: successful
 - Prior Batch B implementation commit: `0f7d51d7faff74793e43ad192054b995c56d16fc` (remote verified)
 - Prior service-location commit: `cc2dcd3e03bc3436a43ae13d8d820c43439df786` (remote verified)
