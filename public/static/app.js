@@ -351,7 +351,7 @@
   // ---------- Wallet balance in header nav ----------
   (function initWalletNav() {
     const el = document.getElementById('wallet-balance-nav');
-    if (!el) return;
+    if (!el || document.body.dataset.authenticated !== 'true') return;
     api('/api/wallet').then(function (res) {
       if (res.ok && res.data) {
         el.textContent = formatNaira(res.data.balance_kobo);
@@ -431,6 +431,7 @@
   }
 
   (function initWishlistNav() {
+    if (document.body.dataset.authenticated !== 'true') { wishlistIds = new Set(); return; }
     api('/api/wishlist/ids').then(function (res) {
       wishlistIds = new Set((res.ok && res.data && res.data.product_ids) || []);
       updateWishlistBadge(wishlistIds.size);

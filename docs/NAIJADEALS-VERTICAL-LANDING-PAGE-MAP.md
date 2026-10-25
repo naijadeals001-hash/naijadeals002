@@ -50,3 +50,11 @@ Updated: 2026-10-25
 - Images use project-owned local assets.
 - Country and vertical transaction controls remain backend-enforced.
 - Sandbox utility payments remain explicitly sandbox-only.
+
+## Hardening checkpoint
+
+- Platform pages now render through the shared async `Layout` and inherit the real global header/footer.
+- Guest header scripts skip authenticated wallet/wishlist API calls, avoiding expected 401 console noise.
+- Browser acceptance covers 18 consolidated routes at 1440x900 and 390x844 with no console errors, failed requests or broken images.
+- NaijaPay utility catalog loading now has explicit loading, empty, retry and failure states.
+- Utility purchase submission is guarded against duplicate clicks and preserves idempotent sandbox receipts.

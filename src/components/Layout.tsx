@@ -116,7 +116,7 @@ export const Layout: FC<LayoutProps> = async ({ title, description, user, cartCo
         <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet" />
         <link href="/static/style.css" rel="stylesheet" />
       </head>
-      <body class="min-h-screen flex flex-col bg-gray-50 font-sans text-gray-900">
+      <body class="min-h-screen flex flex-col bg-gray-50 font-sans text-gray-900" data-authenticated={user ? 'true' : 'false'}>
         {/* z-[60]: kept above the drawer/backdrop/bottom-nav as a defensive
             fallback, but the PRIMARY fix that makes #mobile-menu-btn and
             #mobile-nav-close-btn both independently clickable is spatial, not

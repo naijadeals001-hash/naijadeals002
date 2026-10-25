@@ -114,7 +114,7 @@ export const SellerLayout: FC<SellerLayoutProps> = ({ title, user, vendor, activ
                 <span class="flex items-center gap-2.5 px-5 py-2.5 text-sm font-medium text-gray-400 cursor-not-allowed" aria-disabled="true">
                   <span class="material-symbols-outlined text-lg">{item.icon}</span>
                   {item.label}
-                  <span class="ml-auto text-[9px] bg-gray-100 text-gray-400 rounded px-1.5 py-0.5">Soon</span>
+                  <span class="ml-auto text-[9px] bg-gray-100 text-gray-400 rounded px-1.5 py-0.5">Not enabled</span>
                 </span>
               )
             )}
