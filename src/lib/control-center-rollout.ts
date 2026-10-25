@@ -5,9 +5,11 @@ export type CountryRolloutStatus = 'PLANNED' | 'PRE-LAUNCH' | 'BETA' | 'LIVE' | 
 export type RolloutCountry = {
   id: number
   isoCode: string
+  iso3Code: string | null
   name: string
   region: string
   currencyCode: string
+  dialingCode: string | null
   defaultLanguage: string
   status: CountryRolloutStatus
   displayOrder: number
@@ -32,7 +34,8 @@ const OPERATIONAL_COUNTRY_STATUSES = new Set<CountryRolloutStatus>(['LIVE', 'BET
 
 export async function listRolloutCountries(db: D1Database): Promise<RolloutCountry[]> {
   const { results } = await db.prepare(`
-    SELECT id, iso_code AS isoCode, name, region, currency_code AS currencyCode,
+    SELECT id, iso_code AS isoCode, iso3_code AS iso3Code, name, region,
+           currency_code AS currencyCode, dialing_code AS dialingCode,
            default_language AS defaultLanguage, status, display_order AS displayOrder
     FROM cc_countries
     ORDER BY display_order ASC, name ASC
@@ -100,7 +103,8 @@ export async function isVerticalEnabledInCountry(db: D1Database, verticalKey: st
 export async function setCountryStatus(db: D1Database, countryId: number, status: CountryRolloutStatus): Promise<RolloutCountry | null> {
   await db.prepare(`UPDATE cc_countries SET status = ?, updated_at = datetime('now') WHERE id = ?`).bind(status, countryId).run()
   return db.prepare(`
-    SELECT id, iso_code AS isoCode, name, region, currency_code AS currencyCode,
+    SELECT id, iso_code AS isoCode, iso3_code AS iso3Code, name, region,
+           currency_code AS currencyCode, dialing_code AS dialingCode,
            default_language AS defaultLanguage, status, display_order AS displayOrder
     FROM cc_countries WHERE id = ?
   `).bind(countryId).first<RolloutCountry>()
