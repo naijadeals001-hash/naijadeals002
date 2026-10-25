@@ -6,8 +6,8 @@
 - Local worktree: `/home/user/worktrees/release-naijaeats-phase1`
 - Branch: `feat/naijadrive-private-ride-foundation`
 - Starting checkpoint verified: `60732b8710037b9bf347dc1c2fa51ff25bb2a0bb`
-- Current implementation batch: `cadbbdb0589914f38e7434360ed034b33d609d84` (`feat(eats): harden courier isolation and fulfillment`)
-- Verified remote SHA: `cadbbdb0589914f38e7434360ed034b33d609d84`
+- Current implementation batch: `5978b966a070e985705bc2ed425df4998b36288e` (`feat(control-center): implement CC-003 RBAC and city controls`)
+- Verified remote SHA: `5978b966a070e985705bc2ed425df4998b36288e`
 - Remote branch: `origin/feat/naijadrive-private-ride-foundation`
 - Production deployment: not performed
 - Production merge/release: not performed
@@ -63,6 +63,7 @@
 - Automated evidence: CC-003 targeted suite **3/3**, Control Center combined regression **12/12**, affected EATS/Drive/Shop regression **17/17**, build **272 modules**.
 - Browser acceptance remains explicitly **not run** because no authorized Control Center role sessions were available. Country-admin HTTP workflow coverage is represented by direct server-side role/scope tests, not claimed as browser acceptance.
 - `EATS-001` remains separate and partial; no production deployment, remote D1 mutation, merge, DNS change or force-push performed.
+- Verified CC-003 implementation commit and remote SHA: `5978b966a070e985705bc2ed425df4998b36288e`; local D1 registry now records this SHA.
 
 ## Control Center development registry batch — current local checkpoint
 
