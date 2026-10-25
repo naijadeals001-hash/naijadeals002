@@ -432,6 +432,13 @@ export async function naijapayPage(c: Context<AppEnv>) {
                 </div>
               </div>
 
+              {/* ================= UTILITY PAYMENTS (sandbox-backed, never presented as live) ================= */}
+              <section id="np-utility-payments" class="bg-white border border-gray-100 rounded-2xl p-4 dt:p-5 mb-5" aria-labelledby="np-utility-title">
+                <div class="flex items-start justify-between gap-3 mb-3"><div><p id="np-utility-title" class="text-[13px] font-bold text-gray-800">Airtime, Data &amp; Bills</p><p class="text-[11px] text-gray-400">Available products are provider-backed sandbox products until live authorization is verified.</p></div><span class="text-[9px] font-bold uppercase text-blue-600 bg-blue-50 rounded-full px-2 py-1">Sandbox</span></div>
+                <div class="grid sm:grid-cols-3 gap-2.5"><label class="text-[11px] text-gray-500">Category<select id="np-utility-category" class="mt-1 w-full border border-gray-200 rounded-lg px-2 py-2 text-xs"><option value="">Select category</option><option value="airtime">Mobile airtime</option><option value="data">Mobile data</option><option value="electricity">Electricity</option><option value="cable_tv">Cable TV</option><option value="internet">Internet</option><option value="water">Water</option></select></label><label class="text-[11px] text-gray-500">Product<select id="np-utility-product" class="mt-1 w-full border border-gray-200 rounded-lg px-2 py-2 text-xs" disabled><option>Select category first</option></select></label><label class="text-[11px] text-gray-500">Phone / meter / account<input id="np-utility-identifier" class="mt-1 w-full border border-gray-200 rounded-lg px-2 py-2 text-xs" placeholder="Identifier" /></label></div>
+                <div class="flex flex-wrap items-center justify-between gap-2 mt-3"><span id="np-utility-quote" class="text-xs text-gray-500" role="status">Select a product to view price and fees.</span><button id="np-utility-pay" type="button" disabled class="rounded-lg bg-npPrimary text-white text-xs font-bold px-4 py-2 disabled:opacity-40">Validate &amp; Pay</button></div><div id="np-utility-result" class="hidden mt-3 rounded-lg p-3 text-xs" role="status"></div>
+              </section>
+
               {/* ================= SHARED PAYMENT ACTIVITY (real payment_intents API) ================= */}
               <section id="np-shared-activity" class="bg-white border border-gray-100 rounded-2xl p-4 dt:p-5 mb-5" aria-labelledby="np-shared-activity-title">
                 <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
