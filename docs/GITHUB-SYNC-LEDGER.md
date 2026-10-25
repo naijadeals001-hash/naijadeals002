@@ -6,7 +6,8 @@
 - Local worktree: `/home/user/worktrees/release-naijaeats-phase1`
 - Branch: `feat/naijadrive-private-ride-foundation`
 - Starting checkpoint verified: `60732b8710037b9bf347dc1c2fa51ff25bb2a0bb`
-- Current implementation batch: local, uncommitted until final focused verification
+- Current implementation batch: `cadbbdb0589914f38e7434360ed034b33d609d84` (`feat(eats): harden courier isolation and fulfillment`)
+- Verified remote SHA: `cadbbdb0589914f38e7434360ed034b33d609d84`
 - Remote branch: `origin/feat/naijadrive-private-ride-foundation`
 - Production deployment: not performed
 - Production merge/release: not performed
@@ -47,6 +48,7 @@
 - `offerNextEatsCourier` now keeps an empty eligible pool retryable (`offers_open`) and only persists terminal `no_courier_available` after the reassignment limit is exhausted.
 - Build passed after this batch (272 modules). Existing PM2 `naijadeals` was reused; `/eats` returned HTTP 200 after restart. The restart emitted an existing Control Center D1 binding error in historical logs, but the preview recovered and served the route.
 - Full mixed regression remains not green: Drive private-ride recovery had one stale fixture assertion, and the broad `test:node` discovery includes unrelated waitlist/NestJS missing-module failures. Authenticated customer/merchant/courier browser acceptance remains blocked by lack of an authorized session. REA `npx` verification was blocked by root-owned npm cache permissions; existing Bolt Food evidence remains the only claimed reference.
+- Verified implementation commit and remote SHA: `cadbbdb0589914f38e7434360ed034b33d609d84`; local D1 `EATS-001` checkpoint now records both SHAs and the 12/12 repeated courier evidence.
 - No production deployment, remote D1 mutation, merge, DNS change or force-push performed.
 
 ## Control Center development registry batch — current local checkpoint
