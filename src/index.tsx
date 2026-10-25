@@ -71,6 +71,8 @@ import {
 import { eatsOperatorOrdersPage, eatsOperatorOrderDetailPage } from './pages/eats-operator'
 import { auraPage } from './pages/aura'
 import { drivePage } from './pages/drive'
+import { streamPage } from './pages/stream'
+import { sendPage } from './pages/send'
 import { helpPage } from './pages/help'
 import { aboutPage, careersPage, termsPage, privacyPage, sellerTermsPage } from './pages/company'
 import { sellerGatewayPage, sellerOnboardingPage } from './pages/seller'
@@ -290,6 +292,8 @@ app.get('/affiliate', affiliatePage)
 // engine exists, simply repointing that one line to a different handler),
 // never a rebuild of this list.
 app.get('/drive', drivePage)
+app.get('/stream', streamPage)
+app.get('/send', sendPage)
 // Consolidated platform landing pages. Existing operational vertical routes
 // remain intact below; these pages are discovery front doors, not fake
 // fulfillment surfaces.
