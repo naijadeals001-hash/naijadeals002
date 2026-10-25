@@ -12,6 +12,7 @@
  * the real API for actions (spec section 33AG: no fake completion).
  */
 import type { Context } from 'hono'
+import { getCookie } from 'hono/cookie'
 import { Layout } from '../components/Layout'
 import type { AppEnv, ServiceListingRow, ServiceQuoteRow, ServiceOrderRow, CategoryRow } from '../types'
 import { formatMoney } from '../lib/money'
@@ -598,6 +599,7 @@ export async function gigsRequestPage(c: Context<AppEnv>) {
   const db = c.env.DB
   const user = c.get('user')!
   const locale = c.get('locale')
+  const selectedCity = getCookie(c, 'nd_city') || 'Lagos'
   const listingIdParam = c.req.query('listing_id')
   const listingId = listingIdParam ? Number(listingIdParam) : undefined
 
@@ -677,7 +679,7 @@ export async function gigsRequestPage(c: Context<AppEnv>) {
           <div class="grid sm:grid-cols-2 gap-4">
             <div>
               <label class="text-sm font-medium text-gray-700 block mb-1">City</label>
-              <input type="text" name="city" value="Lagos" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-primary" />
+              <input type="text" name="city" value={selectedCity} class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-primary" />
             </div>
             <div>
               <label class="text-sm font-medium text-gray-700 block mb-1">Address / neighborhood</label>
