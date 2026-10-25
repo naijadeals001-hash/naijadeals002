@@ -5,11 +5,12 @@
 - Repository: `https://github.com/naijadeals001-hash/naijadeals002.git`
 - Local worktree: `/home/user/worktrees/release-naijaeats-phase1`
 - Branch: `feat/naijadrive-private-ride-foundation`
-- Commit: `0f7d51d7faff74793e43ad192054b995c56d16fc`
-- Commit message: `feat(batch-b): build real marketplace experiences`
+- Commit: `cc2dcd3e03bc3436a43ae13d8d820c43439df786`
+- Commit message: `feat(gigs): respect selected service city`
 - Remote branch: `origin/feat/naijadrive-private-ride-foundation`
-- Remote SHA verified: `0f7d51d7faff74793e43ad192054b995c56d16fc`
+- Remote SHA verified: `cc2dcd3e03bc3436a43ae13d8d820c43439df786`
 - Push result: successful
+- Prior Batch B implementation commit: `0f7d51d7faff74793e43ad192054b995c56d16fc` (remote verified)
 - Prior navigation accessibility commit: `eb125827ffff8184cc2a94b4ba517dd3ac89ecb8` (remote verified)
 - Prior Batch A implementation commit: `6c30e08746b4b2cca3e827915b29b221e98e722e` (remote verified)
 - Production deployment: not performed
