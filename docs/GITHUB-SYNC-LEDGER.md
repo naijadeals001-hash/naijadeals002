@@ -5,10 +5,10 @@
 - Repository: `https://github.com/naijadeals001-hash/naijadeals002.git`
 - Local worktree: `/home/user/worktrees/release-naijaeats-phase1`
 - Branch: `feat/naijadrive-private-ride-foundation`
-- Commit: `507756d8ca035a9854092a5be589c1c763974f06`
-- Commit message: `fix(naijapay): post journal lines atomically`
+- Commit: `ff7dff26d2f608bcdcc29405e10845723034d38f`
+- Commit message: `feat(naijapay): add transaction history and provider controls`
 - Remote branch: `origin/feat/naijadrive-private-ride-foundation`
-- Remote SHA verified: `88308d1cb100cef01a5235f9b80681de4fee7182`
+- Remote SHA verified: `ff7dff26d2f608bcdcc29405e10845723034d38f`
 - Push result: successful
 - Prior Batch B implementation commit: `0f7d51d7faff74793e43ad192054b995c56d16fc` (remote verified)
 - Prior service-location commit: `cc2dcd3e03bc3436a43ae13d8d820c43439df786` (remote verified)
