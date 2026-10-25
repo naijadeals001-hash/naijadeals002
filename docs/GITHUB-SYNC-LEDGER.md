@@ -113,6 +113,7 @@
 
 ## Five-vertical autonomous sprint — fresh REA and NaijaDrive carpool batch
 
+- Commit: `85d86ee8c6ce60fee9c6d03f2105377e46bc7437` (`feat(sprint): add evidence-backed carpool and isolate freight auth`); remote SHA verified on `origin/feat/naijadrive-private-ride-foundation`.
 - Starting checkpoint verified: branch `feat/naijadrive-private-ride-foundation`, HEAD/remote `2bef0d77fc498d8790f2d8998a84f023a8f793f5`, existing PM2 `naijadeals` preview online, `/eats` and `/send` HTTP 200. No reset/clean/stash/duplicate server/production operation.
 - Fresh REA preflight and browser research completed before application edits. Full record: `docs/REFERENCE-EVIDENCE-2026-10-25-SPRINT.md`.
 - Fresh evidence IDs: Shop/Jumia `ev_fba5a71f746a59e57bf9e640e36260f179a600e01873a497fbe75b1494912d9a` (Cloudflare blocked); Drive/Bolt cities `ev_d8befc0cf22b7ec8ca283f124f8d231507cfcd8b4dd8eb4a35696d106af74470`; food/Bolt Food `ev_d71162b15ccf2e2a972d7f945d1ba864d709435023cdfaaf9e0087b8c357f02e`; grocery/Glovo `ev_47cbd593feae86670b0da0cefc539412cb639334a3d7780209f9e4dce48c9ec8`; Send/uShip `ev_feafa6d3921f2310a1578f06c3cc86e870a69ba143ed49fe291410438a79e896`; Gigs/Fiverr `ev_bf1e13b566f1456d246cd5b37ae7795192e47122986c4ee9e5cd79356c74d4c9` (human verification blocked); Stay/Airbnb `ev_c976c18378f3d2f525de4a9355a11045566223c107ce55030a966d0c66845540`.
