@@ -1505,6 +1505,10 @@
     let currentStep = 1;
     let appliedCouponCode = null;
     let deliveryMethod = 'standard';
+    // Stable for this checkout page so browser retries cannot create duplicate pending orders.
+    const checkoutIdempotencyKey = (window.crypto && typeof window.crypto.randomUUID === 'function')
+      ? window.crypto.randomUUID()
+      : 'checkout-' + Date.now() + '-' + Math.random().toString(36).slice(2);
 
     // ---------- Step navigation ----------
     function goToStep(n) {
@@ -1689,11 +1693,13 @@
         placeOrderBtn.disabled = true;
         placeOrderBtn.textContent = 'Placing order...';
 
-        const payload = {
+          const payload = {
           address_id: Number(addressRadio.value),
           delivery_method: deliveryMethod,
-          payment_method: paymentRadio ? paymentRadio.value : 'wallet'
+          payment_method: paymentRadio ? paymentRadio.value : 'wallet',
+          idempotency_key: checkoutIdempotencyKey
         };
+
         if (appliedCouponCode) payload.coupon_code = appliedCouponCode;
         if (initData.isBuyNow && initData.buyNow) payload.buy_now = initData.buyNow;
 

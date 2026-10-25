@@ -59,9 +59,14 @@ export async function createPendingOrder(
   items: CartItemRow[],
   shipping: ShippingDetails,
   deliveryMethod: DeliveryMethod = 'standard',
-  couponCode: string | null = null
-): Promise<{ orderId: number; orderNumber: string; totalKobo: number; discountKobo: number; deliveryFeeKobo: number }> {
+  couponCode: string | null = null,
+  checkoutIdempotencyKey: string | null = null
+): Promise<{ orderId: number; orderNumber: string; totalKobo: number; discountKobo: number; deliveryFeeKobo: number; replayed: boolean }> {
   if (items.length === 0) throw new Error('Cart is empty')
+  if (checkoutIdempotencyKey) {
+    const existing = await db.prepare('SELECT id, order_number, total_kobo, discount_kobo, delivery_fee_kobo FROM orders WHERE user_id = ? AND checkout_idempotency_key = ?').bind(userId, checkoutIdempotencyKey).first<any>()
+    if (existing) return { orderId: existing.id, orderNumber: existing.order_number, totalKobo: existing.total_kobo, discountKobo: existing.discount_kobo ?? 0, deliveryFeeKobo: existing.delivery_fee_kobo ?? 0, replayed: true }
+  }
 
   const subtotal = items.reduce((sum, item) => sum + item.price_kobo * item.quantity, 0)
   const deliveryFee = calculateDeliveryFeeKobo(items, deliveryMethod)
@@ -108,14 +113,15 @@ export async function createPendingOrder(
 
   const orderInsert = await db
     .prepare(
-      `INSERT INTO orders (order_number, user_id, status, payment_status, subtotal_kobo, delivery_fee_kobo, total_kobo,
+      `INSERT INTO orders (order_number, user_id, checkout_idempotency_key, status, payment_status, subtotal_kobo, delivery_fee_kobo, total_kobo,
                             shipping_name, shipping_phone, shipping_address, shipping_city, shipping_state, shipping_country,
                             delivery_method, coupon_code, discount_kobo)
-       VALUES (?, ?, 'pending_payment', 'unpaid', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       VALUES (?, ?, ?, 'pending_payment', 'unpaid', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .bind(
       orderNumber,
       userId,
+      checkoutIdempotencyKey,
       subtotal,
       deliveryFee,
       total,
@@ -158,7 +164,7 @@ export async function createPendingOrder(
   // no post-insert increment step needed (see the claim block earlier in this function
   // for the full rationale on why the claim must precede, not follow, the insert).
 
-  return { orderId, orderNumber, totalKobo: total, discountKobo, deliveryFeeKobo: deliveryFee }
+  return { orderId, orderNumber, totalKobo: total, discountKobo, deliveryFeeKobo: deliveryFee, replayed: false }
 }
 
 export class OrderPaymentError extends Error {}

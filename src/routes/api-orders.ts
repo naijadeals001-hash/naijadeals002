@@ -167,10 +167,14 @@ ordersApi.post('/checkout', async (c) => {
     delivery_method?: DeliveryMethod
     coupon_code?: string
     payment_method: 'wallet' | 'paystack'
+    idempotency_key?: string
     buy_now?: { listing_id: number; quantity: number; variant_id?: number | null }
   }>().catch(() => null)
 
   if (!body) return c.json({ error: 'Invalid request body' }, 400)
+  if (!['wallet', 'paystack'].includes(body.payment_method)) return c.json({ error: 'payment_method must be wallet or paystack' }, 400)
+  const idempotencyKey = body.idempotency_key?.trim() || null
+  if (idempotencyKey && (idempotencyKey.length < 8 || idempotencyKey.length > 128)) return c.json({ error: 'idempotency_key must be between 8 and 128 characters' }, 400)
 
   // ---------- Resolve shipping details ----------
   // Stage 2C (Currency & Address Foundation): shipping.country is resolved
@@ -227,14 +231,16 @@ ordersApi.post('/checkout', async (c) => {
     }
   }
 
-  const { orderId, orderNumber, totalKobo } = await createPendingOrder(
+  const result = await createPendingOrder(
     c.env.DB,
     user.id,
     items,
     shipping,
     deliveryMethod,
-    body.coupon_code ?? null
+    body.coupon_code ?? null,
+    idempotencyKey
   )
+  const { orderId, orderNumber, totalKobo } = result
 
   if (body.payment_method === 'wallet') {
     try {
@@ -261,7 +267,13 @@ ordersApi.post('/checkout', async (c) => {
   }
 
   // Paystack flow: initialize transaction, return checkout URL. Cart is cleared only once
-  // payment is verified (via webhook or verify-callback route), never here.
+  // payment is verified (via webhook or verify-callback route), never here. A retry with
+  // the same idempotency key must not create a second provider transaction.
+  if (result.replayed) {
+    const existingPayment = await c.env.DB.prepare("SELECT provider_reference, status FROM payment_transactions WHERE order_id = ? ORDER BY id DESC LIMIT 1").bind(orderId).first<{ provider_reference: string; status: string }>()
+    if (existingPayment?.status === 'success') return c.json({ success: true, orderNumber, paid: true, replayed: true })
+    return c.json({ success: true, orderNumber, paid: false, replayed: true, error: 'checkout_in_progress' }, 200)
+  }
   const secretKey = c.env.PAYSTACK_SECRET_KEY
   if (!secretKey) {
     return c.json({ error: 'Card payments are not configured yet. Please pay from your wallet.' }, 503)
