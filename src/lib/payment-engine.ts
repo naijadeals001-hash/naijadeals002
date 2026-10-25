@@ -143,15 +143,17 @@ export async function postJournalEntry(db: D1Database, input: {
   const credit = input.lines.filter((line) => line.direction === 'credit').reduce((sum, line) => sum + line.amountMinor, 0)
   if (debit !== credit || !Number.isSafeInteger(debit) || debit <= 0) throw new PaymentContractError('Journal debits and credits must balance in positive integer minor units')
   if (!/^[A-Z]{3}$/.test(input.currency)) throw new PaymentContractError('Journal currency must be an ISO 4217 code')
-  const entry = db.prepare(`INSERT INTO journal_entries
-    (entry_reference, currency, source_type, source_reference, description) VALUES (?, ?, ?, ?, ?)`)
-    .bind(input.entryReference, input.currency, input.sourceType, input.sourceReference, input.description ?? '')
-  const result = await entry.run()
-  const entryId = Number(result.meta.last_row_id)
-  await db.batch(input.lines.map((line) => db.prepare(`INSERT INTO journal_lines
-    (journal_entry_id, account_code, direction, amount_minor, currency) VALUES (?, ?, ?, ?, ?)`)
-    .bind(entryId, line.accountCode, line.direction, line.amountMinor, input.currency)))
-  return entryId
+  const statements = [
+    db.prepare(`INSERT INTO journal_entries
+      (entry_reference, currency, source_type, source_reference, description) VALUES (?, ?, ?, ?, ?)`)
+      .bind(input.entryReference, input.currency, input.sourceType, input.sourceReference, input.description ?? ''),
+    ...input.lines.map((line) => db.prepare(`INSERT INTO journal_lines
+      (journal_entry_id, account_code, direction, amount_minor, currency)
+      SELECT id, ?, ?, ?, ? FROM journal_entries WHERE entry_reference = ?`)
+      .bind(line.accountCode, line.direction, line.amountMinor, input.currency, input.entryReference)),
+  ]
+  const results = await db.batch(statements)
+  return Number(results[0].meta.last_row_id)
 }
 
 export async function transitionPaymentIntent(db: D1Database, intentId: number, from: PaymentStatus, to: PaymentStatus): Promise<boolean> {
