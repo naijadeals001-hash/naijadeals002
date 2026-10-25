@@ -81,6 +81,7 @@ import { getAllCountries } from '../lib/country'
 import { getCategoryNavTreeForAdmin, getEcosystemNavConfigForAdmin, type CategoryNavAdminRow } from '../lib/category-nav-admin'
 import { getUnifiedEcosystemRegistry, ECOSYSTEM_STATE_LABELS } from '../lib/control-center-ecosystem'
 import { listRolloutVerticals } from '../lib/control-center-rollout'
+import { listNaijaPayProviders } from '../lib/naijapay-data'
 
 export const controlCenterRoutes = new Hono<AppEnv>()
 
@@ -1037,6 +1038,7 @@ controlCenterRoutes.get('/finance', requireControlCenterPermission('payments.rea
   const refundsRow = await db.prepare("SELECT COUNT(*) c, COALESCE(SUM(amount_kobo),0) s FROM refunds WHERE status='completed'").first<{ c: number; s: number }>()
   const disputesRow = await db.prepare("SELECT COUNT(*) c FROM disputes WHERE status='open'").first<{ c: number }>()
   const txnRow = await db.prepare("SELECT status, COUNT(*) c, COALESCE(SUM(amount_kobo),0) s FROM payment_transactions GROUP BY status").all<{ status: string; c: number; s: number }>()
+  const naijaPayProviders = await listNaijaPayProviders(db)
 
   const txnStatuses = txnRow.results ?? []
 
@@ -1072,6 +1074,22 @@ controlCenterRoutes.get('/finance', requireControlCenterPermission('payments.rea
             {(disputesRow?.c ?? 0) === 0 && <div class="text-[10px] text-ccaccent mt-2 font-semibold">✓ All clear</div>}
           </div>
         </div>
+
+        <section class="bg-ccpanel border border-ccborder rounded-2xl p-6 mb-5">
+          <div class="flex flex-wrap items-start justify-between gap-4 mb-4">
+            <div><h2 class="text-sm font-bold text-white">NaijaPay provider and biller registry</h2><p class="text-xs text-gray-500 mt-1">Operational status is separate from configuration, authorization, environment, and health. A toggle cannot make an unready provider live.</p></div>
+            <a href="/api/control-center/naijapay/providers" class="text-xs text-ccaccent hover:underline">JSON API →</a>
+          </div>
+          <div class="grid md:grid-cols-2 xl:grid-cols-3 gap-3">
+            {naijaPayProviders.map((provider: any) => (
+              <article class="rounded-xl border border-ccborder bg-black/20 p-4">
+                <div class="flex items-center justify-between gap-3"><h3 class="text-sm font-semibold text-white">{provider.display_name}</h3><span class={`text-[10px] uppercase font-bold rounded-full px-2 py-1 ${provider.operational_status === 'operational' ? 'bg-emerald-500/15 text-emerald-300' : provider.operational_status === 'sandbox' ? 'bg-blue-500/15 text-blue-300' : 'bg-white/5 text-gray-400'}`}>{provider.operational_status}</span></div>
+                <p class="text-[11px] text-gray-500 mt-1">{provider.category} · {provider.adapter_type}</p>
+                <dl class="grid grid-cols-2 gap-y-2 mt-3 text-[11px]"><dt class="text-gray-500">Environment</dt><dd class="text-gray-300 text-right">{provider.environment}</dd><dt class="text-gray-500">Configuration</dt><dd class="text-gray-300 text-right">{provider.configuration_status}</dd><dt class="text-gray-500">Authorization</dt><dd class="text-gray-300 text-right">{provider.authorization_status}</dd><dt class="text-gray-500">Health</dt><dd class="text-gray-300 text-right">{provider.health_status}</dd><dt class="text-gray-500">Countries</dt><dd class="text-gray-300 text-right">{provider.country_count ?? 0} ({provider.operational_country_count ?? 0} live)</dd></dl>
+              </article>
+            ))}
+          </div>
+        </section>
 
         <div class="grid lg:grid-cols-3 gap-5">
           <div class="bg-ccpanel border border-ccborder rounded-2xl p-6 flex flex-col items-center">

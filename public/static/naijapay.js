@@ -136,6 +136,45 @@
       });
   })();
 
+  // ---------- Shared payment-intent activity (real authenticated API) ----------
+  (function initSharedActivity() {
+    const state = document.getElementById('np-shared-activity-state');
+    const list = document.getElementById('np-shared-activity-list');
+    const statusFilter = document.getElementById('np-activity-status');
+    const pageLabel = document.getElementById('np-activity-page');
+    const prev = document.getElementById('np-activity-prev');
+    const next = document.getElementById('np-activity-next');
+    const refresh = document.getElementById('np-activity-refresh');
+    if (!state || !list) return;
+    let page = 1;
+    let totalPages = 1;
+    const escapeHtml = function (value) { return String(value).replace(/[&<>\"']/g, function (c) { return ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '\"':'&quot;', "'":'&#39;' })[c]; }); };
+    const load = async function () {
+      state.textContent = 'Loading shared activity…'; state.className = 'text-xs text-gray-400 py-5'; list.classList.add('hidden');
+      const query = new URLSearchParams({ page: String(page), page_size: '8' });
+      if (statusFilter.value) query.set('status', statusFilter.value);
+      try {
+        const response = await fetch('/api/naijapay/transactions?' + query.toString());
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Could not load activity');
+        totalPages = Math.max(1, data.total_pages || 1);
+        pageLabel.textContent = 'Page ' + page + ' of ' + totalPages;
+        prev.disabled = page <= 1; next.disabled = page >= totalPages;
+        if (!data.rows || data.rows.length === 0) { state.textContent = 'No shared payment activity yet.'; state.className = 'text-xs text-gray-400 py-5'; return; }
+        list.innerHTML = data.rows.map(function (tx) {
+          const amount = Number(tx.amount_minor || 0) / 100;
+          const date = new Date(tx.created_at).toLocaleString('en-NG', { dateStyle: 'medium', timeStyle: 'short' });
+          return '<a href="/naijapay#payment-intent-' + encodeURIComponent(tx.id) + '" class="flex items-center justify-between gap-3 py-3 hover:bg-npIvory/60 px-2 rounded-lg">' +
+            '<span class="min-w-0"><span class="block text-xs font-semibold text-gray-800 truncate">' + escapeHtml(tx.vertical_key) + '</span><span class="block text-[10px] text-gray-400 truncate">' + escapeHtml(tx.transaction_reference) + ' · ' + escapeHtml(date) + '</span></span>' +
+            '<span class="shrink-0 text-right"><span class="block text-xs font-bold text-gray-800">' + escapeHtml(tx.currency) + ' ' + amount.toLocaleString('en-NG', { minimumFractionDigits: 2 }) + '</span><span class="inline-block text-[9px] uppercase font-bold text-gray-500">' + escapeHtml(tx.status) + '</span></span></a>';
+        }).join('');
+        state.classList.add('hidden'); list.classList.remove('hidden');
+      } catch (error) { state.textContent = error instanceof Error ? error.message : 'Could not load shared activity'; state.className = 'text-xs text-red-500 py-5'; }
+    };
+    statusFilter.addEventListener('change', function () { page = 1; load(); });
+    refresh.addEventListener('click', load); prev.addEventListener('click', function () { if (page > 1) { page--; load(); } }); next.addEventListener('click', function () { if (page < totalPages) { page++; load(); } }); load();
+  })();
+
   // ---------- Financial Activity chart (REAL money in/out data injected server-side) ----------
   (function initChart() {
     const canvas = document.getElementById('np-activity-chart');

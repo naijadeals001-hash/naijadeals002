@@ -432,6 +432,17 @@ export async function naijapayPage(c: Context<AppEnv>) {
                 </div>
               </div>
 
+              {/* ================= SHARED PAYMENT ACTIVITY (real payment_intents API) ================= */}
+              <section id="np-shared-activity" class="bg-white border border-gray-100 rounded-2xl p-4 dt:p-5 mb-5" aria-labelledby="np-shared-activity-title">
+                <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+                  <div><p id="np-shared-activity-title" class="text-[13px] font-bold text-gray-800">Shared NaijaPay Activity</p><p class="text-[11px] text-gray-400">Payment intents across NaijaDeals, with currency and provider status preserved.</p></div>
+                  <div class="flex items-center gap-2"><select id="np-activity-status" class="text-[11px] border border-gray-200 rounded-lg px-2 py-1.5" aria-label="Filter payment status"><option value="">All statuses</option><option value="succeeded">Succeeded</option><option value="pending">Pending</option><option value="failed">Failed</option><option value="refunded">Refunded</option></select><button id="np-activity-refresh" type="button" class="text-[11px] font-semibold text-npPrimary border border-npPrimary/20 rounded-lg px-3 py-1.5">Refresh</button></div>
+                </div>
+                <div id="np-shared-activity-state" class="text-xs text-gray-400 py-5">Loading shared activity…</div>
+                <div id="np-shared-activity-list" class="hidden divide-y divide-gray-100"></div>
+                <div class="flex items-center justify-between mt-3 text-[11px] text-gray-400"><button id="np-activity-prev" type="button" disabled class="disabled:opacity-40">← Previous</button><span id="np-activity-page">Page 1</span><button id="np-activity-next" type="button" disabled class="disabled:opacity-40">Next →</button></div>
+              </section>
+
               {/* ================= AFRICA PROMOTIONAL BANNER (real ecosystem links) ================= */}
               <div class="relative overflow-hidden rounded-2xl bg-gradient-to-r from-npDark via-npPrimaryDark to-npPrimary text-white p-5 dt:p-6 mb-5">
                 <div class="absolute right-2 top-1/2 -translate-y-1/2 opacity-15 text-npGold" style="width:180px;height:180px">

@@ -14,6 +14,7 @@ import { authApi } from './routes/api-auth'
 import { ordersApi } from './routes/api-orders'
 import { addressesApi } from './routes/api-addresses'
 import { walletApi } from './routes/api-wallet'
+import { naijaPayApi } from './routes/api-naijapay'
 import { affiliateApi } from './routes/api-affiliate'
 import { accountApi } from './routes/api-account'
 import { organizationsApi } from './routes/api-organizations'
@@ -32,6 +33,7 @@ import { notificationsApi } from './routes/api-notifications'
 import { bookingsApi } from './routes/api-bookings'
 import { logisticsApi } from './routes/api-logistics'
 import { apiControlCenterRoutes } from './routes/api-control-center'
+import { naijaPayControlCenterApi } from './routes/api-control-center-naijapay'
 import { eatsApi } from './routes/api-eats'
 import { eatsOperatorApi } from './routes/api-eats-operator'
 
@@ -187,6 +189,7 @@ app.route('/api/auth', authApi)
 app.route('/api/orders', ordersApi)
 app.route('/api/addresses', addressesApi)
 app.route('/api/wallet', walletApi)
+app.route('/api/naijapay', naijaPayApi)
 app.route('/api/affiliate', affiliateApi)
 app.route('/api/account', accountApi)
 app.route('/api/organizations', organizationsApi)
@@ -207,6 +210,7 @@ app.route('/api/notifications', notificationsApi)
 // on '*', then per-route requireControlCenterPermission), never by anything
 // mounted here.
 app.route('/api/control-center', apiControlCenterRoutes)
+app.route('/api/control-center/naijapay', naijaPayControlCenterApi)
 // eatsApi is registered earlier, alongside bookingsApi/logisticsApi/auraApi
 // — see the comment at that registration site (just before app.route('/api/catalog', ...))
 // for why it must NOT be registered down here, after servicesApi/serviceRequestsApi/providerApi's
