@@ -95,8 +95,9 @@
 - Build passed after adding the route; local migration `0093_naijasend_freight_marketplace_foundation.sql` applied successfully.
 - No production deployment or remote D1 mutation performed.
 
-## Fresh REA evidence-driven workflow batch (pending commit)
+## Fresh REA evidence-driven workflow batch
 
+- Commit: `0a6a2ade52c083819cbe91d89031d318d82263c2` (`feat(verticals): implement fresh REA-mapped discovery workflows`); remote SHA verified on `origin/feat/naijadrive-private-ride-foundation`.
 - Fresh REA preflight executed before application edits: `rea --version` returned `6.7.0`; `rea doctor --format json` reported the audit-wide native-engine limitation but the browser provider was available; `rea capabilities --format json` enumerated the catalog; active MCP configuration was verified at `/home/user/.config/opencode/opencode.jsonc`.
 - Fresh REA browser captures, not reused evidence:
   - Bolt Food `https://food.bolt.eu` via `capture_browser_scenario`: `ev_1a85796f4ca99ff5076eedc38c0f565e9fa6b04ba39ef826115e21f54d15c4c8`.
