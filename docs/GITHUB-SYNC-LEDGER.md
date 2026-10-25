@@ -65,6 +65,18 @@
 - `EATS-001` remains separate and partial; no production deployment, remote D1 mutation, merge, DNS change or force-push performed.
 - Verified CC-003 implementation commit and remote SHA: `5978b966a070e985705bc2ed425df4998b36288e`; local D1 registry now records this SHA.
 
+## CC-004 authenticated acceptance and NaijaEats operations — current local checkpoint
+
+- Starting checkpoint verified: `9935c7f10d140accd7c7878a8c1c1bd7e68b74f7` on `feat/naijadrive-private-ride-foundation`; remote matched and the existing PM2 `naijadeals` preview was reused. `.npm-cache-rea/` remains preserved.
+- REA `6.7.0` and MCP registration were verified. Existing public evidence was reused; no new protected workflow evidence was claimed and no authentication/WAF/CAPTCHA bypass was used.
+- Added `migrations/0103_control_center_scope_admin_permission.sql` and Super Admin-only country-scope API/UI: list Country Admins, assign/revoke valid registered country scopes, safe retries, server-side authorization and audited mutations.
+- Added authenticated HTTP acceptance using real `/api/auth/register` identities with server-assigned Control Center roles. Super Admin scope assignment/revocation passed; Country Admin denial passed; unauthenticated EATS operations access returned 401; authenticated EATS summary/order APIs and `/control-center/eats` plus `/control-center/country-scopes` pages returned 200.
+- Added NaijaEats Operations command center at `/control-center/eats` with persisted counts and drill-down for order, restaurant, city, fulfillment outcome, shipment, pickup/delivery jobs, courier assignment, retry count, latest event and proof type. OTP values are never selected or displayed.
+- Drive recovery root cause was the new rollout guard correctly denying the globally disabled preview vertical; the test now provisions explicit local `ACTIVE`/enabled NaijaDrive and `LIVE` NG policy, restores exact prior values, and leaves the expiry/reassignment/no-driver assertions unchanged. Drive suite passed 4/4, including concurrent acceptance and recovery.
+- Integrated relevant matrix passed **26/26**: CC-003 direct tests 3/3, CC-004 authenticated HTTP/page tests 2/2, Drive 4/4, EATS courier 4/4, EATS operator 10/10, Carpool 1/1, Shop idempotency 2/2. Build passed with 272 modules.
+- Browser acceptance remains partial: authenticated HTTP acceptance is verified, but full role-specific browser screenshots and customer/merchant/courier browser journeys were not completed. No production deployment or production data mutation was performed.
+- Historical PM2 logs still contain older `18 values for 17 columns` and binding errors; current Development Registry source is covered by idempotent seed/repair tests and no new error was reproduced during the CC-004 test/preview run. The old accumulated log entries were not deleted.
+
 ## Control Center development registry batch — current local checkpoint
 
 - Added `migrations/0095_control_center_development_registry.sql` with persisted `cc_development_tasks` and append-only `cc_development_events`, readiness milestones, dependency metadata, REA evidence fields, preview/commit verification fields and development permissions.

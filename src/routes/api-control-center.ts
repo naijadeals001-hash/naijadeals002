@@ -319,6 +319,99 @@ apiControlCenterRoutes.get('/verticals/:slug', requireControlCenterPermission('c
   return c.json({ vertical, city_overrides: cityOverrides, generated_at: new Date().toISOString() })
 })
 
+async function requireSuperAdmin(c: any, next: () => Promise<void>) {
+  const access = c.get('ccAccess')
+  if (!access?.roleKeys?.includes('super_admin') || !access.permissionKeys.has('configuration.scopes.manage')) return c.json({ error: 'Super Admin permission required' }, 403)
+  await next()
+}
+
+// ---------- Country scope administration ----------
+apiControlCenterRoutes.get('/country-scopes', requireSuperAdmin, async (c) => {
+  const { results } = await c.env.DB.prepare(`
+    SELECT u.id AS user_id, u.name, u.email, r.key AS role_key,
+           GROUP_CONCAT(s.country_iso) AS country_scopes
+    FROM users u
+    JOIN cc_user_roles ur ON ur.user_id = u.id
+    JOIN cc_roles r ON r.id = ur.role_id AND r.key = 'country_admin'
+    LEFT JOIN cc_user_country_scopes s ON s.user_id = u.id
+    GROUP BY u.id, u.name, u.email, r.key
+    ORDER BY u.name, u.id
+  `).all<any>()
+  return c.json({ users: results.map((row) => ({ ...row, country_scopes: row.country_scopes ? String(row.country_scopes).split(',').filter(Boolean) : [] })) })
+})
+
+apiControlCenterRoutes.post('/country-scopes', requireSuperAdmin, async (c) => {
+  const actor = c.get('user')!
+  const body = await c.req.json<{ user_id?: number; country_iso?: string }>().catch(() => null)
+  const userId = Number(body?.user_id)
+  const countryIso = String(body?.country_iso ?? '').trim().toUpperCase()
+  if (!Number.isInteger(userId) || userId <= 0 || !/^[A-Z]{2}$/.test(countryIso)) return c.json({ error: 'user_id and a valid ISO-3166 alpha-2 country_iso are required' }, 400)
+  const target = await c.env.DB.prepare(`SELECT u.id,u.name,u.email FROM users u JOIN cc_user_roles ur ON ur.user_id=u.id JOIN cc_roles r ON r.id=ur.role_id AND r.key='country_admin' WHERE u.id=?`).bind(userId).first<any>()
+  const country = await c.env.DB.prepare('SELECT id,iso_code,name FROM cc_countries WHERE iso_code=?').bind(countryIso).first<any>()
+  if (!target || !country) return c.json({ error: !target ? 'Target user must hold country_admin role' : 'Country not found' }, 404)
+  const before = await c.env.DB.prepare('SELECT country_iso FROM cc_user_country_scopes WHERE user_id=? AND country_iso=?').bind(userId, countryIso).first()
+  await c.env.DB.prepare('INSERT OR IGNORE INTO cc_user_country_scopes(user_id,country_iso,assigned_by_user_id) VALUES(?,?,?)').bind(userId, countryIso, actor.id).run()
+  const after = await c.env.DB.prepare('SELECT country_iso FROM cc_user_country_scopes WHERE user_id=? AND country_iso=?').bind(userId, countryIso).first()
+  await recordControlCenterAction(c.env.DB, { actorUserId: actor.id, actorName: actor.name, action: 'country_scope_assigned', entityType: 'cc_user_country_scope', entityId: `${userId}:${countryIso}`, beforeState: before, afterState: after, context: { target_user_id: userId, country_iso: countryIso }, success: true, ipAddress: getClientIp(c.req.header('cf-connecting-ip') ?? null) })
+  return c.json({ success: true, target, country, scope: after, replayed: !!before })
+})
+
+apiControlCenterRoutes.delete('/country-scopes/:userId/:countryIso', requireSuperAdmin, async (c) => {
+  const actor = c.get('user')!
+  const userId = Number(c.req.param('userId'))
+  const countryIso = c.req.param('countryIso').trim().toUpperCase()
+  if (!Number.isInteger(userId) || userId <= 0 || !/^[A-Z]{2}$/.test(countryIso)) return c.json({ error: 'Invalid scope identifiers' }, 400)
+  const before = await c.env.DB.prepare('SELECT country_iso FROM cc_user_country_scopes WHERE user_id=? AND country_iso=?').bind(userId, countryIso).first()
+  if (!before) return c.json({ success: true, removed: false })
+  await c.env.DB.prepare('DELETE FROM cc_user_country_scopes WHERE user_id=? AND country_iso=?').bind(userId, countryIso).run()
+  await recordControlCenterAction(c.env.DB, { actorUserId: actor.id, actorName: actor.name, action: 'country_scope_revoked', entityType: 'cc_user_country_scope', entityId: `${userId}:${countryIso}`, beforeState: before, afterState: null, context: { target_user_id: userId, country_iso: countryIso }, success: true, ipAddress: getClientIp(c.req.header('cf-connecting-ip') ?? null) })
+  return c.json({ success: true, removed: true })
+})
+
+// ---------- NaijaEats operations command center ----------
+apiControlCenterRoutes.get('/eats/operations/summary', requireControlCenterPermission('orders.read'), async (c) => {
+  const row = await c.env.DB.prepare(`
+    SELECT
+      (SELECT COUNT(*) FROM eats_orders WHERE status NOT IN ('completed','declined','cancelled')) AS active_orders,
+      (SELECT COUNT(*) FROM eats_order_fulfillments WHERE dispatch_outcome IN ('pending','offers_open','no_courier_available')) AS attention_fulfillments,
+      (SELECT COUNT(*) FROM eats_order_fulfillments WHERE dispatch_outcome='offers_open') AS offers_open,
+      (SELECT COUNT(*) FROM eats_order_fulfillments WHERE dispatch_outcome='courier_assigned') AS assigned,
+      (SELECT COUNT(*) FROM eats_order_fulfillments WHERE dispatch_outcome IN ('picked_up','out_for_delivery')) AS in_transit,
+      (SELECT COUNT(*) FROM eats_order_fulfillments WHERE dispatch_outcome='delivered') AS delivered,
+      (SELECT COUNT(*) FROM eats_order_fulfillments WHERE dispatch_outcome='no_courier_available') AS intervention_required
+  `).first<any>()
+  return c.json({ definitions: { attention_fulfillments: 'pending, offers_open or no_courier_available', in_transit: 'picked_up or out_for_delivery' }, metrics: row })
+})
+
+apiControlCenterRoutes.get('/eats/operations/orders', requireControlCenterPermission('orders.read'), async (c) => {
+  const limitValue = Number(c.req.query('limit') ?? 25)
+  const offsetValue = Number(c.req.query('offset') ?? 0)
+  const limit = Number.isInteger(limitValue) ? Math.min(Math.max(limitValue, 1), 100) : 25
+  const offset = Number.isInteger(offsetValue) ? Math.max(offsetValue, 0) : 0
+  const status = c.req.query('dispatch_outcome')?.trim() || null
+  const params: any[] = []
+  const conditions = ['1=1']
+  if (status) { conditions.push('eof.dispatch_outcome = ?'); params.push(status) }
+  const { results } = await c.env.DB.prepare(`
+    SELECT eo.id, eo.order_number, eo.status AS order_status, eo.shipping_city, eo.shipping_state,
+           r.name AS restaurant_name, eof.dispatch_outcome, eof.reassignment_count,
+           eof.courier_driver_id, s.status AS shipment_status,
+           pj.status AS pickup_job_status, dj.status AS delivery_job_status,
+           eof.proof_type, eof.proof_recorded_at,
+           (SELECT event_type || ':' || created_at FROM eats_fulfillment_events efe WHERE efe.fulfillment_id=eof.id ORDER BY efe.id DESC LIMIT 1) AS latest_event
+    FROM eats_order_fulfillments eof
+    JOIN eats_orders eo ON eo.id=eof.order_id
+    JOIN restaurants r ON r.id=eo.restaurant_id
+    JOIN shipments s ON s.id=eof.shipment_id
+    LEFT JOIN pickup_jobs pj ON pj.shipment_id=s.id
+    LEFT JOIN delivery_jobs dj ON dj.shipment_id=s.id
+    WHERE ${conditions.join(' AND ')}
+    ORDER BY CASE WHEN eof.dispatch_outcome='no_courier_available' THEN 0 WHEN eof.dispatch_outcome IN ('pending','offers_open') THEN 1 ELSE 2 END, eo.created_at DESC, eo.id DESC
+    LIMIT ? OFFSET ?
+  `).bind(...params, limit, offset).all<any>()
+  return c.json({ limit, offset, dispatch_outcome: status, orders: results })
+})
+
 // ---------- Pan-African rollout controls ----------
 // Country and vertical activation are server-side controls. The preview may
 // display a disabled surface, but these endpoints are the authoritative write

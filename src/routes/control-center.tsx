@@ -858,6 +858,38 @@ controlCenterRoutes.get('/operations', async (c) => {
 })
 
 // ============================================================
+// NAIJAEATS OPERATIONS — persisted fulfillment command center
+// ============================================================
+controlCenterRoutes.get('/eats', requireControlCenterPermission('orders.read'), async (c) => {
+  const user = c.get('user')!
+  const ccAccess = c.get('ccAccess')!
+  const [metrics, orders] = await Promise.all([
+    c.env.DB.prepare(`SELECT
+      (SELECT COUNT(*) FROM eats_orders WHERE status NOT IN ('completed','declined','cancelled')) AS active_orders,
+      (SELECT COUNT(*) FROM eats_order_fulfillments WHERE dispatch_outcome IN ('pending','offers_open','no_courier_available')) AS attention_fulfillments,
+      (SELECT COUNT(*) FROM eats_order_fulfillments WHERE dispatch_outcome='offers_open') AS offers_open,
+      (SELECT COUNT(*) FROM eats_order_fulfillments WHERE dispatch_outcome='courier_assigned') AS assigned,
+      (SELECT COUNT(*) FROM eats_order_fulfillments WHERE dispatch_outcome IN ('picked_up','out_for_delivery')) AS in_transit,
+      (SELECT COUNT(*) FROM eats_order_fulfillments WHERE dispatch_outcome='delivered') AS delivered,
+      (SELECT COUNT(*) FROM eats_order_fulfillments WHERE dispatch_outcome='no_courier_available') AS intervention_required`).first<any>(),
+    c.env.DB.prepare(`SELECT eo.order_number, eo.status AS order_status, eo.shipping_city, r.name AS restaurant_name,
+      eof.dispatch_outcome, eof.reassignment_count, eof.courier_driver_id, s.status AS shipment_status,
+      pj.status AS pickup_job_status, dj.status AS delivery_job_status, eof.proof_type,
+      (SELECT event_type FROM eats_fulfillment_events efe WHERE efe.fulfillment_id=eof.id ORDER BY efe.id DESC LIMIT 1) AS latest_event
+      FROM eats_order_fulfillments eof JOIN eats_orders eo ON eo.id=eof.order_id JOIN restaurants r ON r.id=eo.restaurant_id
+      JOIN shipments s ON s.id=eof.shipment_id LEFT JOIN pickup_jobs pj ON pj.shipment_id=s.id LEFT JOIN delivery_jobs dj ON dj.shipment_id=s.id
+      ORDER BY CASE WHEN eof.dispatch_outcome='no_courier_available' THEN 0 WHEN eof.dispatch_outcome IN ('pending','offers_open') THEN 1 ELSE 2 END, eo.created_at DESC LIMIT 50`).all<any>(),
+  ])
+  return c.render(<ControlCenterLayout title="NaijaEats Operations" user={user} ccAccess={ccAccess} active="eats_operations">
+    <div class="max-w-[100rem] mx-auto px-4 md:px-8 py-8">
+      <div class="flex items-start justify-between gap-4 mb-6"><div><p class="text-xs uppercase tracking-widest text-ccaccent font-bold">Persisted fulfillment operations</p><h1 class="text-3xl font-extrabold text-white mt-1">NaijaEats Operations</h1><p class="text-sm text-gray-500 mt-2">Real order, shipment, job, offer and proof states. No GPS, ETA or courier supply is inferred.</p></div><a class="text-xs text-ccaccent border border-ccaccent/30 rounded-lg px-3 py-2" href="/api/control-center/eats/operations/summary">JSON summary ↗</a></div>
+      <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3 mb-6">{[['Active orders','active_orders'],['Attention','attention_fulfillments'],['Offers open','offers_open'],['Assigned','assigned'],['In transit','in_transit'],['Delivered','delivered'],['Intervention','intervention_required']].map(([label,key]) => <div class="bg-ccpanel border border-ccborder rounded-xl p-4"><div class="text-2xl font-extrabold text-white">{Number(metrics?.[key] ?? 0)}</div><div class="text-[11px] text-gray-500 mt-1">{label}</div></div>)}</div>
+      <div class="bg-ccpanel border border-ccborder rounded-2xl overflow-hidden"><div class="px-5 py-4 border-b border-ccborder flex items-center justify-between"><h2 class="font-bold text-white">Fulfillment queue</h2><span class="text-xs text-gray-500">Latest 50 records</span></div><div class="overflow-x-auto"><table class="w-full text-left text-xs"><thead class="text-gray-500 uppercase tracking-wider"><tr><th class="px-5 py-3">Order</th><th class="px-5 py-3">Restaurant</th><th class="px-5 py-3">City</th><th class="px-5 py-3">Outcome</th><th class="px-5 py-3">Jobs</th><th class="px-5 py-3">Courier</th><th class="px-5 py-3">Latest event</th></tr></thead><tbody>{(orders.results ?? []).map((row: any) => <tr class="border-t border-ccborder/70"><td class="px-5 py-3 font-bold text-white">{row.order_number}<div class="text-[10px] text-gray-600">{row.order_status}</div></td><td class="px-5 py-3 text-gray-300">{row.restaurant_name}</td><td class="px-5 py-3 text-gray-400">{row.shipping_city || '—'}</td><td class="px-5 py-3"><span class={row.dispatch_outcome === 'no_courier_available' ? 'text-red-400 font-bold' : row.dispatch_outcome === 'delivered' ? 'text-ccaccent font-bold' : 'text-amber-300'}>{String(row.dispatch_outcome).replaceAll('_',' ')}</span></td><td class="px-5 py-3 text-gray-400">P: {row.pickup_job_status || '—'}<br/>D: {row.delivery_job_status || '—'}</td><td class="px-5 py-3 text-gray-400">{row.courier_driver_id ? `Driver #${row.courier_driver_id}` : 'Unassigned'}<br/>Retries: {row.reassignment_count ?? 0}</td><td class="px-5 py-3 text-gray-500">{row.latest_event || '—'}<br/>Proof: {row.proof_type || '—'}</td></tr>)}</tbody></table></div>{(orders.results ?? []).length === 0 && <p class="p-8 text-center text-gray-500">No persisted EATS fulfillment records.</p>}</div>
+    </div>
+  </ControlCenterLayout>)
+})
+
+// ============================================================
 // VERIFICATION — landing page unifying vendor + provider queues
 // ============================================================
 controlCenterRoutes.get('/verification', async (c) => {
@@ -1294,6 +1326,22 @@ controlCenterRoutes.get('/countries', async (c) => {
 // ============================================================
 // Audit & Governance
 // ============================================================
+controlCenterRoutes.get('/country-scopes', requireControlCenterPermission('configuration.scopes.manage'), async (c) => {
+  const user = c.get('user')!
+  const ccAccess = c.get('ccAccess')!
+  if (!ccAccess.roleKeys.includes('super_admin')) return c.redirect('/control-center')
+  const [users, countries] = await Promise.all([
+    c.env.DB.prepare(`SELECT u.id,u.name,u.email,GROUP_CONCAT(s.country_iso) AS country_scopes FROM users u JOIN cc_user_roles ur ON ur.user_id=u.id JOIN cc_roles r ON r.id=ur.role_id AND r.key='country_admin' LEFT JOIN cc_user_country_scopes s ON s.user_id=u.id GROUP BY u.id,u.name,u.email ORDER BY u.name`).all<any>(),
+    c.env.DB.prepare('SELECT iso_code,name FROM cc_countries ORDER BY name').all<any>(),
+  ])
+  return c.render(<ControlCenterLayout title="Country Admin Scopes" user={user} ccAccess={ccAccess} active="country_scopes">
+    <div class="max-w-[80rem] mx-auto px-4 md:px-8 py-8"><p class="text-xs uppercase tracking-widest text-ccaccent font-bold">Super Admin governance</p><h1 class="text-3xl font-extrabold text-white mt-1">Country Admin Scopes</h1><p class="text-sm text-gray-500 mt-2 mb-8">Assigning a country scope changes server-resolved authorization. Every mutation is audited.</p>
+      <section class="bg-ccpanel border border-ccborder rounded-2xl p-5 mb-6"><h2 class="font-bold text-white mb-4">Assign scope</h2><form id="cc-scope-form" class="flex flex-col md:flex-row gap-3"><select name="user_id" required class="bg-black/30 border border-ccborder rounded-lg px-3 py-2 text-sm text-white"><option value="">Select Country Admin</option>{(users.results ?? []).map((row: any) => <option value={row.id}>{row.name} · {row.email}</option>)}</select><select name="country_iso" required class="bg-black/30 border border-ccborder rounded-lg px-3 py-2 text-sm text-white"><option value="">Select country</option>{(countries.results ?? []).map((row: any) => <option value={row.iso_code}>{row.name} ({row.iso_code})</option>)}</select><button class="bg-ccaccent text-black font-bold rounded-lg px-4 py-2" type="submit">Assign</button></form><p id="cc-scope-message" class="text-xs mt-3 text-gray-500"></p></section>
+      <section class="bg-ccpanel border border-ccborder rounded-2xl overflow-hidden"><div class="px-5 py-4 border-b border-ccborder"><h2 class="font-bold text-white">Current assignments</h2></div><div class="overflow-x-auto"><table class="w-full text-left text-sm"><thead class="text-gray-500 uppercase text-[11px]"><tr><th class="px-5 py-3">Admin</th><th class="px-5 py-3">Scopes</th><th class="px-5 py-3">Actions</th></tr></thead><tbody>{(users.results ?? []).map((row: any) => <tr class="border-t border-ccborder/70"><td class="px-5 py-3 text-white">{row.name}<div class="text-xs text-gray-500">{row.email}</div></td><td class="px-5 py-3 text-gray-300">{row.country_scopes || 'None assigned'}</td><td class="px-5 py-3">{row.country_scopes ? String(row.country_scopes).split(',').map((iso) => <button type="button" class="cc-scope-revoke text-xs text-red-300 border border-red-400/30 rounded px-2 py-1 mr-1" data-user-id={row.id} data-country-iso={iso}>Revoke {iso}</button>) : <span class="text-gray-600">—</span>}</td></tr>)}</tbody></table></div></section></div>
+    <script dangerouslySetInnerHTML={{ __html: `const message=document.getElementById('cc-scope-message'); document.getElementById('cc-scope-form').addEventListener('submit',async(e)=>{e.preventDefault();const f=new FormData(e.currentTarget);const r=await fetch('/api/control-center/country-scopes',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({user_id:Number(f.get('user_id')),country_iso:f.get('country_iso')})});const b=await r.json();message.textContent=r.ok?'Scope assigned and audited':(b.error||'Assignment failed');message.className='text-xs mt-3 '+(r.ok?'text-ccaccent':'text-red-400');if(r.ok)location.reload()}); document.querySelectorAll('.cc-scope-revoke').forEach((button)=>button.addEventListener('click',async()=>{button.disabled=true;const r=await fetch('/api/control-center/country-scopes/'+button.dataset.userId+'/'+button.dataset.countryIso,{method:'DELETE'});if(r.ok)location.reload();else{message.textContent='Scope revocation failed';message.className='text-xs mt-3 text-red-400';button.disabled=false}}));` }}></script>
+  </ControlCenterLayout>)
+})
+
 controlCenterRoutes.get('/audit', requireControlCenterPermission('audit.read'), async (c) => {
   const user = c.get('user')!
   const ccAccess = c.get('ccAccess')!

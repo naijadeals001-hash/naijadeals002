@@ -3,14 +3,22 @@ import assert from 'node:assert/strict'
 import { registerUser, cleanupRunNonce, queryOneD1, execD1, RUN_NONCE } from './marketplace-engine/helpers/client.mjs'
 
 let customer, driver, driverTwo
+let previousDriveEnabled, previousDriveStatus, previousNgStatus
 
 test.before(async () => {
+  previousDriveEnabled = await queryOneD1("SELECT enabled FROM cc_capabilities WHERE key='ecosystem.naijadrive'")
+  previousDriveStatus = await queryOneD1("SELECT status FROM cc_capabilities WHERE key='ecosystem.naijadrive'")
+  previousNgStatus = await queryOneD1("SELECT status FROM cc_countries WHERE iso_code='NG'")
+  // The preview lifecycle is intentionally disabled in the readiness registry.
+  // This test provisions an explicit local operational fixture, then restores
+  // the exact prior values in test.after; it does not change production policy.
+  await execD1("UPDATE cc_capabilities SET enabled=1, status='ACTIVE' WHERE key='ecosystem.naijadrive'; UPDATE cc_countries SET status='LIVE' WHERE iso_code='NG';")
   customer = await registerUser('ride-customer')
   driver = await registerUser('ride-driver')
   driverTwo = await registerUser('ride-driver-two')
   await execD1(`INSERT INTO driver_profiles (user_id,license_number,country_iso,status,is_online,operational_status) VALUES (${driver.userId}, 'LIC-${RUN_NONCE}-1', 'NG', 'active', 1, 'available'), (${driverTwo.userId}, 'LIC-${RUN_NONCE}-2', 'NG', 'active', 1, 'available')`)
 })
-test.after(async () => { await execD1(`DELETE FROM drive_ride_events; DELETE FROM drive_ride_offers; DELETE FROM drive_ride_requests; DELETE FROM driver_profiles WHERE license_number LIKE 'LIC-${RUN_NONCE}%';`); await cleanupRunNonce(RUN_NONCE) })
+test.after(async () => { await execD1(`DELETE FROM drive_ride_events; DELETE FROM drive_ride_offers; DELETE FROM drive_ride_requests; DELETE FROM driver_profiles WHERE license_number LIKE 'LIC-${RUN_NONCE}%'; UPDATE cc_capabilities SET enabled=${previousDriveEnabled?.enabled ?? 0}, status='${previousDriveStatus?.status ?? 'ACTIVE'}' WHERE key='ecosystem.naijadrive'; UPDATE cc_countries SET status='${previousNgStatus?.status ?? 'LIVE'}' WHERE iso_code='NG';`); await cleanupRunNonce(RUN_NONCE) })
 
 test('private ride persists, retries idempotently, driver accepts, and lifecycle transitions are authorized', async () => {
   const payload = { pickupZone: 'abuja-central', dropoffZone: 'gwarinpa', vehicleCategory: 'car', idempotencyKey: `ride-${RUN_NONCE}` }
