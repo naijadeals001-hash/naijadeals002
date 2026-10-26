@@ -42,3 +42,7 @@ core
 
 # Stage 2C Chromium verification harness (local QA tool, not app source)
 verify/
+
+# Preserved local QA/tool caches and generated regression evidence; never package or commit
+.npm-cache-rea/
+qa-screenshots/
