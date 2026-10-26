@@ -135,8 +135,20 @@ app.use('*', async (c, next) => {
   await next()
 })
 
-// Static assets (public/static/* -> /static/*)
+// Static assets (public/static/* -> /static/*). Curated media may also be
+// served from the existing R2 binding when the hosted package omits large
+// binaries; local files remain the first choice so preview and deployment
+// behavior stay identical for CSS/JS and any bundled asset.
 app.use('/static/*', serveStatic({ root: './public' }))
+app.get('/static/*', async (c) => {
+  const key = c.req.path.slice('/static/'.length)
+  const object = await c.env.SELLER_UPLOADS.get(key)
+  if (!object) return c.notFound()
+  const headers = new Headers()
+  object.writeHttpMetadata(headers)
+  headers.set('cache-control', 'public, max-age=31536000, immutable')
+  return new Response(object.body, { headers })
+})
 
 // Branded SVG placeholder image generator (used everywhere product photos would go)
 app.route('/', placeholderRoute)
