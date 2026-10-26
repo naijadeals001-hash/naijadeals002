@@ -32,7 +32,7 @@ export const RUN_NONCE = `${Date.now()}${Math.floor(Math.random() * 100000)}`
 let proxyPromise = null
 function getTestProxy() {
   if (!proxyPromise) {
-    proxyPromise = getPlatformProxy({ configPath: new URL('../../../wrangler.jsonc', import.meta.url).pathname })
+    proxyPromise = getPlatformProxy({ configPath: new URL('../../../wrangler.jsonc', import.meta.url).pathname, persistTo: process.env.NOTIF_TEST_PERSIST_TO })
   }
   return proxyPromise
 }
@@ -64,7 +64,7 @@ export async function createTestUser(label) {
 export async function execD1(sql) {
   const { stdout } = await execFileAsync(
     'npx',
-    ['wrangler', 'd1', 'execute', DB_BINDING, '--local', '--json', `--command=${sql}`],
+    ['wrangler', 'd1', 'execute', DB_BINDING, '--local', ...(process.env.NOTIF_TEST_PERSIST_TO ? [`--persist-to=${process.env.NOTIF_TEST_PERSIST_TO}`] : []), '--json', `--command=${sql}`],
     { cwd: PROJECT_DIR, maxBuffer: 10 * 1024 * 1024 }
   )
   const parsed = JSON.parse(stdout)

@@ -69,7 +69,7 @@ export async function getTestDb() {
  */
 function getTestProxy() {
   if (!proxyPromise) {
-    proxyPromise = getPlatformProxy({ configPath: new URL('../../../wrangler.jsonc', import.meta.url).pathname })
+    proxyPromise = getPlatformProxy({ configPath: new URL('../../../wrangler.jsonc', import.meta.url).pathname, persistTo: process.env.PAYMENT_TEST_PERSIST_TO })
   }
   return proxyPromise
 }
@@ -84,7 +84,7 @@ function getTestProxy() {
 export async function execD1(sql) {
   const { stdout } = await execFileAsync(
     'npx',
-    ['wrangler', 'd1', 'execute', DB_BINDING, '--local', '--json', `--command=${sql}`],
+    ['wrangler', 'd1', 'execute', DB_BINDING, '--local', ...(process.env.PAYMENT_TEST_PERSIST_TO ? [`--persist-to=${process.env.PAYMENT_TEST_PERSIST_TO}`] : []), '--json', `--command=${sql}`],
     { cwd: PROJECT_DIR, maxBuffer: 10 * 1024 * 1024 }
   )
   const parsed = JSON.parse(stdout)

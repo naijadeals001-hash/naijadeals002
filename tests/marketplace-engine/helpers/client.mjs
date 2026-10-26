@@ -22,11 +22,16 @@ const DB_BINDING = process.env.MKT_TEST_D1_NAME ?? 'naijadeals-production'
 const PROJECT_DIR = process.env.MKT_TEST_PROJECT_DIR ?? new URL('../../../', import.meta.url).pathname
 
 export async function execD1(sql) {
-  const args = ['wrangler', 'd1', 'execute', DB_BINDING, '--local', '--json', `--command=${sql}`]
+  const args = ['wrangler', 'd1', 'execute', DB_BINDING, '--local', ...(process.env.MKT_TEST_PERSIST_TO ? [`--persist-to=${process.env.MKT_TEST_PERSIST_TO}`] : []), '--json', `--command=${sql}`]
   let lastError
   for (let attempt = 0; attempt < 8; attempt += 1) {
     try {
-      const { stdout } = await execFileAsync('npx', args, { cwd: PROJECT_DIR, maxBuffer: 10 * 1024 * 1024 })
+      const { stdout } = await execFileAsync('npx', args, {
+        cwd: PROJECT_DIR,
+        maxBuffer: 10 * 1024 * 1024,
+        timeout: 30_000,
+        killSignal: 'SIGKILL'
+      })
       const parsed = JSON.parse(stdout)
       return parsed.map((stmt) => stmt.results)
     } catch (error) {
