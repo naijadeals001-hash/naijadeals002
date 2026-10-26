@@ -20,6 +20,7 @@
  */
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
+import path from 'node:path'
 import { getPlatformProxy } from 'wrangler'
 
 const execFileAsync = promisify(execFile)
@@ -32,7 +33,12 @@ export const RUN_NONCE = `${Date.now()}${Math.floor(Math.random() * 100000)}`
 let proxyPromise = null
 function getTestProxy() {
   if (!proxyPromise) {
-    proxyPromise = getPlatformProxy({ configPath: new URL('../../../wrangler.jsonc', import.meta.url).pathname })
+    proxyPromise = getPlatformProxy({
+      configPath: new URL('../../../wrangler.jsonc', import.meta.url).pathname,
+      persist: process.env.NOTIF_TEST_PERSIST_TO
+        ? { path: path.join(process.env.NOTIF_TEST_PERSIST_TO, 'v3') }
+        : undefined
+    })
   }
   return proxyPromise
 }
@@ -64,7 +70,7 @@ export async function createTestUser(label) {
 export async function execD1(sql) {
   const { stdout } = await execFileAsync(
     'npx',
-    ['wrangler', 'd1', 'execute', DB_BINDING, '--local', '--json', `--command=${sql}`],
+    ['wrangler', 'd1', 'execute', DB_BINDING, '--local', ...(process.env.NOTIF_TEST_PERSIST_TO ? [`--persist-to=${process.env.NOTIF_TEST_PERSIST_TO}`] : []), '--json', `--command=${sql}`],
     { cwd: PROJECT_DIR, maxBuffer: 10 * 1024 * 1024 }
   )
   const parsed = JSON.parse(stdout)

@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { registerUser, cleanupRunNonce, queryOneD1, execD1, RUN_NONCE } from './marketplace-engine/helpers/client.mjs'
+import { registerUser, cleanupRunNonce, queryOneD1, execD1, RUN_NONCE, BASE_URL } from './marketplace-engine/helpers/client.mjs'
 
 let customer, driver, driverTwo
 let previousDriveEnabled, previousDriveStatus, previousNgStatus
@@ -125,6 +125,6 @@ test('active driver availability is authenticated and persisted', async () => {
 test('invalid zones and unauthenticated ride creation fail closed', async () => {
   const bad = await customer.client.post('/api/drive/rides', { pickupZone: 'unknown', dropoffZone: 'gwarinpa', idempotencyKey: `bad-${RUN_NONCE}` })
   assert.equal(bad.status, 400)
-  const guest = await fetch('http://localhost:3000/api/drive/rides', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pickupZone: 'abuja-central', dropoffZone: 'gwarinpa' }) })
+  const guest = await fetch(`${BASE_URL}/api/drive/rides`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pickupZone: 'abuja-central', dropoffZone: 'gwarinpa' }) })
   assert.equal(guest.status, 401)
 })
